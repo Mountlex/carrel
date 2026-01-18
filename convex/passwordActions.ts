@@ -5,9 +5,10 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { auth } from "./auth";
 import * as crypto from "node:crypto";
 import { promisify } from "node:util";
+import { validatePasswordOrThrow } from "./lib/validation";
+import { requireUserId } from "./lib/auth";
 
 const scryptAsync = promisify(crypto.scrypt);
 
@@ -55,10 +56,7 @@ async function hashPassword(password: string): Promise<string> {
 export const requestPasswordChangeCode = action({
   args: {},
   handler: async (ctx) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
 
     // Get user email
     const email = await ctx.runQuery(internal.users.getUserEmailInternal, { userId });
@@ -126,21 +124,10 @@ export const changePassword = action({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
 
     // Validate password
-    if (args.newPassword.length < 8) {
-      throw new Error("Password must be at least 8 characters");
-    }
-    if (!/[A-Z]/.test(args.newPassword)) {
-      throw new Error("Password must contain at least one uppercase letter");
-    }
-    if (!/[0-9]/.test(args.newPassword)) {
-      throw new Error("Password must contain at least one number");
-    }
+    validatePasswordOrThrow(args.newPassword);
 
     // Get the stored code
     const storedCode = await ctx.runQuery(internal.users.getPasswordChangeCode, { userId });
@@ -154,7 +141,7 @@ export const changePassword = action({
       throw new Error("Invalid verification code");
     }
 
-    // Hash the new password using scrypt (same format as oslo/password)
+    // Hash the new password using scrypt (Lucia's format for @convex-dev/auth)
     const newPasswordHash = await hashPassword(args.newPassword);
 
     // Update password and mark code as used

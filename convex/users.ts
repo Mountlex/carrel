@@ -323,6 +323,11 @@ function isPrivateOrReservedUrl(urlString: string): boolean {
       return true;
     }
 
+    // Block Azure IMDS endpoint
+    if (hostname === "168.63.129.16") {
+      return true;
+    }
+
     return false;
   } catch {
     // Invalid URL

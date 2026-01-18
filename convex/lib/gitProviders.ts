@@ -124,3 +124,18 @@ export function parseRepoUrl(
   }
   return null;
 }
+
+/**
+ * Creates headers for GitLab API requests.
+ * @param token - Optional GitLab access token (PRIVATE-TOKEN)
+ * @returns Headers object with User-Agent and optional PRIVATE-TOKEN
+ */
+export function getGitLabHeaders(token?: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    "User-Agent": "PaperShelf",
+  };
+  if (token) {
+    headers["PRIVATE-TOKEN"] = token;
+  }
+  return headers;
+}

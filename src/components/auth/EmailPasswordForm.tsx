@@ -3,6 +3,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { VerificationCodeInput } from "./VerificationCodeInput";
+import { validatePassword, PASSWORD_REQUIREMENTS } from "../../lib/validation";
 
 type AuthMode = "signIn" | "signUp" | "verify" | "forgotPassword" | "resetPassword";
 
@@ -12,19 +13,6 @@ interface FormErrors {
   name?: string;
   code?: string;
   general?: string;
-}
-
-function validatePassword(password: string): string | undefined {
-  if (password.length < 8) {
-    return "Password must be at least 8 characters";
-  }
-  if (!/[A-Z]/.test(password)) {
-    return "Password must contain at least one uppercase letter";
-  }
-  if (!/[0-9]/.test(password)) {
-    return "Password must contain at least one number";
-  }
-  return undefined;
 }
 
 export function EmailPasswordForm() {
@@ -235,7 +223,7 @@ export function EmailPasswordForm() {
         </p>
 
         <VerificationCodeInput
-          length={8}
+          length={6}
           onComplete={handleVerifyCode}
           disabled={isLoading}
         />
@@ -350,10 +338,10 @@ export function EmailPasswordForm() {
               id="reset-code"
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               required
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono tracking-widest focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-              placeholder="12345678"
+              placeholder="123456"
             />
             {errors.code && (
               <p className="mt-1 text-sm text-red-600">{errors.code}</p>
@@ -502,7 +490,7 @@ export function EmailPasswordForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-            placeholder={mode === "signUp" ? "Min 8 chars, 1 uppercase, 1 number" : "Your password"}
+            placeholder={mode === "signUp" ? PASSWORD_REQUIREMENTS : "Your password"}
           />
           {errors.password && (
             <p className="mt-1 text-sm text-red-600">{errors.password}</p>

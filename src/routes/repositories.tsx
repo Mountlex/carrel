@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -175,25 +175,29 @@ function RepositoriesPage() {
     }
   }, [isAddModalOpen, activeAddTab, hasGitLabToken, gitlabRepos, isLoadingGitLabRepos, listUserGitLabRepos]);
 
-  const filteredRepos = userRepos?.filter((repo) => {
-    const query = repoSearch.toLowerCase();
-    const description = (repo.description ?? "").toLowerCase();
-    return (
-      repo.name.toLowerCase().includes(query) ||
-      repo.fullName.toLowerCase().includes(query) ||
-      description.includes(query)
-    );
-  });
+  const filteredRepos = useMemo(() => {
+    return userRepos?.filter((repo) => {
+      const query = repoSearch.toLowerCase();
+      const description = (repo.description ?? "").toLowerCase();
+      return (
+        repo.name.toLowerCase().includes(query) ||
+        repo.fullName.toLowerCase().includes(query) ||
+        description.includes(query)
+      );
+    });
+  }, [userRepos, repoSearch]);
 
-  const filteredGitLabRepos = gitlabRepos?.filter((repo) => {
-    const query = repoSearch.toLowerCase();
-    const description = (repo.description ?? "").toLowerCase();
-    return (
-      repo.name.toLowerCase().includes(query) ||
-      repo.fullName.toLowerCase().includes(query) ||
-      description.includes(query)
-    );
-  });
+  const filteredGitLabRepos = useMemo(() => {
+    return gitlabRepos?.filter((repo) => {
+      const query = repoSearch.toLowerCase();
+      const description = (repo.description ?? "").toLowerCase();
+      return (
+        repo.name.toLowerCase().includes(query) ||
+        repo.fullName.toLowerCase().includes(query) ||
+        description.includes(query)
+      );
+    });
+  }, [gitlabRepos, repoSearch]);
 
   const handleAddRepository = async () => {
     if (!user || !gitUrl.trim()) return;

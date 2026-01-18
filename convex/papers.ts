@@ -19,33 +19,51 @@ export const list = query({
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .collect();
 
-    const repoIds = repositories.map((r) => r._id);
-
-    // Get papers for all repositories
-    const papers = [];
-    for (const repoId of repoIds) {
-      const repoPapers = await ctx.db
+    // Get papers for all repositories in parallel (reduces sequential N+1 to parallel queries)
+    const [repoPapersArrays, directUploads] = await Promise.all([
+      Promise.all(
+        repositories.map((repo) =>
+          ctx.db
+            .query("papers")
+            .withIndex("by_repository", (q) => q.eq("repositoryId", repo._id))
+            .collect()
+        )
+      ),
+      // Also get directly uploaded papers (no repository)
+      ctx.db
         .query("papers")
-        .withIndex("by_repository", (q) => q.eq("repositoryId", repoId))
-        .collect();
-      papers.push(...repoPapers);
-    }
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+    ]);
 
-    // Also get directly uploaded papers (no repository)
-    const directUploads = await ctx.db
-      .query("papers")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .collect();
-    papers.push(...directUploads);
+    const papers = [...repoPapersArrays.flat(), ...directUploads];
+
+    // Pre-fetch all trackedFiles in a batch to avoid N+1 queries during enrichment
+    const trackedFileIds = [
+      ...new Set(
+        papers.filter((p) => p.trackedFileId).map((p) => p.trackedFileId!)
+      ),
+    ];
+    const trackedFilesArray = await Promise.all(
+      trackedFileIds.map((id) => ctx.db.get(id))
+    );
+    const trackedFileMap = new Map(
+      trackedFilesArray
+        .filter((tf): tf is NonNullable<typeof tf> => tf !== null)
+        .map((tf) => [tf._id, tf])
+    );
+
+    // Create repository lookup map for faster access
+    const repositoryMap = new Map(repositories.map((r) => [r._id, r]));
 
     // Enrich with thumbnail URLs, repository info, and up-to-date status
     const enrichedPapers = await Promise.all(
       papers.map(async (paper) => {
         const repository = paper.repositoryId
-          ? repositories.find((r) => r._id === paper.repositoryId)
+          ? repositoryMap.get(paper.repositoryId) ?? null
           : null;
         const trackedFile = paper.trackedFileId
-          ? await ctx.db.get(paper.trackedFileId)
+          ? trackedFileMap.get(paper.trackedFileId) ?? null
           : null;
         const thumbnailUrl = paper.thumbnailFileId
           ? await ctx.storage.getUrl(paper.thumbnailFileId)

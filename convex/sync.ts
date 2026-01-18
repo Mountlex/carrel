@@ -77,24 +77,22 @@ export const tryAcquireSyncLock = internalMutation({
 
     // If already syncing, check if the lock has timed out
     if (repo.syncStatus === "syncing") {
-      // If lastSyncedAt exists and the sync has been running for too long, consider it stale
-      // We use lastSyncedAt as a proxy - if it's been more than SYNC_LOCK_TIMEOUT_MS since
-      // the last successful sync and status is still "syncing", the lock is stale
-      const lockStartTime = repo.lastSyncedAt || 0;
-      const timeSinceLastSync = now - lockStartTime;
+      // Use dedicated syncLockAcquiredAt field for timeout calculation
+      const lockStartTime = repo.syncLockAcquiredAt || 0;
+      const timeSinceLockAcquired = now - lockStartTime;
 
-      if (timeSinceLastSync < SYNC_LOCK_TIMEOUT_MS) {
+      if (timeSinceLockAcquired < SYNC_LOCK_TIMEOUT_MS) {
         // Lock is still valid, don't allow new sync
         return false;
       }
       // Lock has timed out, allow override
-      console.log(`Sync lock for repository ${args.id} timed out after ${timeSinceLastSync}ms, allowing new sync`);
+      console.log(`Sync lock for repository ${args.id} timed out after ${timeSinceLockAcquired}ms, allowing new sync`);
     }
 
-    // Acquire the lock by setting status to syncing and updating lastSyncedAt as lock timestamp
+    // Acquire the lock by setting status to syncing and recording lock acquisition time
     await ctx.db.patch(args.id, {
       syncStatus: "syncing",
-      lastSyncedAt: now, // Use this as the lock acquisition time
+      syncLockAcquiredAt: now,
     });
     return true;
   },

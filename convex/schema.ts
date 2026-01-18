@@ -55,6 +55,7 @@ export default defineSchema({
     selfHostedGitLabInstanceId: v.optional(v.id("selfHostedGitLabInstances")),
     defaultBranch: v.string(),
     lastSyncedAt: v.optional(v.number()),
+    syncLockAcquiredAt: v.optional(v.number()), // When sync lock was acquired (for timeout calculation)
     lastCommitHash: v.optional(v.string()),
     lastCommitTime: v.optional(v.number()), // Unix timestamp of the latest commit
     syncStatus: v.union(

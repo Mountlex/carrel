@@ -8,6 +8,7 @@ import {
   parseOverleafUrl,
   parseRepoUrl,
   getProviderFromUrl,
+  getGitLabHeaders,
   type SelfHostedGitLabInstance,
 } from "./lib/gitProviders";
 
@@ -176,12 +177,7 @@ export const fetchRepositoryInfo = action({
       const token = isSelfHosted ? matchingInstance!.token : await getGitLabToken(ctx);
 
       const projectId = encodeURIComponent(`${parsed.owner}/${parsed.repo}`);
-      const headers: Record<string, string> = {
-        "User-Agent": "PaperShelf",
-      };
-      if (token) {
-        headers["PRIVATE-TOKEN"] = token;
-      }
+      const headers = getGitLabHeaders(token);
 
       const response = await fetch(
         `${baseUrl}/api/v4/projects/${projectId}`,
@@ -255,12 +251,7 @@ export const fetchLatestCommit = action({
       const token = isSelfHosted ? matchingInstance!.token : await getGitLabToken(ctx);
 
       const projectId = encodeURIComponent(`${parsed.owner}/${parsed.repo}`);
-      const headers: Record<string, string> = {
-        "User-Agent": "PaperShelf",
-      };
-      if (token) {
-        headers["PRIVATE-TOKEN"] = token;
-      }
+      const headers = getGitLabHeaders(token);
 
       const response = await fetch(
         `${baseUrl}/api/v4/projects/${projectId}/repository/commits/${encodeURIComponent(args.branch)}`,
