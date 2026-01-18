@@ -49,25 +49,22 @@ async function fetchDependencyHashes(
   ctx: ActionCtx,
   gitUrl: string,
   branch: string,
-  dirPath: string,
   dependencies: string[]
 ): Promise<DependencyHash[]> {
   const results: DependencyHash[] = [];
 
   for (const dep of dependencies) {
-    // Build the full path for the dependency
-    const fullPath = dirPath ? `${dirPath}/${dep}` : dep;
-
+    // Dependencies are already full paths from the latex service
     try {
       const hash = await ctx.runAction(internal.git.fetchFileHashInternal, {
         gitUrl,
-        filePath: fullPath,
+        filePath: dep,
         branch,
       });
       results.push({ path: dep, hash });
     } catch (error) {
       // Skip files that can't be hashed (e.g., system files, missing files)
-      console.log(`Could not fetch hash for ${fullPath}: ${error}`);
+      console.log(`Could not fetch hash for ${dep}: ${error}`);
     }
   }
 
@@ -468,7 +465,6 @@ export const compileLatexInternal = internalAction({
         ctx,
         args.gitUrl,
         args.branch,
-        dirPath,
         finalDependencies
       );
       console.log(`Cached ${dependencyHashes.length} dependency hashes`);

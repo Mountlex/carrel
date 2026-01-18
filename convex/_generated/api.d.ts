@@ -14,6 +14,7 @@ import type * as git from "../git.js";
 import type * as http from "../http.js";
 import type * as latex from "../latex.js";
 import type * as lib_audit from "../lib/audit.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fileFetching from "../lib/fileFetching.js";
 import type * as lib_gitProviders from "../lib/gitProviders.js";
 import type * as lib_latexUtils from "../lib/latexUtils.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   latex: typeof latex;
   "lib/audit": typeof lib_audit;
+  "lib/auth": typeof lib_auth;
   "lib/fileFetching": typeof lib_fileFetching;
   "lib/gitProviders": typeof lib_gitProviders;
   "lib/latexUtils": typeof lib_latexUtils;

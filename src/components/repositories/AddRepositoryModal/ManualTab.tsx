@@ -1,0 +1,45 @@
+interface ManualTabProps {
+  isAdding: boolean;
+  error: string | null;
+  urlValue: string;
+  onUrlChange: (url: string) => void;
+  onAddFromUrl: (url: string) => void;
+}
+
+export function ManualTab({
+  isAdding,
+  error,
+  urlValue,
+  onUrlChange,
+  onAddFromUrl,
+}: ManualTabProps) {
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      <p className="mb-2 text-xs text-gray-500">Enter a repository URL manually:</p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={urlValue}
+          onChange={(e) => onUrlChange(e.target.value)}
+          placeholder="https://github.com/user/repo or https://gitlab.com/user/repo"
+          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isAdding && urlValue.trim()) {
+              onAddFromUrl(urlValue.trim());
+            }
+          }}
+        />
+        <button
+          onClick={() => onAddFromUrl(urlValue.trim())}
+          disabled={isAdding || !urlValue.trim()}
+          className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isAdding ? "Adding..." : "Add"}
+        </button>
+      </div>
+      {error && (
+        <p className="mt-2 text-sm text-red-600">{error}</p>
+      )}
+    </div>
+  );
+}

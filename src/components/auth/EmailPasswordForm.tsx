@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -15,12 +15,24 @@ interface FormErrors {
   general?: string;
 }
 
+const REMEMBERED_EMAIL_KEY = "papershelf_remembered_email";
+
 export function EmailPasswordForm() {
   const { signIn } = useAuthActions();
   const invalidateAllSessions = useMutation(api.users.invalidateAllSessions);
   const [mode, setMode] = useState<AuthMode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Load remembered email on mount
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberMe(true);
+    }
+  }, []);
   const [newPassword, setNewPassword] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -38,6 +50,13 @@ export function EmailPasswordForm() {
     e.preventDefault();
     setErrors({});
     setIsLoading(true);
+
+    // Save or clear remembered email
+    if (rememberMe) {
+      localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
 
     try {
       const formData = new FormData();
@@ -496,6 +515,21 @@ export function EmailPasswordForm() {
             <p className="mt-1 text-sm text-red-600">{errors.password}</p>
           )}
         </div>
+
+        {mode === "signIn" && (
+          <div className="flex items-center">
+            <input
+              id="remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+            />
+            <label htmlFor="remember-me" className="ml-2 text-sm text-gray-600">
+              Remember my email
+            </label>
+          </div>
+        )}
 
         {errors.general && (
           <p className="text-sm text-red-600">{errors.general}</p>
