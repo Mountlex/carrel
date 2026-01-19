@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { api } from "../../convex/_generated/api";
+import { PdfViewer } from "../components/PdfViewer";
 
 export const Route = createFileRoute("/share/$slug")({
   loader: async ({ params, context }) => {
@@ -44,13 +45,9 @@ function SharePage() {
   return (
     <div className="mx-auto max-w-4xl">
       {/* PDF Viewer */}
-      <div className="mb-6 aspect-[8.5/11] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-lg dark:border-gray-800 dark:bg-gray-800">
+      <div className="mb-6 h-[70vh] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-lg dark:border-gray-800 dark:bg-gray-800">
         {paper.pdfUrl ? (
-          <iframe
-            src={paper.pdfUrl}
-            className="h-full w-full"
-            title={paper.title}
-          />
+          <PdfViewer url={paper.pdfUrl} title={paper.title} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-400">
             <div className="text-center">

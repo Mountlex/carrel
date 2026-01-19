@@ -6,6 +6,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { StatusBadge } from "../components/ui";
+import { PdfViewer } from "../components/PdfViewer";
 
 export const Route = createFileRoute("/papers/$id")({
   component: PaperDetailPage,
@@ -107,13 +108,9 @@ function PaperDetailPage() {
       <div className="grid gap-8 lg:grid-cols-3">
         {/* PDF Preview */}
         <div className="lg:col-span-2">
-          <div className="aspect-[8.5/11] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-sm dark:border-gray-800 dark:bg-gray-800">
+          <div className="h-[calc(100vh-12rem)] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-sm dark:border-gray-800 dark:bg-gray-800">
             {paper.pdfUrl ? (
-              <iframe
-                src={paper.pdfUrl}
-                className="h-full w-full"
-                title={paper.title}
-              />
+              <PdfViewer url={paper.pdfUrl} title={paper.title} />
             ) : (
               <div className="flex h-full items-center justify-center text-gray-400">
                 <div className="text-center">
