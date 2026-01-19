@@ -613,6 +613,7 @@ export const fetchLatestCommitInternal = internalAction({
   args: {
     gitUrl: v.string(),
     branch: v.string(),
+    knownSha: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Get all self-hosted GitLab instances to check if URL matches any
@@ -643,6 +644,7 @@ export const fetchLatestCommitInternal = internalAction({
           gitUrl: overleafParsed.gitUrl, // Use canonical git URL
           branch: args.branch,
           auth: credentials,
+          knownSha: args.knownSha,
         }),
         timeout: 30000, // 30 seconds for refs
       });
@@ -653,6 +655,16 @@ export const fetchLatestCommitInternal = internalAction({
       }
 
       const data = await response.json();
+
+      // If SHA unchanged, return without date (caller should use cached date)
+      if (data.unchanged) {
+        return {
+          sha: data.sha,
+          message: "Overleaf commit",
+          unchanged: true as const,
+        };
+      }
+
       return {
         sha: data.sha,
         message: data.message || "Overleaf commit",

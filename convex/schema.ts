@@ -141,6 +141,11 @@ export default defineSchema({
     // Timestamp when needsSync was set to true (for detecting stale flags)
     needsSyncSetAt: v.optional(v.number()),
 
+    // Paper-level build lock (for independent paper builds)
+    buildStatus: v.optional(v.union(v.literal("idle"), v.literal("building"), v.literal("error"))),
+    buildLockAcquiredAt: v.optional(v.number()),
+    currentBuildAttemptId: v.optional(v.string()),
+
     // Sharing
     isPublic: v.boolean(),
     shareSlug: v.optional(v.string()),

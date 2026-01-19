@@ -41,7 +41,7 @@ function GalleryPage() {
   const generateUploadUrl = useMutation(api.papers.generateUploadUrl);
   const uploadPdf = useMutation(api.papers.uploadPdf);
   const generateThumbnail = useAction(api.thumbnail.generateThumbnailForPaper);
-  const syncRepository = useAction(api.sync.syncRepository);
+  const refreshRepository = useAction(api.sync.refreshRepository);
 
   const [editingPaperId, setEditingPaperId] = useState<Id<"papers"> | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -84,8 +84,8 @@ function GalleryPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Quick sync all repositories on page load (just check for new commits, no compilation)
-  // Uses requestIdleCallback to avoid blocking UI and sequential syncing to reduce load
+  // Quick check all repositories on page load (just check for new commits, no compilation)
+  // Uses requestIdleCallback to avoid blocking UI and sequential checking to reduce load
   useEffect(() => {
     if (
       repositories &&
@@ -95,46 +95,46 @@ function GalleryPage() {
     ) {
       hasSyncedOnLoad.current = true;
 
-      const reposToSync = repositories.filter((repo) => repo.syncStatus !== "syncing");
-      if (reposToSync.length === 0) return;
+      const reposToCheck = repositories.filter((repo) => repo.syncStatus !== "syncing");
+      if (reposToCheck.length === 0) return;
 
-      // Use requestIdleCallback to defer sync until browser is idle
-      const scheduleSync = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 100));
+      // Use requestIdleCallback to defer check until browser is idle
+      const scheduleCheck = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 100));
 
-      scheduleSync(() => {
+      scheduleCheck(() => {
         setIsSyncing(true);
-        setSyncProgress({ current: 0, total: reposToSync.length });
+        setSyncProgress({ current: 0, total: reposToCheck.length });
 
         let hasErrors = false;
         let currentIndex = 0;
 
-        // Sync repos sequentially with idle callbacks between each
-        const syncNext = async () => {
-          if (currentIndex >= reposToSync.length) {
+        // Check repos sequentially with idle callbacks between each
+        const checkNext = async () => {
+          if (currentIndex >= reposToCheck.length) {
             setIsSyncing(false);
             setSyncProgress(null);
             if (hasErrors) {
-              showToast("Some repositories failed to sync", "info");
+              showToast("Some repositories failed to check", "info");
             }
             return;
           }
 
-          const repo = reposToSync[currentIndex];
+          const repo = reposToCheck[currentIndex];
           try {
-            await syncRepository({ repositoryId: repo._id });
+            await refreshRepository({ repositoryId: repo._id });
           } catch (err) {
-            console.error(`Quick sync failed for ${repo.name}:`, err);
+            console.error(`Quick check failed for ${repo.name}:`, err);
             hasErrors = true;
           }
 
           currentIndex++;
-          setSyncProgress({ current: currentIndex, total: reposToSync.length });
+          setSyncProgress({ current: currentIndex, total: reposToCheck.length });
 
-          // Use idle callback for next sync to keep UI responsive
-          scheduleSync(syncNext);
+          // Use idle callback for next check to keep UI responsive
+          scheduleCheck(checkNext);
         };
 
-        syncNext();
+        checkNext();
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on load
@@ -291,34 +291,34 @@ function GalleryPage() {
     }
   };
 
-  // Quick sync all repositories (just check for new commits, no compilation)
-  const handleSyncAll = async () => {
+  // Quick check all repositories (just check for new commits, no compilation)
+  const handleCheckAll = async () => {
     if (!repositories || isSyncing) return;
 
     setIsSyncing(true);
     setSyncProgress({ current: 0, total: repositories.length });
 
-    // Quick sync all repositories in parallel
+    // Quick check all repositories in parallel
     let failedCount = 0;
-    const syncPromises = repositories
+    const checkPromises = repositories
       .filter((repo) => repo.syncStatus !== "syncing")
       .map(async (repo, index) => {
         try {
-          await syncRepository({ repositoryId: repo._id });
+          await refreshRepository({ repositoryId: repo._id });
         } catch (err) {
-          console.error(`Quick sync failed for ${repo.name}:`, err);
+          console.error(`Quick check failed for ${repo.name}:`, err);
           failedCount++;
         }
         setSyncProgress((prev) => prev ? { ...prev, current: index + 1 } : null);
       });
 
-    await Promise.all(syncPromises);
+    await Promise.all(checkPromises);
 
     setIsSyncing(false);
     setSyncProgress(null);
 
     if (failedCount > 0) {
-      showToast(`${failedCount} ${failedCount === 1 ? "repository" : "repositories"} failed to sync`, "error");
+      showToast(`${failedCount} ${failedCount === 1 ? "repository" : "repositories"} failed to check`, "error");
     }
   };
 
@@ -434,11 +434,11 @@ function GalleryPage() {
           </select>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleSyncAll}
+              onClick={handleCheckAll}
               disabled={isSyncing || !repositories || repositories.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               title="Check all repositories for new commits"
-              aria-label={isSyncing ? "Syncing repositories" : "Check all repositories"}
+              aria-label={isSyncing ? "Checking repositories" : "Check all repositories"}
             >
               {isSyncing ? (
                 <>
@@ -446,7 +446,7 @@ function GalleryPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Syncing
+                  Checking
                 </>
               ) : (
                 <>

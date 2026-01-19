@@ -92,6 +92,9 @@ export const getTrackedFileById = internalQuery({
 // Sync lock timeout in milliseconds (2 minutes - reduced from 5 to prevent long stuck syncs)
 const SYNC_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 
+// Build lock timeout in milliseconds (5 minutes - longer for compilation)
+const BUILD_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+
 // Generate a unique attempt ID
 function generateAttemptId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
@@ -187,6 +190,105 @@ export const resetSyncStatus = mutation({
   },
 });
 
+// Try to acquire build lock for a paper - returns attempt ID if acquired, null if already building
+export const tryAcquireBuildLock = internalMutation({
+  args: { id: v.id("papers") },
+  handler: async (ctx, args): Promise<{ acquired: boolean; attemptId: string | null }> => {
+    const paper = await ctx.db.get(args.id);
+    if (!paper) return { acquired: false, attemptId: null };
+
+    const now = Date.now();
+
+    // If already building, check if the lock has timed out
+    if (paper.buildStatus === "building") {
+      const lockStartTime = paper.buildLockAcquiredAt || 0;
+      const timeSinceLockAcquired = now - lockStartTime;
+
+      if (timeSinceLockAcquired < BUILD_LOCK_TIMEOUT_MS) {
+        // Lock is still valid, don't allow new build
+        return { acquired: false, attemptId: null };
+      }
+      // Lock has timed out, allow override
+      console.log(`Build lock for paper ${args.id} timed out after ${timeSinceLockAcquired}ms, allowing new build`);
+    }
+
+    // Generate a new attempt ID
+    const attemptId = generateAttemptId();
+
+    // Acquire the lock by setting status to building and recording lock acquisition time
+    await ctx.db.patch(args.id, {
+      buildStatus: "building",
+      buildLockAcquiredAt: now,
+      currentBuildAttemptId: attemptId,
+    });
+    return { acquired: true, attemptId };
+  },
+});
+
+// Validate that the given attempt ID matches the current build attempt
+export const validateBuildAttempt = internalQuery({
+  args: {
+    paperId: v.id("papers"),
+    attemptId: v.string(),
+  },
+  handler: async (ctx, args): Promise<boolean> => {
+    const paper = await ctx.db.get(args.paperId);
+    if (!paper) return false;
+    return paper.currentBuildAttemptId === args.attemptId;
+  },
+});
+
+// Release build lock (set status to idle or error)
+export const releaseBuildLock = internalMutation({
+  args: {
+    id: v.id("papers"),
+    status: v.union(v.literal("idle"), v.literal("error")),
+    attemptId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // If attemptId is provided, validate it first
+    if (args.attemptId) {
+      const paper = await ctx.db.get(args.id);
+      if (paper && paper.currentBuildAttemptId !== args.attemptId) {
+        console.log(`Build attempt ${args.attemptId} superseded, skipping lock release`);
+        return;
+      }
+    }
+    await ctx.db.patch(args.id, { buildStatus: args.status });
+  },
+});
+
+// Public mutation to reset a stuck build status (for manual intervention)
+export const resetBuildStatus = mutation({
+  args: { paperId: v.id("papers") },
+  handler: async (ctx, args) => {
+    // Verify the user owns this paper
+    const authenticatedUserId = await auth.getUserId(ctx);
+    if (!authenticatedUserId) {
+      throw new Error("Not authenticated");
+    }
+
+    const paper = await ctx.db.get(args.paperId);
+    if (!paper) {
+      throw new Error("Paper not found");
+    }
+
+    // Check ownership through repository or direct upload
+    if (paper.repositoryId) {
+      const repo = await ctx.db.get(paper.repositoryId);
+      if (!repo || repo.userId !== authenticatedUserId) {
+        throw new Error("Paper not found or access denied");
+      }
+    } else if (paper.userId !== authenticatedUserId) {
+      throw new Error("Paper not found or access denied");
+    }
+
+    // Reset the build status to idle
+    await ctx.db.patch(args.paperId, { buildStatus: "idle" });
+    return { success: true };
+  },
+});
+
 // Internal mutation to update repository after sync
 export const updateRepositoryAfterSync = internalMutation({
   args: {
@@ -217,8 +319,9 @@ export const updateRepositoryAfterSync = internalMutation({
   },
 });
 
-// Sync a repository - fetch latest commit and update PDFs if needed
-export const syncRepository = action({
+// Refresh a repository - fetch latest commit and check if papers need updates
+// (renamed from syncRepository for clearer terminology)
+export const refreshRepository = action({
   args: { repositoryId: v.id("repositories") },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
@@ -239,7 +342,8 @@ export const syncRepository = action({
     });
 
     if (!lockResult.acquired || !lockResult.attemptId) {
-      throw new Error("Repository is already syncing. Please wait for the current sync to complete.");
+      // Repository is already syncing - return gracefully instead of throwing
+      return { updated: false, skipped: true, reason: "Repository is already syncing" };
     }
 
     const attemptId = lockResult.attemptId;
@@ -247,14 +351,18 @@ export const syncRepository = action({
     try {
       // Repository already loaded and authorized above
 
-      // Fetch latest commit
+      // Fetch latest commit (pass knownSha to skip expensive date fetch if unchanged)
       const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
+        knownSha: repository.lastCommitHash,
       });
 
       // Convert commit date to Unix timestamp
-      const commitTime = new Date(latestCommit.date).getTime();
+      // If unchanged, use existing lastCommitTime from repository
+      const commitTime = latestCommit.unchanged
+        ? (repository.lastCommitTime ?? Date.now())
+        : new Date(latestCommit.date).getTime();
 
       // Get all papers for this repository
       const papers = await ctx.runQuery(internal.sync.getPapersForRepository, {
@@ -461,6 +569,84 @@ export const updatePaperPdf = internalMutation({
   },
 });
 
+// Update paper with PDF info using paper-level build lock
+export const updatePaperPdfWithBuildLock = internalMutation({
+  args: {
+    id: v.id("papers"),
+    pdfFileId: v.id("_storage"),
+    cachedCommitHash: v.string(),
+    fileSize: v.number(),
+    cachedDependencies: v.optional(v.array(v.object({
+      path: v.string(),
+      hash: v.string(),
+    }))),
+    cachedPdfBlobHash: v.optional(v.string()),
+    attemptId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; reason?: string }> => {
+    // If attemptId is provided, validate against paper's build attempt
+    if (args.attemptId) {
+      const paper = await ctx.db.get(args.id);
+      if (paper && paper.currentBuildAttemptId !== args.attemptId) {
+        console.log(`Build attempt ${args.attemptId} superseded, skipping paper PDF update`);
+        return { success: false, reason: "superseded" };
+      }
+    }
+
+    // Get current paper to create version history entry
+    const paper = await ctx.db.get(args.id);
+    if (paper?.pdfFileId && paper?.cachedCommitHash) {
+      // Create a version entry for the current (soon to be previous) PDF
+      await ctx.db.insert("paperVersions", {
+        paperId: args.id,
+        commitHash: paper.cachedCommitHash,
+        versionCreatedAt: paper.updatedAt || Date.now(),
+        pdfFileId: paper.pdfFileId,
+        thumbnailFileId: paper.thumbnailFileId,
+        fileSize: paper.fileSize,
+        pageCount: paper.pageCount,
+      });
+    }
+
+    await ctx.db.patch(args.id, {
+      pdfFileId: args.pdfFileId,
+      cachedCommitHash: args.cachedCommitHash,
+      fileSize: args.fileSize,
+      cachedDependencies: args.cachedDependencies,
+      cachedPdfBlobHash: args.cachedPdfBlobHash,
+      needsSync: false,
+      needsSyncSetAt: undefined,
+      lastSyncError: undefined,
+      buildStatus: "idle", // Clear build status on success
+      updatedAt: Date.now(),
+    });
+    return { success: true };
+  },
+});
+
+// Update paper build error (for paper-level locks)
+export const updatePaperBuildError = internalMutation({
+  args: {
+    id: v.id("papers"),
+    error: v.optional(v.string()),
+    attemptId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // If attemptId is provided, validate against paper's build attempt
+    if (args.attemptId) {
+      const paper = await ctx.db.get(args.id);
+      if (paper && paper.currentBuildAttemptId !== args.attemptId) {
+        console.log(`Skipping stale error update for paper ${args.id} (build attempt ${args.attemptId} superseded)`);
+        return;
+      }
+    }
+    await ctx.db.patch(args.id, {
+      lastSyncError: args.error,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Update paper sync error
 export const updatePaperSyncError = internalMutation({
   args: {
@@ -537,8 +723,9 @@ export const updatePaperNeedsSync = internalMutation({
   },
 });
 
-// Sync a single paper - compile/fetch its PDF
-export const syncPaper = action({
+// Build a single paper - compile/fetch its PDF using paper-level locks
+// (renamed from syncPaper for clearer terminology, uses paper-level locks instead of repo-level)
+export const buildPaper = action({
   args: { paperId: v.id("papers") },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
@@ -566,57 +753,51 @@ export const syncPaper = action({
       throw new Error("Invalid paper configuration");
     }
 
-    // Try to acquire sync lock (optimistic locking to prevent concurrent syncs)
-    const lockResult = await ctx.runMutation(internal.sync.tryAcquireSyncLock, {
-      id: repository._id,
+    // Try to acquire paper-level build lock (allows concurrent builds of different papers)
+    const lockResult = await ctx.runMutation(internal.sync.tryAcquireBuildLock, {
+      id: args.paperId,
     });
 
     if (!lockResult.acquired || !lockResult.attemptId) {
-      throw new Error("Repository is already syncing. Please wait for the current sync to complete.");
+      // Paper is already building - return gracefully instead of throwing
+      return { updated: false, skipped: true, reason: "Paper is already building" };
     }
 
     const attemptId = lockResult.attemptId;
 
-    // Clear any previous sync error at the start
-    await ctx.runMutation(internal.sync.updatePaperSyncError, {
+    // Clear any previous build error at the start
+    await ctx.runMutation(internal.sync.updatePaperBuildError, {
       id: args.paperId,
       error: undefined,
-      repositoryId: repository._id,
       attemptId,
     });
 
     try {
-      // Fetch latest commit to check if we need to update
+      // Fetch latest commit to check if we need to update (pass knownSha to skip expensive date fetch if unchanged)
       const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
+        knownSha: repository.lastCommitHash,
       });
 
-      // Convert commit date to Unix timestamp
-      const commitTime = new Date(latestCommit.date).getTime();
-
       // Validate attempt before expensive operations
-      const isStillValid = await ctx.runQuery(internal.sync.validateSyncAttempt, {
-        repositoryId: repository._id,
+      const isStillValid = await ctx.runQuery(internal.sync.validateBuildAttempt, {
+        paperId: args.paperId,
         attemptId,
       });
       if (!isStillValid) {
-        console.log(`Sync attempt ${attemptId} was superseded before paper sync`);
+        console.log(`Build attempt ${attemptId} was superseded before paper build`);
         return { updated: false, commitHash: latestCommit.sha, superseded: true };
       }
 
-      // Always update repository metadata with latest commit info
-      await ctx.runMutation(internal.sync.updateRepositoryAfterSync, {
-        id: repository._id,
-        lastCommitHash: latestCommit.sha,
-        lastCommitTime: commitTime,
-        lastSyncedAt: Date.now(),
-        syncStatus: "idle",
-        attemptId,
-      });
-
       // Check if PDF is already cached for this commit
       if (paper.cachedCommitHash === latestCommit.sha && paper.pdfFileId) {
+        // Release lock since nothing to do
+        await ctx.runMutation(internal.sync.releaseBuildLock, {
+          id: args.paperId,
+          status: "idle",
+          attemptId,
+        });
         return { updated: false, commitHash: latestCommit.sha };
       }
 
@@ -640,7 +821,11 @@ export const syncPaper = action({
           await ctx.runMutation(internal.sync.updatePaperCommitOnly, {
             id: args.paperId,
             cachedCommitHash: latestCommit.sha,
-            repositoryId: repository._id,
+          });
+          // Release lock
+          await ctx.runMutation(internal.sync.releaseBuildLock, {
+            id: args.paperId,
+            status: "idle",
             attemptId,
           });
           return { updated: false, commitHash: latestCommit.sha, reason: "dependencies_unchanged" };
@@ -648,12 +833,12 @@ export const syncPaper = action({
       }
 
       // Validate attempt before expensive compile/fetch operations
-      const isStillValidBeforeCompile = await ctx.runQuery(internal.sync.validateSyncAttempt, {
-        repositoryId: repository._id,
+      const isStillValidBeforeCompile = await ctx.runQuery(internal.sync.validateBuildAttempt, {
+        paperId: args.paperId,
         attemptId,
       });
       if (!isStillValidBeforeCompile) {
-        console.log(`Sync attempt ${attemptId} was superseded before compile/fetch`);
+        console.log(`Build attempt ${attemptId} was superseded before compile/fetch`);
         return { updated: false, commitHash: latestCommit.sha, superseded: true };
       }
 
@@ -698,24 +883,23 @@ export const syncPaper = action({
         }
       }
 
-      // Update paper with new PDF (also clears lastSyncError)
-      const updateResult = await ctx.runMutation(internal.sync.updatePaperPdf, {
+      // Update paper with new PDF using paper-level lock validation (also clears lastSyncError and buildStatus)
+      const updateResult = await ctx.runMutation(internal.sync.updatePaperPdfWithBuildLock, {
         id: args.paperId,
         pdfFileId: storageId as Id<"_storage">,
         cachedCommitHash: latestCommit.sha,
         fileSize,
         cachedDependencies: dependencies,
         cachedPdfBlobHash: pdfBlobHash,
-        repositoryId: repository._id,
         attemptId,
       });
 
       if (!updateResult.success) {
-        console.log(`Sync attempt ${attemptId} was superseded at paper PDF update`);
+        console.log(`Build attempt ${attemptId} was superseded at paper PDF update`);
         return { updated: true, commitHash: latestCommit.sha, superseded: true };
       }
 
-      // Generate thumbnail (non-blocking, errors are logged but don't fail sync)
+      // Generate thumbnail (non-blocking, errors are logged but don't fail build)
       try {
         await ctx.runAction(internal.thumbnail.generateThumbnail, {
           pdfFileId: storageId as Id<"_storage">,
@@ -728,21 +912,24 @@ export const syncPaper = action({
       return { updated: true, commitHash: latestCommit.sha };
     } catch (error) {
       // Store the error on the paper for UI display
-      const errorMessage = error instanceof Error ? error.message : "Sync failed";
-      await ctx.runMutation(internal.sync.updatePaperSyncError, {
+      const errorMessage = error instanceof Error ? error.message : "Build failed";
+      await ctx.runMutation(internal.sync.updatePaperBuildError, {
         id: args.paperId,
         error: errorMessage,
-        repositoryId: repository._id,
         attemptId,
       });
 
-      // Release lock on failure (paper errors are tracked per paper, not on repository)
-      await ctx.runMutation(internal.sync.releaseSyncLock, {
-        id: repository._id,
-        status: "idle",
+      // Release lock on failure with error status
+      await ctx.runMutation(internal.sync.releaseBuildLock, {
+        id: args.paperId,
+        status: "error",
         attemptId,
       });
       throw error;
     }
   },
 });
+
+// Backwards-compatible aliases for the renamed functions
+export const syncRepository = refreshRepository;
+export const syncPaper = buildPaper;

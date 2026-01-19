@@ -26,8 +26,8 @@ function RepositoriesPage() {
   const addRepository = useMutation(api.repositories.add);
   const removeRepository = useMutation(api.repositories.remove);
   const updateRepository = useMutation(api.repositories.update);
-  const syncRepository = useAction(api.sync.syncRepository);
-  const syncPaper = useAction(api.sync.syncPaper);
+  const refreshRepository = useAction(api.sync.refreshRepository);
+  const buildPaper = useAction(api.sync.buildPaper);
   const fetchRepoInfo = useAction(api.git.fetchRepoInfo);
   const listUserRepos = useAction(api.git.listUserRepos);
   const listUserGitLabRepos = useAction(api.git.listUserGitLabRepos);
@@ -75,22 +75,22 @@ function RepositoriesPage() {
   const hasGitHubToken = Boolean(user?.hasGitHubToken);
   const hasGitLabToken = Boolean(user?.hasGitLabToken);
 
-  // Quick sync all repositories on page load
+  // Quick check all repositories on page load
   useEffect(() => {
     if (repositories && repositories.length > 0 && !hasQuickSyncedRef.current) {
       hasQuickSyncedRef.current = true;
       let hasErrors = false;
-      const syncPromises = repositories
+      const checkPromises = repositories
         .filter((repo) => repo.syncStatus !== "syncing")
         .map((repo) =>
-          syncRepository({ repositoryId: repo._id }).catch((err) => {
-            console.error(`Quick sync failed for ${repo.name}:`, err);
+          refreshRepository({ repositoryId: repo._id }).catch((err) => {
+            console.error(`Quick check failed for ${repo.name}:`, err);
             hasErrors = true;
           })
         );
-      Promise.all(syncPromises).then(() => {
+      Promise.all(checkPromises).then(() => {
         if (hasErrors) {
-          showToast("Some repositories failed to sync", "info");
+          showToast("Some repositories failed to check", "info");
         }
       });
     }
@@ -181,13 +181,13 @@ function RepositoriesPage() {
     setIsAddModalOpen(false);
   };
 
-  const handleSync = async (repoId: Id<"repositories">) => {
+  const handleCheck = async (repoId: Id<"repositories">) => {
     setSyncingRepoId(repoId);
     try {
-      await syncRepository({ repositoryId: repoId });
+      await refreshRepository({ repositoryId: repoId });
     } catch (error) {
-      console.error("Failed to sync repository:", error);
-      showError(error, "Failed to sync repository");
+      console.error("Failed to check repository:", error);
+      showError(error, "Failed to check repository");
     } finally {
       setSyncingRepoId(null);
     }
@@ -283,28 +283,28 @@ function RepositoriesPage() {
       return;
     }
 
-    // Auto-sync each paper in the background
+    // Auto-build each paper in the background
     for (const paperId of paperIds) {
-      syncPaper({ paperId: paperId as Id<"papers"> }).catch((error) => {
-        console.error("Failed to sync paper:", error);
+      buildPaper({ paperId: paperId as Id<"papers"> }).catch((error) => {
+        console.error("Failed to build paper:", error);
       });
     }
   };
 
-  const handleSyncAll = async () => {
+  const handleCheckAll = async () => {
     if (!repositories || repositories.length === 0) return;
     let failedCount = 0;
-    const syncPromises = repositories
+    const checkPromises = repositories
       .filter((repo) => repo.syncStatus !== "syncing")
       .map((repo) =>
-        syncRepository({ repositoryId: repo._id }).catch((err) => {
-          console.error(`Quick sync failed for ${repo.name}:`, err);
+        refreshRepository({ repositoryId: repo._id }).catch((err) => {
+          console.error(`Quick check failed for ${repo.name}:`, err);
           failedCount++;
         })
       );
-    await Promise.all(syncPromises);
+    await Promise.all(checkPromises);
     if (failedCount > 0) {
-      showToast(`${failedCount} ${failedCount === 1 ? "repository" : "repositories"} failed to sync`, "error");
+      showToast(`${failedCount} ${failedCount === 1 ? "repository" : "repositories"} failed to check`, "error");
     }
   };
 
@@ -348,7 +348,7 @@ function RepositoriesPage() {
         <h1 className="font-serif text-2xl font-semibold text-gray-900 dark:text-gray-100">Repositories</h1>
         <div className="flex items-center gap-3">
           <button
-            onClick={handleSyncAll}
+            onClick={handleCheckAll}
             disabled={isSyncingAny || !repositories || repositories.length === 0}
             className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
@@ -415,7 +415,7 @@ function RepositoriesPage() {
               key={repo._id}
               repo={repo}
               isSyncing={syncingRepoId === repo._id}
-              onSync={() => handleSync(repo._id)}
+              onSync={() => handleCheck(repo._id)}
               onDelete={() => handleDelete(repo._id)}
               onConfigure={() => setConfigureRepo(repo)}
               onUpdateName={(name) => handleUpdateName(repo._id, name)}

@@ -457,56 +457,105 @@ app.post("/compile/upload", rateLimit, upload.array("files"), async (req, res) =
 
 // Git refs endpoint
 app.post("/git/refs", rateLimit, async (req, res) => {
-  try {
-    const { gitUrl, branch, auth } = req.body;
+  const { gitUrl, branch, auth, knownSha } = req.body;
 
-    const gitUrlValidation = validateGitUrl(gitUrl);
-    if (!gitUrlValidation.valid) {
-      return res.status(400).json({ error: gitUrlValidation.error });
-    }
+  const gitUrlValidation = validateGitUrl(gitUrl);
+  if (!gitUrlValidation.valid) {
+    return res.status(400).json({ error: gitUrlValidation.error });
+  }
 
-    const authenticatedUrl = buildAuthenticatedUrl(gitUrl, auth);
+  const authenticatedUrl = buildAuthenticatedUrl(gitUrl, auth);
 
-    const result = await spawnAsync("git", ["ls-remote", authenticatedUrl], {
-      timeout: 30000,
-      logger: req.log,
-    });
+  const result = await spawnAsync("git", ["ls-remote", authenticatedUrl], {
+    timeout: 30000,
+    logger: req.log,
+  });
 
-    if (!result.success) {
-      return res.status(400).json({ error: result.stderr || "Failed to access repository" });
-    }
+  if (!result.success) {
+    return res.status(400).json({ error: result.stderr || "Failed to access repository" });
+  }
 
-    // Parse refs
-    const lines = result.stdout.trim().split("\n");
-    let headSha = null;
-    let defaultBranch = "master";
-    let requestedSha = null;
+  // Parse refs
+  const lines = result.stdout.trim().split("\n");
+  let headSha = null;
+  let defaultBranch = "master";
+  let requestedSha = null;
 
-    for (const line of lines) {
-      const [sha, ref] = line.split("\t");
-      if (ref === "HEAD") {
-        headSha = sha;
-      } else if (ref === "refs/heads/master" || ref === "refs/heads/main") {
-        if (!requestedSha && (!branch || branch === "master" || branch === "main")) {
-          requestedSha = sha;
-          defaultBranch = ref.replace("refs/heads/", "");
-        }
-      }
-      if (branch && ref === `refs/heads/${branch}`) {
+  for (const line of lines) {
+    const [sha, ref] = line.split("\t");
+    if (ref === "HEAD") {
+      headSha = sha;
+    } else if (ref === "refs/heads/master" || ref === "refs/heads/main") {
+      if (!requestedSha && (!branch || branch === "master" || branch === "main")) {
         requestedSha = sha;
+        defaultBranch = ref.replace("refs/heads/", "");
+      }
+    }
+    if (branch && ref === `refs/heads/${branch}`) {
+      requestedSha = sha;
+    }
+  }
+
+  const sha = requestedSha || headSha;
+
+  // If SHA hasn't changed, skip the expensive commit date fetch
+  // The client already has the date from the previous sync
+  if (knownSha && sha === knownSha) {
+    return res.json({
+      sha,
+      defaultBranch,
+      unchanged: true,
+    });
+  }
+
+  // SHA changed or no knownSha provided - fetch commit details
+  const jobId = uuidv4();
+  const workDir = `/tmp/git-refs-${jobId}`;
+
+  await withCleanup(workDir, async () => {
+    let commitDate = null;
+    let commitMessage = "Latest commit";
+
+    if (sha) {
+      try {
+        await fs.mkdir(workDir, { recursive: true });
+
+        // Initialize bare repo and fetch just the commit we need
+        await spawnAsync("git", ["init", "--bare"], { cwd: workDir, logger: req.log });
+
+        const targetBranch = branch || defaultBranch;
+        const fetchResult = await spawnAsync(
+          "git",
+          ["fetch", "--depth=1", authenticatedUrl, `refs/heads/${targetBranch}:refs/heads/${targetBranch}`],
+          { cwd: workDir, timeout: 30000, logger: req.log }
+        );
+
+        if (fetchResult.success) {
+          // Get commit date and message
+          const logResult = await spawnAsync(
+            "git",
+            ["log", "-1", "--format=%cI%n%s", sha],
+            { cwd: workDir, logger: req.log }
+          );
+
+          if (logResult.success && logResult.stdout.trim()) {
+            const [date, ...messageParts] = logResult.stdout.trim().split("\n");
+            commitDate = date;
+            commitMessage = messageParts.join("\n") || "Latest commit";
+          }
+        }
+      } catch (err) {
+        req.log.warn({ err }, "Failed to fetch commit date, using current time");
       }
     }
 
     res.json({
-      sha: requestedSha || headSha,
+      sha,
       defaultBranch,
-      message: "Latest commit",
-      date: new Date().toISOString(),
+      message: commitMessage,
+      date: commitDate || new Date().toISOString(),
     });
-  } catch (error) {
-    req.log.error({ err: error }, "Git refs error");
-    res.status(500).json({ error: error.message });
-  }
+  }, req.log);
 });
 
 // Git tree endpoint

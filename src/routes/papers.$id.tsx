@@ -19,24 +19,28 @@ function PaperDetailPage() {
   const versions = useQuery(api.papers.listVersions, { paperId: id as Id<"papers"> });
   const togglePublic = useMutation(api.papers.togglePublic);
   const deletePaper = useMutation(api.papers.deletePaper);
-  const syncPaper = useAction(api.sync.syncPaper);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const buildPaper = useAction(api.sync.buildPaper);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const { toast, showError, clearToast } = useToast();
 
-  const handleSync = async () => {
+  const handleBuild = async () => {
     if (!paper) return;
-    setIsSyncing(true);
-    setSyncError(null);
+    setIsBuilding(true);
+    setBuildError(null);
     try {
-      await syncPaper({ paperId: paper._id });
+      const result = await buildPaper({ paperId: paper._id });
+      if (result.skipped) {
+        setBuildError(result.reason || "Build was skipped");
+      }
     } catch (error) {
-      console.error("Failed to sync paper:", error);
-      setSyncError(error instanceof Error ? error.message : "Failed to sync");
+      console.error("Failed to build paper:", error);
+      const isCompile = paper.trackedFile?.pdfSourceType === "compile";
+      setBuildError(error instanceof Error ? error.message : (isCompile ? "Failed to compile" : "Failed to fetch"));
     } finally {
-      setIsSyncing(false);
+      setIsBuilding(false);
     }
   };
 
@@ -130,29 +134,29 @@ function PaperDetailPage() {
                   <p className="mt-2 text-sm">No PDF available</p>
                   <p className="mb-4 text-xs text-gray-400">
                     {paper.trackedFile?.pdfSourceType === "compile"
-                      ? "Click Sync to compile LaTeX and generate PDF"
-                      : "Click Sync to fetch the PDF from the repository"}
+                      ? "Click to compile LaTeX and generate PDF"
+                      : "Click to fetch the PDF from the repository"}
                   </p>
                   <button
-                    onClick={handleSync}
-                    disabled={isSyncing}
+                    onClick={handleBuild}
+                    disabled={isBuilding}
                     className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {isSyncing ? (
+                    {isBuilding ? (
                       <span className="flex items-center">
                         <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
-                        {paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Syncing..."}
+                        {paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
                       </span>
-                    ) : "Sync Now"}
+                    ) : (paper.trackedFile?.pdfSourceType === "compile" ? "Compile" : "Fetch")}
                   </button>
-                  {isSyncing && paper.compilationProgress && (
+                  {isBuilding && paper.compilationProgress && (
                     <p className="mt-2 text-xs text-blue-600">{paper.compilationProgress}</p>
                   )}
-                  {syncError && (
-                    <p className="mt-2 text-xs text-red-500">{syncError}</p>
+                  {buildError && (
+                    <p className="mt-2 text-xs text-red-500">{buildError}</p>
                   )}
                 </div>
               </div>
@@ -186,16 +190,16 @@ function PaperDetailPage() {
               <div className="flex justify-between">
                 <dt className="text-gray-500 dark:text-gray-400">Status</dt>
                 <dd className="flex items-center gap-2">
-                  {(syncError || paper.lastSyncError) ? (
+                  {(buildError || paper.lastSyncError) ? (
                     <>
                       <StatusBadge
                         status="error"
-                        label={paper.trackedFile?.pdfSourceType === "compile" ? "Compilation failed" : "Sync failed"}
-                        title={syncError || paper.lastSyncError || undefined}
+                        label={paper.trackedFile?.pdfSourceType === "compile" ? "Compilation failed" : "Fetch failed"}
+                        title={buildError || paper.lastSyncError || undefined}
                       />
                       <button
-                        onClick={handleSync}
-                        disabled={isSyncing}
+                        onClick={handleBuild}
+                        disabled={isBuilding}
                         className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                       >
                         Retry
@@ -206,7 +210,7 @@ function PaperDetailPage() {
                   ) : paper.isUpToDate === true ? (
                     <StatusBadge status="success" label="Up to date" />
                   ) : (
-                    <StatusBadge status="warning" label="Needs sync" />
+                    <StatusBadge status="warning" label="Needs update" />
                   )}
                 </dd>
               </div>
@@ -243,30 +247,30 @@ function PaperDetailPage() {
 
           <div className="flex flex-col gap-2">
             <button
-              onClick={handleSync}
-              disabled={isSyncing}
+              onClick={handleBuild}
+              disabled={isBuilding}
               className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
             >
-              {isSyncing ? (
+              {isBuilding ? (
                 <span className="flex items-center justify-center">
                   <svg className="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  {paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Syncing..."}
+                  {paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
                 </span>
               ) : (
                 paper.pdfUrl ? "Refresh PDF" : (paper.trackedFile?.pdfSourceType === "compile" ? "Compile LaTeX" : "Fetch PDF")
               )}
             </button>
             {/* Compilation Progress */}
-            {isSyncing && paper.compilationProgress && (
+            {isBuilding && paper.compilationProgress && (
               <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                 {paper.compilationProgress}
               </div>
             )}
-            {syncError && (
-              <p className="text-xs text-red-500">{syncError}</p>
+            {buildError && (
+              <p className="text-xs text-red-500">{buildError}</p>
             )}
             {paper.pdfUrl && (
               <a
