@@ -27,12 +27,12 @@ function PaperDetailPage() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const { toast, showError, clearToast } = useToast();
 
-  const handleBuild = async () => {
+  const handleBuild = async (force = false) => {
     if (!paper) return;
     setIsLocallyBuilding(true);
     setBuildError(null);
     try {
-      const result = await buildPaper({ paperId: paper._id });
+      const result = await buildPaper({ paperId: paper._id, force });
       if (result.skipped) {
         setBuildError(result.reason || "Build was skipped");
       }
@@ -260,7 +260,11 @@ function PaperDetailPage() {
 
           <div className="flex flex-col gap-2">
             <button
-              onClick={handleBuild}
+              onClick={() => {
+                const isUpToDate = !!(paper.pdfUrl && !paper.needsSync);
+                const isCompile = paper.trackedFile?.pdfSourceType === "compile";
+                handleBuild(!!(isUpToDate && isCompile));
+              }}
               disabled={isBuilding}
               className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
             >
@@ -273,7 +277,13 @@ function PaperDetailPage() {
                   {paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
                 </span>
               ) : (
-                paper.pdfUrl ? "Refresh PDF" : (paper.trackedFile?.pdfSourceType === "compile" ? "Compile LaTeX" : "Fetch PDF")
+                (() => {
+                  const isCompile = paper.trackedFile?.pdfSourceType === "compile";
+                  const isUpToDate = paper.pdfUrl && !paper.needsSync;
+                  if (!paper.pdfUrl) return isCompile ? "Compile LaTeX" : "Fetch PDF";
+                  if (isUpToDate && isCompile) return "Force Recompile";
+                  return "Refresh PDF";
+                })()
               )}
             </button>
             {/* Compilation Progress */}

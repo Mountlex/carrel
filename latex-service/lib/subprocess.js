@@ -156,11 +156,13 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
     "-cd", // Change to file's directory
   ];
 
+  // -bibtex ensures bibtex/biber runs to generate .bbl files for references
+  // (auto-detects bibtex vs biber based on .bcf file presence)
+  // Must be included even in recorder mode so .bib dependencies are detected
+  args.push("-bibtex");
+
   if (recorder) {
     args.push("-recorder");
-  } else {
-    // -bibtex-cond1 runs bibtex/biber only when needed and auto-detects backend
-    args.push("-bibtex-cond1");
   }
 
   args.push(targetPath);

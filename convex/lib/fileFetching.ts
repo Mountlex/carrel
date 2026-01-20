@@ -292,7 +292,8 @@ export async function fetchTexFilesOnly(
     const itemPath = item.path;
     const itemName = item.name;
 
-    if (itemType === "file" && itemName.endsWith(".tex")) {
+    // Fetch .tex and .bib files (bibliography needed for references)
+    if (itemType === "file" && (itemName.endsWith(".tex") || itemName.endsWith(".bib"))) {
       // Fetch .tex file content
       let rawUrl: string;
       const fetchHeaders: Record<string, string> = { "User-Agent": "Carrel" };
@@ -325,7 +326,7 @@ export async function fetchTexFilesOnly(
         console.warn(`[fetchTexFilesOnly] Failed to fetch ${itemPath}: ${fileResponse.status} ${fileResponse.statusText}`);
       }
     } else if (itemType === "dir") {
-      // Recursively fetch .tex files from subdirectories
+      // Recursively fetch .tex and .bib files from subdirectories
       const subFiles = await fetchTexFilesOnly(owner, repo, branch, itemPath, token, provider, gitlabBaseUrl);
       files.push(...subFiles);
     }

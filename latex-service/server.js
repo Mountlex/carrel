@@ -278,6 +278,34 @@ app.post("/deps", rateLimit, async (req, res) => {
       // No log file
     }
 
+    // Also check biber log (.blg) for missing .bib files
+    const blgPath = path.join(targetDir, `${targetName}.blg`);
+    try {
+      const blgContent = await fs.readFile(blgPath, "utf-8");
+
+      // Biber and BibTeX error patterns for missing files
+      const biberPatterns = [
+        // Biber errors
+        /ERROR - Cannot find '([^']+)'!/gm,
+        /ERROR - Cannot find file '([^']+)'/gm,
+        /WARN - I didn't find a database named '([^']+)'/gm,
+        // Traditional BibTeX errors
+        /I couldn't open database file ([^\s]+)/gm,
+        /I couldn't open file name `([^']+)'/gm,
+      ];
+
+      for (const pattern of biberPatterns) {
+        let match;
+        while ((match = pattern.exec(blgContent)) !== null) {
+          if (match[1]) {
+            missingFiles.push(match[1]);
+          }
+        }
+      }
+    } catch {
+      // No biber log file
+    }
+
     res.json({
       success: result.success,
       dependencies: Array.from(deps),

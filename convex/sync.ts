@@ -726,7 +726,7 @@ export const updatePaperNeedsSync = internalMutation({
 // Build a single paper - compile/fetch its PDF using paper-level locks
 // (renamed from syncPaper for clearer terminology, uses paper-level locks instead of repo-level)
 export const buildPaper = action({
-  args: { paperId: v.id("papers") },
+  args: { paperId: v.id("papers"), force: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) {
@@ -790,8 +790,8 @@ export const buildPaper = action({
         return { updated: false, commitHash: latestCommit.sha, superseded: true };
       }
 
-      // Check if PDF is already cached for this commit
-      if (paper.cachedCommitHash === latestCommit.sha && paper.pdfFileId) {
+      // Check if PDF is already cached for this commit (skip if force=true)
+      if (!args.force && paper.cachedCommitHash === latestCommit.sha && paper.pdfFileId) {
         // Release lock since nothing to do
         await ctx.runMutation(internal.sync.releaseBuildLock, {
           id: args.paperId,
@@ -802,7 +802,9 @@ export const buildPaper = action({
       }
 
       // Check if any dependency files actually changed (for compile source type)
+      // Skip this check if force=true
       if (
+        !args.force &&
         trackedFile.pdfSourceType === "compile" &&
         paper.cachedDependencies &&
         paper.cachedDependencies.length > 0 &&

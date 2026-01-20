@@ -154,8 +154,8 @@ export const compileLatexInternal = internalAction({
 
       await updateProgress("Fetching .tex files from Overleaf...");
 
-      // Step 1: Fetch only .tex, .sty, .cls, .bst files initially (common LaTeX source files)
-      const initialExtensions = [".tex", ".sty", ".cls", ".bst"];
+      // Step 1: Fetch common LaTeX source files including bibliography
+      const initialExtensions = [".tex", ".sty", ".cls", ".bst", ".bib"];
       const initialResponse = await fetchWithRetry(`${latexServiceUrl}/git/selective-archive`, {
         method: "POST",
         headers: getLatexServiceHeaders(),
