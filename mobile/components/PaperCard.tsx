@@ -1,16 +1,16 @@
 import { View, Text, Image, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { DownloadButton } from "./DownloadButton";
-import { useDownloadStatus } from "@/hooks/useDownloadStatus";
 
 interface Paper {
   _id: string;
   title: string;
   authors?: string[];
-  thumbnailUrl?: string;
-  pdfUrl?: string;
-  pageCount?: number;
+  thumbnailUrl?: string | null;
+  pdfUrl?: string | null;
+  isUpToDate?: boolean | null;
+  buildStatus?: string;
+  pdfSourceType?: string | null;
 }
 
 interface PaperCardProps {
@@ -19,15 +19,23 @@ interface PaperCardProps {
 
 export function PaperCard({ paper }: PaperCardProps) {
   const router = useRouter();
-  const { isOffline } = useDownloadStatus(paper._id);
 
   const handlePress = () => {
     router.push(`/paper/${paper._id}`);
   };
 
+  const isBuilding = paper.buildStatus === "building";
+  const needsSync = paper.isUpToDate === false;
+  const canCompile = paper.pdfSourceType === "compile";
+
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
-      {/* Thumbnail */}
+    <Pressable
+      style={({ pressed }) => [
+        styles.container,
+        pressed && styles.pressed,
+      ]}
+      onPress={handlePress}
+    >
       <View style={styles.thumbnailContainer}>
         {paper.thumbnailUrl ? (
           <Image
@@ -37,24 +45,23 @@ export function PaperCard({ paper }: PaperCardProps) {
           />
         ) : (
           <View style={styles.placeholderThumbnail}>
-            <Ionicons name="document-text-outline" size={32} color="#ccc" />
+            <Ionicons name="document-text" size={28} color="#ccc" />
           </View>
         )}
 
-        {/* Offline indicator */}
-        {isOffline && (
-          <View style={styles.offlineBadge}>
-            <Ionicons name="checkmark-circle" size={16} color="#fff" />
+        {/* Status indicator */}
+        {isBuilding && (
+          <View style={styles.statusBadge}>
+            <Ionicons name="sync" size={12} color="#fff" />
           </View>
         )}
-
-        {/* Download button overlay */}
-        <View style={styles.downloadOverlay}>
-          <DownloadButton paper={paper} size="small" />
-        </View>
+        {!isBuilding && needsSync && canCompile && (
+          <View style={[styles.statusBadge, styles.needsSyncBadge]}>
+            <Ionicons name="arrow-up-circle" size={12} color="#fff" />
+          </View>
+        )}
       </View>
 
-      {/* Info */}
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={2}>
           {paper.title}
@@ -75,15 +82,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     overflow: "hidden",
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginBottom: 12,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   thumbnailContainer: {
-    aspectRatio: 0.75,
+    aspectRatio: 0.77,
     backgroundColor: "#f5f5f5",
     position: "relative",
   },
@@ -96,20 +101,21 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
+    backgroundColor: "#f8f8f8",
   },
-  offlineBadge: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "#34C759",
-    borderRadius: 10,
-    padding: 2,
-  },
-  downloadOverlay: {
+  statusBadge: {
     position: "absolute",
     top: 8,
     right: 8,
+    backgroundColor: "#007AFF",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  needsSyncBadge: {
+    backgroundColor: "#FF9500",
   },
   info: {
     padding: 10,
@@ -117,12 +123,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111",
-    lineHeight: 18,
+    color: "#000",
+    lineHeight: 17,
   },
   authors: {
     fontSize: 11,
     color: "#666",
-    marginTop: 4,
+    marginTop: 3,
   },
 });

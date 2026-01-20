@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import { auth } from "./auth";
 
 // Token configuration
 const ACCESS_TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
@@ -297,6 +298,96 @@ export const revokeAllTokens = mutation({
     }
 
     return { success: true, revokedCount: tokens.filter((t) => !t.isRevoked).length };
+  },
+});
+
+// Mutation to generate mobile tokens for the current authenticated user
+// This is called by the web app after the user logs in
+export const generateMobileTokens = mutation({
+  args: {
+    deviceId: v.optional(v.string()),
+    deviceName: v.optional(v.string()),
+    platform: v.optional(v.union(v.literal("ios"), v.literal("android"), v.literal("unknown"))),
+  },
+  handler: async (ctx, args) => {
+    // Use auth.getUserId which is the proper way to get user ID in Convex Auth
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Get identity for email/name (optional fields for JWT)
+    const identity = await ctx.auth.getUserIdentity();
+
+    // Get JWT secret
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      throw new Error("JWT_SECRET not configured");
+    }
+
+    // Generate tokens
+    const now = Date.now();
+    const accessTokenExpiry = now + ACCESS_TOKEN_EXPIRY_MS;
+    const refreshToken = generateSecureToken();
+    const refreshTokenExpiry = now + REFRESH_TOKEN_EXPIRY_MS;
+
+    // Create JWT access token (use user fields, fallback to identity)
+    const accessToken = await createJwt(
+      {
+        sub: user._id,
+        email: user.email || identity?.email,
+        name: user.name || identity?.name,
+        iat: Math.floor(now / 1000),
+        exp: Math.floor(accessTokenExpiry / 1000),
+      },
+      jwtSecret
+    );
+
+    // Store refresh token hash
+    const refreshTokenHash = await hashToken(refreshToken);
+
+    // If deviceId is provided, revoke any existing tokens for this device
+    if (args.deviceId) {
+      const existingTokens = await ctx.db
+        .query("mobileTokens")
+        .withIndex("by_user_and_device", (q) =>
+          q.eq("userId", userId).eq("deviceId", args.deviceId)
+        )
+        .collect();
+
+      for (const token of existingTokens) {
+        if (!token.isRevoked) {
+          await ctx.db.patch(token._id, {
+            isRevoked: true,
+            revokedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    await ctx.db.insert("mobileTokens", {
+      userId,
+      refreshTokenHash,
+      deviceId: args.deviceId,
+      deviceName: args.deviceName,
+      platform: args.platform,
+      createdAt: Date.now(),
+      expiresAt: refreshTokenExpiry,
+      isRevoked: false,
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresAt: accessTokenExpiry,
+      refreshExpiresAt: refreshTokenExpiry,
+      tokenType: "Bearer",
+    };
   },
 });
 

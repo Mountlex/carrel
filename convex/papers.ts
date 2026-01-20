@@ -105,6 +105,8 @@ export const list = query({
             ? {
                 _id: repository._id,
                 name: repository.name,
+                gitUrl: repository.gitUrl,
+                provider: repository.provider,
                 lastSyncedAt: repository.lastSyncedAt,
                 lastCommitTime: repository.lastCommitTime,
                 syncStatus: repository.syncStatus,

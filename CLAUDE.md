@@ -107,6 +107,7 @@ Set these in your Convex dashboard:
 - `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` - GitHub OAuth credentials
 - `AUTH_GITLAB_ID` / `AUTH_GITLAB_SECRET` - GitLab OAuth credentials
 - `AUTH_RESEND_KEY` - Resend API key for email/password auth
-- `JWT_PRIVATE_KEY` / `JWKS` - JWT signing keys for mobile auth
+- `JWT_PRIVATE_KEY` / `JWKS` - RSA keys for Convex Auth OpenID
+- `JWT_SECRET` - Symmetric secret for mobile app JWT tokens (generate with `openssl rand -base64 32`)
 - `SITE_URL` - Your app URL (used in OAuth callbacks)
 - `LATEX_SERVICE_URL` - Optional LaTeX compilation service URL

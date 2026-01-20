@@ -13,6 +13,8 @@ import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 
 const CONVEX_URL = process.env.EXPO_PUBLIC_CONVEX_URL!;
+// HTTP routes are served on .convex.site, not .convex.cloud
+const CONVEX_SITE_URL = CONVEX_URL.replace('.convex.cloud', '.convex.site');
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL!;
 
 // Storage keys
@@ -63,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const deviceInfo = getDeviceInfo();
 
-      const response = await fetch(`${CONVEX_URL}/api/auth/mobile/token`, {
+      const response = await fetch(`${CONVEX_SITE_URL}/api/mobile/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -88,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(data.accessToken);
 
       // Verify token and get user info
-      const verifyResponse = await fetch(`${CONVEX_URL}/api/auth/mobile/verify`, {
+      const verifyResponse = await fetch(`${CONVEX_SITE_URL}/api/mobile/verify`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${data.accessToken}`,
@@ -118,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Revoke refresh token on server
       const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
       if (refreshToken) {
-        await fetch(`${CONVEX_URL}/api/auth/mobile/revoke`, {
+        await fetch(`${CONVEX_SITE_URL}/api/mobile/revoke`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -148,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      const response = await fetch(`${CONVEX_URL}/api/auth/mobile/refresh`, {
+      const response = await fetch(`${CONVEX_SITE_URL}/api/mobile/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -180,28 +182,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginWithProvider = useCallback(
-    async (provider: "github" | "gitlab") => {
-      try {
-        setIsLoading(true);
-
-        const result = await WebBrowser.openAuthSessionAsync(
-          `${WEB_URL}/mobile-auth?provider=${provider}`,
-          "carrel://auth/callback"
-        );
-
-        if (result.type === "success") {
-          const success = await exchangeSessionForTokens();
-          if (success) {
-            routerRef.current.replace("/(tabs)");
-          }
-        }
-      } catch (error) {
-        console.error(`${provider} login error:`, error);
-      } finally {
-        setIsLoading(false);
-      }
+    (provider: "github" | "gitlab") => {
+      // Navigate to WebView login screen
+      routerRef.current.push({
+        pathname: "/(auth)/webview-login",
+        params: { provider },
+      });
     },
-    [exchangeSessionForTokens]
+    []
   );
 
   const loginWithGitHub = useCallback(
@@ -214,27 +202,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loginWithProvider]
   );
 
-  const loginWithEmail = useCallback(async () => {
+  const loginWithEmail = useCallback(() => {
+    // Navigate to WebView login screen
+    routerRef.current.push({
+      pathname: "/(auth)/webview-login",
+      params: { provider: "email" },
+    });
+  }, []);
+
+  const completeWebViewAuth = useCallback(async (): Promise<boolean> => {
     try {
       setIsLoading(true);
-
-      const result = await WebBrowser.openAuthSessionAsync(
-        `${WEB_URL}/mobile-auth?provider=email`,
-        "carrel://auth/callback"
-      );
-
-      if (result.type === "success") {
-        const success = await exchangeSessionForTokens();
-        if (success) {
-          routerRef.current.replace("/(tabs)");
-        }
+      const success = await exchangeSessionForTokens();
+      if (success) {
+        routerRef.current.replace("/(tabs)");
       }
+      return success;
     } catch (error) {
-      console.error("Email login error:", error);
+      console.error("WebView auth completion error:", error);
+      return false;
     } finally {
       setIsLoading(false);
     }
   }, [exchangeSessionForTokens]);
+
+  const setTokensFromWebView = useCallback(async (tokens: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: number;
+  }): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+
+      // Store tokens securely
+      await Promise.all([
+        SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.accessToken),
+        SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken),
+        SecureStore.setItemAsync(TOKEN_EXPIRY_KEY, tokens.expiresAt.toString()),
+      ]);
+
+      setAccessToken(tokens.accessToken);
+
+      // Verify token and get user info
+      const verifyResponse = await fetch(`${CONVEX_SITE_URL}/api/mobile/verify`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+        },
+      });
+
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        const userData: User = {
+          id: verifyData.userId,
+          email: verifyData.email,
+          name: verifyData.name,
+        };
+        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
+        setUser(userData);
+      }
+
+      routerRef.current.replace("/(tabs)");
+      return true;
+    } catch (error) {
+      console.error("setTokensFromWebView error:", error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Load stored auth state on mount
   useEffect(() => {
@@ -280,6 +316,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithEmail,
         logout,
         refreshAccessToken,
+        completeWebViewAuth,
+        setTokensFromWebView,
       }}
     >
       {children}

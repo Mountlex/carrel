@@ -21,6 +21,7 @@ function corsHeaders(origin?: string | null): Record<string, string> {
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -40,9 +41,21 @@ function jsonResponse(
   });
 }
 
+// Simple test route
+http.route({
+  path: "/api/test",
+  method: "GET",
+  handler: httpAction(async () => {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }),
+});
+
 // OPTIONS handler for CORS preflight
 http.route({
-  path: "/api/auth/mobile/token",
+  path: "/api/mobile/token",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
@@ -53,7 +66,7 @@ http.route({
 });
 
 http.route({
-  path: "/api/auth/mobile/refresh",
+  path: "/api/mobile/refresh",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
@@ -64,7 +77,7 @@ http.route({
 });
 
 http.route({
-  path: "/api/auth/mobile/revoke",
+  path: "/api/mobile/revoke",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
@@ -74,10 +87,10 @@ http.route({
   }),
 });
 
-// POST /api/auth/mobile/token - Exchange session for JWT tokens
+// POST /api/mobile/token - Exchange session for JWT tokens
 // This endpoint requires an existing authenticated session (cookie-based)
 http.route({
-  path: "/api/auth/mobile/token",
+  path: "/api/mobile/token",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("Origin");
@@ -166,9 +179,9 @@ http.route({
   }),
 });
 
-// POST /api/auth/mobile/refresh - Refresh access token using refresh token
+// POST /api/mobile/refresh - Refresh access token using refresh token
 http.route({
-  path: "/api/auth/mobile/refresh",
+  path: "/api/mobile/refresh",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("Origin");
@@ -244,9 +257,9 @@ http.route({
   }),
 });
 
-// POST /api/auth/mobile/revoke - Revoke a refresh token
+// POST /api/mobile/revoke - Revoke a refresh token
 http.route({
-  path: "/api/auth/mobile/revoke",
+  path: "/api/mobile/revoke",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("Origin");
@@ -293,9 +306,9 @@ http.route({
   }),
 });
 
-// POST /api/auth/mobile/verify - Verify an access token (for debugging/testing)
+// POST /api/mobile/verify - Verify an access token (for debugging/testing)
 http.route({
-  path: "/api/auth/mobile/verify",
+  path: "/api/mobile/verify",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
@@ -306,7 +319,7 @@ http.route({
 });
 
 http.route({
-  path: "/api/auth/mobile/verify",
+  path: "/api/mobile/verify",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("Origin");

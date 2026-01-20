@@ -154,6 +154,7 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
     "-interaction=nonstopmode",
     "-file-line-error",
     "-cd", // Change to file's directory
+    "-f",  // Force processing past errors to complete all passes
   ];
 
   // -bibtex ensures bibtex/biber runs to generate .bbl files for references

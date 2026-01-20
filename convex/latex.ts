@@ -388,7 +388,10 @@ export const compileLatexInternal = internalAction({
         );
       }
 
-      console.log(`Found ${texFiles.length} .tex files: ${texFiles.map(f => f.path).join(", ")}`);
+      const bibFiles = texFiles.filter(f => f.path.endsWith(".bib"));
+      const actualTexFiles = texFiles.filter(f => f.path.endsWith(".tex"));
+      console.log(`Found ${actualTexFiles.length} .tex files: ${actualTexFiles.map(f => f.path).join(", ")}`);
+      console.log(`Found ${bibFiles.length} .bib files: ${bibFiles.map(f => f.path).join(", ")}`);
 
       // Track all resources we have (relative paths)
       const allResources: Map<string, { path: string; content: string; encoding?: string }> = new Map();

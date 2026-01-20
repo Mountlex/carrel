@@ -8,8 +8,8 @@ export default function TabLayout() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+        <ActivityIndicator size="large" color="#000" />
       </View>
     );
   }
@@ -21,18 +21,25 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#007AFF",
-        tabBarInactiveTintColor: "#8E8E93",
+        tabBarActiveTintColor: "#000",
+        tabBarInactiveTintColor: "#999",
         tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: "#E5E5EA",
+          backgroundColor: "#fff",
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         headerStyle: {
           backgroundColor: "#fff",
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 0,
         },
         headerTitleStyle: {
-          fontWeight: "600",
+          fontWeight: "700",
+          fontSize: 28,
         },
+        headerTitleAlign: "left",
       }}
     >
       <Tabs.Screen
@@ -40,16 +47,7 @@ export default function TabLayout() {
         options={{
           title: "Papers",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="offline"
-        options={{
-          title: "Offline",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="download-outline" size={size} color={color} />
+            <Ionicons name="documents" size={size} color={color} />
           ),
         }}
       />
@@ -58,7 +56,7 @@ export default function TabLayout() {
         options={{
           title: "Settings",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="person-circle" size={size} color={color} />
           ),
         }}
       />

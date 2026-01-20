@@ -4,7 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { AuthProvider } from "@/lib/auth";
-import { registerBackgroundTasks } from "@/lib/backgroundTasks";
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -15,10 +14,6 @@ const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
 
 export default function RootLayout() {
   useEffect(() => {
-    // Register background download tasks
-    registerBackgroundTasks();
-
-    // Hide splash screen after initialization
     SplashScreen.hideAsync();
   }, []);
 

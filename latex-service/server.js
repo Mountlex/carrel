@@ -278,6 +278,71 @@ app.post("/deps", rateLimit, async (req, res) => {
       // No log file
     }
 
+    // Check .aux file for \bibdata commands (tells us what .bib files are needed)
+    // Also recursively check included aux files (\@input{file.aux})
+    const auxPath = path.join(targetDir, `${targetName}.aux`);
+    const requiredBibFiles = new Set();
+    const processedAuxFiles = new Set();
+
+    async function parseAuxFile(auxFilePath) {
+      if (processedAuxFiles.has(auxFilePath)) return;
+      processedAuxFiles.add(auxFilePath);
+
+      try {
+        const auxContent = await fs.readFile(auxFilePath, "utf-8");
+
+        // Match \bibdata{file1,file2,...} - these are the .bib files needed
+        const bibdataMatches = auxContent.matchAll(/\\bibdata\{([^}]+)\}/g);
+        for (const match of bibdataMatches) {
+          const bibFiles = match[1].split(",").map(f => f.trim());
+          for (const bibFile of bibFiles) {
+            requiredBibFiles.add(bibFile);
+          }
+        }
+
+        // Check for included aux files (\@input{file.aux})
+        const inputMatches = auxContent.matchAll(/\\@input\{([^}]+)\}/g);
+        for (const match of inputMatches) {
+          const includedAuxPath = path.join(path.dirname(auxFilePath), match[1]);
+          await parseAuxFile(includedAuxPath);
+        }
+      } catch {
+        // Aux file doesn't exist or can't be read
+      }
+    }
+
+    await parseAuxFile(auxPath);
+
+    // Check .bcf file for biblatex datasources (alternative to \bibdata)
+    const bcfPath = path.join(targetDir, `${targetName}.bcf`);
+    try {
+      const bcfContent = await fs.readFile(bcfPath, "utf-8");
+      // Match <bcf:datasource type="file" datatype="bibtex" glob="false">filename</bcf:datasource>
+      const datasourcePattern = /<bcf:datasource[^>]*>([^<]+)<\/bcf:datasource>/g;
+      let dsMatch;
+      while ((dsMatch = datasourcePattern.exec(bcfContent)) !== null) {
+        if (dsMatch[1]) {
+          requiredBibFiles.add(dsMatch[1].replace(/\.bib$/, ""));
+        }
+      }
+    } catch {
+      // No bcf file
+    }
+
+    // Check if required .bib files exist in provided resources
+    for (const bibName of requiredBibFiles) {
+      const bibWithExt = bibName.endsWith(".bib") ? bibName : `${bibName}.bib`;
+      const bibExists = resources.some(r =>
+        r.path === bibWithExt ||
+        r.path.endsWith(`/${bibWithExt}`) ||
+        r.path === bibName ||
+        r.path.endsWith(`/${bibName}`)
+      );
+      if (!bibExists) {
+        missingFiles.push(bibWithExt);
+      }
+    }
+
     // Also check biber log (.blg) for missing .bib files
     const blgPath = path.join(targetDir, `${targetName}.blg`);
     try {
@@ -289,6 +354,7 @@ app.post("/deps", rateLimit, async (req, res) => {
         /ERROR - Cannot find '([^']+)'!/gm,
         /ERROR - Cannot find file '([^']+)'/gm,
         /WARN - I didn't find a database named '([^']+)'/gm,
+        /WARN - Data source '([^']+)' not found/gm,
         // Traditional BibTeX errors
         /I couldn't open database file ([^\s]+)/gm,
         /I couldn't open file name `([^']+)'/gm,

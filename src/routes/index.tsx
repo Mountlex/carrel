@@ -32,6 +32,43 @@ function formatRelativeTime(timestamp: number | undefined): string {
   return "Just now";
 }
 
+// Convert git URL to web URL for the repository
+function getRepoWebUrl(gitUrl: string, provider: string): string | null {
+  // Remove .git suffix if present
+  const url = gitUrl.replace(/\.git$/, "");
+
+  // GitHub: https://github.com/owner/repo
+  if (provider === "github") {
+    const match = url.match(/github\.com[/:]([\w-]+\/[\w.-]+)/);
+    if (match) return `https://github.com/${match[1]}`;
+  }
+
+  // GitLab: https://gitlab.com/owner/repo
+  if (provider === "gitlab") {
+    const match = url.match(/gitlab\.com[/:]((?:[\w-]+\/)+[\w.-]+)/);
+    if (match) return `https://gitlab.com/${match[1]}`;
+  }
+
+  // Overleaf: https://www.overleaf.com/project/<id>
+  if (provider === "overleaf") {
+    const match = url.match(/git\.overleaf\.com\/([a-f0-9]+)/i);
+    if (match) return `https://www.overleaf.com/project/${match[1]}`;
+  }
+
+  // Self-hosted GitLab: convert git URL to web URL
+  if (provider === "selfhosted-gitlab") {
+    // Handle both https:// and git@ formats
+    if (url.startsWith("git@")) {
+      const match = url.match(/git@([^:]+):(.+)/);
+      if (match) return `https://${match[1]}/${match[2]}`;
+    }
+    // Already https format
+    return url;
+  }
+
+  return null;
+}
+
 function GalleryPage() {
   const { user, isLoading: isUserLoading, isAuthenticated } = useUser();
   const papers = useQuery(api.papers.list, isAuthenticated && user ? { userId: user._id } : "skip");
@@ -266,8 +303,12 @@ function GalleryPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
       handleSaveTitle();
     } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       setEditingPaperId(null);
       setEditTitle("");
     }
@@ -576,13 +617,12 @@ function GalleryPage() {
         </div>
       ) : (
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredPapers.map((paper) => (
-            <Link
-              key={paper._id}
-              to="/papers/$id"
-              params={{ id: paper._id }}
-              className="group overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:border-gray-200 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
-            >
+          {filteredPapers.map((paper) => {
+            const isEditing = editingPaperId === paper._id;
+            const cardClassName = "group overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:border-gray-200 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700";
+
+            const cardContent = (
+              <>
               {/* Thumbnail */}
               <div className="relative aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800">
                 {paper.thumbnailUrl ? (
@@ -629,7 +669,7 @@ function GalleryPage() {
               {/* Info */}
               <div className="p-4">
                 <div className="flex items-start gap-1">
-                  {editingPaperId === paper._id ? (
+                  {isEditing ? (
                     <input
                       ref={inputRef}
                       type="text"
@@ -637,7 +677,6 @@ function GalleryPage() {
                       onChange={(e) => setEditTitle(e.target.value)}
                       onBlur={handleSaveTitle}
                       onKeyDown={handleKeyDown}
-                      onClick={(e) => e.preventDefault()}
                       className="flex-1 truncate rounded border border-blue-400 px-1 py-0.5 text-sm font-normal text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
                     />
                   ) : (
@@ -676,7 +715,23 @@ function GalleryPage() {
                 <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
                   {paper.repository ? (
                     <span className="flex items-center gap-1 truncate">
-                      <span className="truncate">{paper.repository.name}</span>
+                      {(() => {
+                        const webUrl = getRepoWebUrl(paper.repository.gitUrl, paper.repository.provider);
+                        return webUrl ? (
+                          <a
+                            href={webUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                            title={`Open ${paper.repository.name} on ${paper.repository.provider}`}
+                          >
+                            {paper.repository.name}
+                          </a>
+                        ) : (
+                          <span className="truncate">{paper.repository.name}</span>
+                        );
+                      })()}
                       {paper.buildStatus === "building" ? (
                         <span
                           className="flex shrink-0 items-center gap-0.5 text-blue-600"
@@ -822,8 +877,24 @@ function GalleryPage() {
                   </span>
                 </div>
               </div>
-            </Link>
-          ))}
+              </>
+            );
+
+            return isEditing ? (
+              <div key={paper._id} className={cardClassName}>
+                {cardContent}
+              </div>
+            ) : (
+              <Link
+                key={paper._id}
+                to="/papers/$id"
+                params={{ id: paper._id }}
+                className={cardClassName}
+              >
+                {cardContent}
+              </Link>
+            );
+          })}
         </div>
       )}
       </DropZone>

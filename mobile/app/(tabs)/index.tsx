@@ -5,50 +5,53 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  ActivityIndicator,
 } from "react-native";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Id } from "@convex/_generated/dataModel";
 import { PaperCard } from "@/components/PaperCard";
-import { DownloadAllBanner } from "@/components/DownloadAllBanner";
 import { EmptyState } from "@/components/EmptyState";
+import { useAuth } from "@/lib/useAuth";
 
 export default function PapersScreen() {
+  const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const papers = useQuery(api.papers.list);
+  const papers = useQuery(
+    api.papers.list,
+    user?.id ? { userId: user.id as Id<"users"> } : "skip"
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Convex auto-refreshes, but we can trigger a sync here
-    // await triggerSync();
-    setRefreshing(false);
+    // Convex auto-refreshes via subscriptions
+    setTimeout(() => setRefreshing(false), 500);
   }, []);
 
   if (papers === undefined) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading papers...</Text>
+          <ActivityIndicator size="small" color="#000" />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (papers.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <EmptyState
-          icon="document-outline"
+          icon="documents-outline"
           title="No papers yet"
-          message="Add repositories or upload PDFs from the web app to see them here."
+          message="Add a repository from the web app to get started."
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["left", "right"]}>
-      <DownloadAllBanner papers={papers} />
+    <View style={styles.container}>
       <FlatList
         data={papers}
         numColumns={2}
@@ -57,32 +60,33 @@ export default function PapersScreen() {
         contentContainerStyle={styles.list}
         columnWrapperStyle={styles.row}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#000"
+          />
         }
         showsVerticalScrollIndicator={false}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#fff",
   },
   loading: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: {
-    fontSize: 16,
-    color: "#666",
-  },
   list: {
-    padding: 8,
+    padding: 12,
+    paddingTop: 8,
   },
   row: {
-    gap: 8,
+    gap: 12,
   },
 });

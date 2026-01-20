@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, ActivityIndicator } from "react-native";
 import Pdf from "react-native-pdf";
 
 interface PdfViewerProps {
-  source: string; // URL or local file path
+  source: string;
 }
 
 export function PdfViewer({ source }: PdfViewerProps) {
@@ -12,10 +12,7 @@ export function PdfViewer({ source }: PdfViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Determine if source is a local file or URL
-  const pdfSource = source.startsWith("file://") || source.startsWith("/")
-    ? { uri: source.startsWith("/") ? `file://${source}` : source, cache: true }
-    : { uri: source, cache: true };
+  const pdfSource = { uri: source, cache: true };
 
   return (
     <View style={styles.container}>
@@ -39,26 +36,22 @@ export function PdfViewer({ source }: PdfViewerProps) {
         horizontal={false}
         enableAntialiasing={true}
         enableAnnotationRendering={true}
-        fitPolicy={0} // Fit width
+        fitPolicy={0}
         spacing={0}
       />
 
-      {/* Loading overlay */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading PDF...</Text>
+          <ActivityIndicator size="small" color="#000" />
         </View>
       )}
 
-      {/* Error state */}
       {error && (
         <View style={styles.errorOverlay}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
-      {/* Page indicator */}
       {totalPages > 0 && !isLoading && (
         <View style={styles.pageIndicator}>
           <Text style={styles.pageText}>
@@ -73,22 +66,17 @@ export function PdfViewer({ source }: PdfViewerProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#333",
+    backgroundColor: "#f0f0f0",
   },
   pdf: {
     flex: 1,
-    backgroundColor: "#333",
+    backgroundColor: "#f0f0f0",
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#666",
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -98,22 +86,22 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   errorText: {
-    fontSize: 16,
-    color: "#FF3B30",
+    fontSize: 15,
+    color: "#c00",
     textAlign: "center",
   },
   pageIndicator: {
     position: "absolute",
-    bottom: 16,
+    bottom: 12,
     alignSelf: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 5,
+    borderRadius: 12,
   },
   pageText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
   },
 });

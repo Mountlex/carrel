@@ -1,15 +1,13 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useConvexAuth } from "convex/react";
+import { useEffect, useState, useCallback } from "react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { EmailPasswordForm } from "../components/auth/EmailPasswordForm";
 import { GitHubIcon, GitLabIcon } from "../components/icons";
+import { api } from "../../convex/_generated/api";
 
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
-
-// Convex URL for API calls
-const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
 
 // Check if running in React Native WebView
 function isReactNativeWebView(): boolean {
@@ -24,52 +22,8 @@ function getDeviceInfo() {
   return {
     deviceId: `webview-${Date.now()}`,
     deviceName: isAndroid ? "Android Device" : isIOS ? "iOS Device" : "Mobile Device",
-    platform: isAndroid ? "android" : isIOS ? "ios" : "unknown",
+    platform: (isAndroid ? "android" : isIOS ? "ios" : "unknown") as "android" | "ios" | "unknown",
   };
-}
-
-// Exchange session for tokens and send to React Native
-async function exchangeAndNotify(): Promise<void> {
-  console.log("[mobile-auth] exchangeAndNotify called, isWebView:", isReactNativeWebView());
-
-  if (!isReactNativeWebView()) {
-    window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
-    return;
-  }
-
-  try {
-    console.log("[mobile-auth] Calling token endpoint:", `${CONVEX_URL}/api/auth/mobile/token`);
-
-    // Call token endpoint from web context (cookies are available here)
-    const response = await fetch(`${CONVEX_URL}/api/auth/mobile/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(getDeviceInfo()),
-    });
-
-    console.log("[mobile-auth] Token response status:", response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[mobile-auth] Token error response:", errorText);
-      throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
-    }
-
-    const tokens = await response.json();
-    console.log("[mobile-auth] Got tokens, sending to RN");
-
-    // Send tokens to React Native
-    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
-      JSON.stringify({ type: "auth_tokens", ...tokens })
-    );
-    console.log("[mobile-auth] postMessage sent");
-  } catch (error) {
-    console.error("[mobile-auth] Token exchange error:", error);
-    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
-      JSON.stringify({ type: "auth_error", error: String(error) })
-    );
-  }
 }
 
 // Send cancel message to React Native or redirect
@@ -81,6 +35,28 @@ function notifyCancel() {
   } else {
     window.location.href = `${MOBILE_CALLBACK_URL}?cancelled=true`;
   }
+}
+
+// Send tokens to React Native
+function sendTokensToReactNative(tokens: {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  refreshExpiresAt: number;
+  tokenType: string;
+}) {
+  console.log("[mobile-auth] Sending tokens to RN");
+  (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
+    JSON.stringify({ type: "auth_tokens", ...tokens })
+  );
+}
+
+// Send error to React Native
+function sendErrorToReactNative(error: string) {
+  console.error("[mobile-auth] Sending error to RN:", error);
+  (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
+    JSON.stringify({ type: "auth_error", error })
+  );
 }
 
 interface MobileAuthSearch {
@@ -103,6 +79,33 @@ function MobileAuthPage() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [authStarted, setAuthStarted] = useState(false);
   const [error] = useState<string | null>(search.error ?? null);
+  const [tokenExchangeAttempted, setTokenExchangeAttempted] = useState(false);
+
+  // Convex mutation for generating mobile tokens
+  const generateMobileTokens = useMutation(api.mobileAuth.generateMobileTokens);
+
+  // Exchange session for tokens and send to React Native
+  const exchangeAndNotify = useCallback(async () => {
+    console.log("[mobile-auth] exchangeAndNotify called, isWebView:", isReactNativeWebView());
+
+    if (!isReactNativeWebView()) {
+      window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
+      return;
+    }
+
+    try {
+      const deviceInfo = getDeviceInfo();
+      console.log("[mobile-auth] Calling generateMobileTokens mutation");
+
+      const tokens = await generateMobileTokens(deviceInfo);
+      console.log("[mobile-auth] Got tokens from mutation");
+
+      sendTokensToReactNative(tokens);
+    } catch (err) {
+      console.error("[mobile-auth] Token exchange error:", err);
+      sendErrorToReactNative(String(err));
+    }
+  }, [generateMobileTokens]);
 
   // Auto-start OAuth flow if provider is specified
   useEffect(() => {
@@ -121,21 +124,23 @@ function MobileAuthPage() {
 
   // Redirect to mobile app after successful authentication
   useEffect(() => {
-    if (isAuthenticated && !isRedirecting) {
+    if (isAuthenticated && !isRedirecting && !tokenExchangeAttempted) {
       // Small delay to ensure session is fully established
       const timer = setTimeout(() => {
         setIsRedirecting(true);
+        setTokenExchangeAttempted(true);
         // Notify mobile app (via postMessage or redirect)
         exchangeAndNotify();
       }, 500);
 
       return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, isRedirecting]);
+  }, [isAuthenticated, isRedirecting, tokenExchangeAttempted, exchangeAndNotify]);
 
   // Handle successful email auth
   const handleEmailAuthSuccess = () => {
     setIsRedirecting(true);
+    setTokenExchangeAttempted(true);
     setTimeout(() => {
       exchangeAndNotify();
     }, 500);
