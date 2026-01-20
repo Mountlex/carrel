@@ -32,7 +32,7 @@ function ProfilePage() {
   const requestPasswordChangeCode = useAction(api.passwordActions.requestPasswordChangeCode);
   const changePassword = useAction(api.passwordActions.changePassword);
   const saveOverleafCredentials = useMutation(api.users.saveOverleafCredentials);
-  const addSelfHostedGitLabInstance = useMutation(api.users.addSelfHostedGitLabInstance);
+  const addSelfHostedGitLabInstance = useAction(api.git.addSelfHostedGitLabInstanceWithTest);
   const deleteSelfHostedGitLabInstance = useMutation(api.users.deleteSelfHostedGitLabInstance);
   const deleteAccountMutation = useMutation(api.users.deleteAccount);
 

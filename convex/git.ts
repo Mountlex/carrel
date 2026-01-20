@@ -1313,14 +1313,48 @@ export const fetchRepoInfo = action({
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          if (isSelfHosted) {
+            throw new Error(
+              `Authentication failed for ${matchingInstance!.name}. ` +
+              "Your Personal Access Token may be expired or invalid. " +
+              "Please update the token in your self-hosted GitLab settings."
+            );
+          }
+          throw new Error("GitLab authentication failed. Please sign in with GitLab again.");
+        }
+        if (response.status === 403) {
+          if (isSelfHosted) {
+            throw new Error(
+              `Access denied to ${parsed.owner}/${parsed.repo} on ${matchingInstance!.name}. ` +
+              "Your PAT may lack the required scopes (read_api, read_repository) or you may not have access to this project."
+            );
+          }
+          throw new Error(
+            `Access denied to ${parsed.owner}/${parsed.repo}. ` +
+            "Check that you have permission to view this repository."
+          );
+        }
         if (response.status === 404) {
+          if (isSelfHosted) {
+            throw new Error(
+              `Repository not found: ${parsed.owner}/${parsed.repo} on ${matchingInstance!.name}. ` +
+              "Check that the repository exists and your PAT has access to it."
+            );
+          }
           const privateNote = token
             ? "Check that you have access to this repository."
-            : isSelfHosted
-              ? "Check that you have access to this repository and your PAT has the correct scopes."
-              : "If this is a private repository, sign in with GitLab first.";
+            : "If this is a private repository, sign in with GitLab first.";
           throw new Error(
             `Repository not found: ${parsed.owner}/${parsed.repo}. ${privateNote}`
+          );
+        }
+        // For other errors, try to get more detail
+        const errorText = await response.text().catch(() => "");
+        if (isSelfHosted) {
+          throw new Error(
+            `Could not access repository on ${matchingInstance!.name} (HTTP ${response.status}). ` +
+            (errorText ? errorText.slice(0, 100) : response.statusText)
           );
         }
         throw new Error(`GitLab API error: ${response.status} ${response.statusText}`);
@@ -1334,5 +1368,135 @@ export const fetchRepoInfo = action({
         isPrivate: data.visibility !== "public",
       };
     }
+  },
+});
+
+// Test and add a self-hosted GitLab instance
+// This action tests the connection before saving to provide better error messages
+export const addSelfHostedGitLabInstanceWithTest = action({
+  args: {
+    name: v.string(),
+    url: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Normalize URL (remove trailing slash)
+    const normalizedUrl = args.url.replace(/\/$/, "");
+
+    // Validate URL format
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(normalizedUrl);
+    } catch {
+      throw new Error(
+        "Invalid URL format. Please enter a valid URL like https://gitlab.example.com"
+      );
+    }
+
+    // Require HTTPS
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error(
+        "Only HTTPS URLs are allowed for security. Please use https:// instead of http://"
+      );
+    }
+
+    // Test the connection by fetching the GitLab API version endpoint
+    // This is a lightweight endpoint that doesn't require specific scopes
+    const headers: Record<string, string> = {
+      "User-Agent": "Carrel",
+      "PRIVATE-TOKEN": args.token,
+    };
+
+    try {
+      // First, test basic connectivity with version endpoint
+      const versionResponse = await fetchWithTimeout(
+        `${normalizedUrl}/api/v4/version`,
+        { headers, timeout: 15000 }
+      );
+
+      if (versionResponse.status === 401) {
+        throw new Error(
+          "Authentication failed. Please check that your Personal Access Token is correct and not expired."
+        );
+      }
+
+      if (versionResponse.status === 403) {
+        throw new Error(
+          "Access denied. Your token may not have the required scopes. " +
+          "Please ensure your PAT has at least 'read_api' scope."
+        );
+      }
+
+      if (!versionResponse.ok) {
+        const errorText = await versionResponse.text().catch(() => "");
+        throw new Error(
+          `Could not connect to GitLab instance (HTTP ${versionResponse.status}). ` +
+          (errorText ? `Server response: ${errorText.slice(0, 100)}` : "Please verify the URL is correct.")
+        );
+      }
+
+      // Now test that we can actually list projects (verifies read_api scope)
+      const projectsResponse = await fetchWithTimeout(
+        `${normalizedUrl}/api/v4/projects?membership=true&per_page=1`,
+        { headers, timeout: 15000 }
+      );
+
+      if (projectsResponse.status === 403) {
+        throw new Error(
+          "Token is valid but lacks required permissions. " +
+          "Please ensure your PAT has 'read_api' and 'read_repository' scopes."
+        );
+      }
+
+      if (!projectsResponse.ok && projectsResponse.status !== 401) {
+        // 401 might just mean the token doesn't have project access yet, which is fine
+        const errorText = await projectsResponse.text().catch(() => "");
+        throw new Error(
+          `Could not verify repository access (HTTP ${projectsResponse.status}). ` +
+          (errorText ? `Server response: ${errorText.slice(0, 100)}` : "")
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        // Check for network-level errors
+        const message = error.message.toLowerCase();
+        if (message.includes("fetch") || message.includes("network") || message.includes("enotfound") || message.includes("econnrefused")) {
+          throw new Error(
+            `Could not reach the GitLab instance at ${parsedUrl.hostname}. ` +
+            "Please check that the URL is correct and the server is accessible."
+          );
+        }
+        if (message.includes("timeout")) {
+          throw new Error(
+            `Connection timed out while trying to reach ${parsedUrl.hostname}. ` +
+            "The server may be slow or unreachable."
+          );
+        }
+        if (message.includes("certificate") || message.includes("ssl") || message.includes("tls")) {
+          throw new Error(
+            `SSL/TLS error connecting to ${parsedUrl.hostname}. ` +
+            "The server may have an invalid or self-signed certificate."
+          );
+        }
+        // Re-throw our own errors
+        throw error;
+      }
+      throw new Error("An unexpected error occurred while testing the connection.");
+    }
+
+    // Connection test passed - now save the instance using the mutation
+    const { api } = await import("./_generated/api");
+    const instanceId = await ctx.runMutation(api.users.addSelfHostedGitLabInstance, {
+      name: args.name,
+      url: normalizedUrl,
+      token: args.token,
+    });
+
+    return { instanceId, success: true };
   },
 });

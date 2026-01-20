@@ -88,9 +88,29 @@ export function AddRepositoryModal({
 
   const getRepositoryErrorMessage = (err: unknown): string => {
     const message = err instanceof Error ? err.message : "";
+
+    // Provide user-friendly messages for common patterns, otherwise show the detailed backend error
     if (message.includes("already") || message.includes("exists") || message.includes("duplicate")) {
       return "This repository has already been added to your collection.";
     }
+
+    // For self-hosted GitLab, the backend provides detailed messages - show them directly
+    if (message.includes("Self-hosted") || message.includes("self-hosted") ||
+        message.includes("PAT") || message.includes("Personal Access Token")) {
+      return message;
+    }
+
+    // For other detailed backend messages (containing specific info), show them directly
+    if (message.length > 50 && (
+      message.includes("Repository not found") ||
+      message.includes("Authentication failed") ||
+      message.includes("Access denied") ||
+      message.includes("Could not")
+    )) {
+      return message;
+    }
+
+    // Generic fallbacks for terse error messages
     if (message.includes("401") || message.includes("403") || message.includes("permission")) {
       return "Unable to access this repository. Please check your permissions.";
     }
@@ -100,6 +120,7 @@ export function AddRepositoryModal({
     if (message.includes("network") || message.includes("fetch")) {
       return "Network error. Please check your connection and try again.";
     }
+
     return message || "Failed to add repository. Please try again.";
   };
 

@@ -120,6 +120,7 @@ export const add = mutation({
     gitUrl: v.string(),
     name: v.optional(v.string()),
     defaultBranch: v.optional(v.string()),
+    selfHostedGitLabInstanceId: v.optional(v.id("selfHostedGitLabInstances")),
   },
   handler: async (ctx, args) => {
     // Authorization check: verify the caller owns this userId
@@ -138,9 +139,37 @@ export const add = mutation({
       throw new Error("Invalid git URL format");
     }
 
-    const parsed = parseRepoUrl(args.gitUrl);
+    // Get user's self-hosted GitLab instances to properly detect provider
+    const selfHostedInstances = await ctx.db
+      .query("selfHostedGitLabInstances")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const parsed = parseRepoUrl(
+      args.gitUrl,
+      selfHostedInstances.map((i) => ({ url: i.url }))
+    );
     if (!parsed) {
       throw new Error("Invalid git URL. Supported providers: GitHub, GitLab, Overleaf, or configured self-hosted GitLab instances.");
+    }
+
+    // For self-hosted GitLab, find the matching instance ID
+    let instanceId = args.selfHostedGitLabInstanceId;
+    if (parsed.provider === "selfhosted-gitlab" && !instanceId && parsed.matchedInstanceUrl) {
+      const matchingInstance = selfHostedInstances.find(
+        (i) => i.url === parsed.matchedInstanceUrl
+      );
+      if (matchingInstance) {
+        instanceId = matchingInstance._id;
+      }
+    }
+
+    // Validate that self-hosted GitLab repos have a valid instance
+    if (parsed.provider === "selfhosted-gitlab" && !instanceId) {
+      throw new Error(
+        "Could not find a matching self-hosted GitLab instance for this URL. " +
+        "Please add the GitLab instance first in the Self-Hosted tab."
+      );
     }
 
     const repositoryId = await ctx.db.insert("repositories", {
@@ -148,6 +177,7 @@ export const add = mutation({
       name: args.name || parsed.repo,
       gitUrl: args.gitUrl,
       provider: parsed.provider,
+      selfHostedGitLabInstanceId: instanceId,
       defaultBranch: args.defaultBranch || "main",
       syncStatus: "idle",
     });

@@ -8,6 +8,81 @@ import { GitHubIcon, GitLabIcon } from "../components/icons";
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
 
+// Convex URL for API calls
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
+
+// Check if running in React Native WebView
+function isReactNativeWebView(): boolean {
+  return typeof window !== "undefined" && !!(window as unknown as { ReactNativeWebView?: unknown }).ReactNativeWebView;
+}
+
+// Get device info from user agent
+function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  return {
+    deviceId: `webview-${Date.now()}`,
+    deviceName: isAndroid ? "Android Device" : isIOS ? "iOS Device" : "Mobile Device",
+    platform: isAndroid ? "android" : isIOS ? "ios" : "unknown",
+  };
+}
+
+// Exchange session for tokens and send to React Native
+async function exchangeAndNotify(): Promise<void> {
+  console.log("[mobile-auth] exchangeAndNotify called, isWebView:", isReactNativeWebView());
+
+  if (!isReactNativeWebView()) {
+    window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
+    return;
+  }
+
+  try {
+    console.log("[mobile-auth] Calling token endpoint:", `${CONVEX_URL}/api/auth/mobile/token`);
+
+    // Call token endpoint from web context (cookies are available here)
+    const response = await fetch(`${CONVEX_URL}/api/auth/mobile/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(getDeviceInfo()),
+    });
+
+    console.log("[mobile-auth] Token response status:", response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[mobile-auth] Token error response:", errorText);
+      throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
+    }
+
+    const tokens = await response.json();
+    console.log("[mobile-auth] Got tokens, sending to RN");
+
+    // Send tokens to React Native
+    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
+      JSON.stringify({ type: "auth_tokens", ...tokens })
+    );
+    console.log("[mobile-auth] postMessage sent");
+  } catch (error) {
+    console.error("[mobile-auth] Token exchange error:", error);
+    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
+      JSON.stringify({ type: "auth_error", error: String(error) })
+    );
+  }
+}
+
+// Send cancel message to React Native or redirect
+function notifyCancel() {
+  if (isReactNativeWebView()) {
+    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
+      JSON.stringify({ type: "auth_cancelled" })
+    );
+  } else {
+    window.location.href = `${MOBILE_CALLBACK_URL}?cancelled=true`;
+  }
+}
+
 interface MobileAuthSearch {
   provider?: "github" | "gitlab" | "email";
   error?: string;
@@ -50,8 +125,8 @@ function MobileAuthPage() {
       // Small delay to ensure session is fully established
       const timer = setTimeout(() => {
         setIsRedirecting(true);
-        // Redirect to mobile app
-        window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
+        // Notify mobile app (via postMessage or redirect)
+        exchangeAndNotify();
       }, 500);
 
       return () => clearTimeout(timer);
@@ -62,7 +137,7 @@ function MobileAuthPage() {
   const handleEmailAuthSuccess = () => {
     setIsRedirecting(true);
     setTimeout(() => {
-      window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
+      exchangeAndNotify();
     }, 500);
   };
 
@@ -75,12 +150,12 @@ function MobileAuthPage() {
           <p className="mt-4 text-gray-600">Redirecting to app...</p>
           <p className="mt-2 text-sm text-gray-500">
             If you're not redirected automatically,{" "}
-            <a
-              href={`${MOBILE_CALLBACK_URL}?success=true`}
+            <button
+              onClick={() => exchangeAndNotify()}
               className="text-blue-600 underline"
             >
               tap here
-            </a>
+            </button>
           </p>
         </div>
       </MobileAuthLayout>
@@ -208,12 +283,12 @@ function MobileAuthPage() {
 
         {/* Cancel link */}
         <div className="mt-4 text-center">
-          <a
-            href={`${MOBILE_CALLBACK_URL}?cancelled=true`}
+          <button
+            onClick={() => notifyCancel()}
             className="text-sm text-gray-600 underline"
           >
             Cancel and return to app
-          </a>
+          </button>
         </div>
       </div>
     </MobileAuthLayout>

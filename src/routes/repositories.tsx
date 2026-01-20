@@ -41,7 +41,7 @@ function RepositoriesPage() {
 
   // Self-hosted GitLab instance management
   const selfHostedGitLabInstances = useQuery(api.users.getSelfHostedGitLabInstances);
-  const addSelfHostedGitLabInstance = useMutation(api.users.addSelfHostedGitLabInstance);
+  const addSelfHostedGitLabInstance = useAction(api.git.addSelfHostedGitLabInstanceWithTest);
   const deleteSelfHostedGitLabInstance = useMutation(api.users.deleteSelfHostedGitLabInstance);
 
   // Modal states

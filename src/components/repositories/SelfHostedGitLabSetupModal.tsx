@@ -38,20 +38,16 @@ export function SelfHostedGitLabSetupModal({ onClose, onSave }: SelfHostedGitLab
     } catch (err) {
       console.error("Failed to add self-hosted GitLab instance:", err);
       const message = err instanceof Error ? err.message : "";
-      if (message.includes("401") || message.includes("403") || message.includes("auth")) {
-        setError(
-          "Authentication failed. Please verify your token has the required scopes: read_api and read_repository."
-        );
-      } else if (message.includes("network") || message.includes("fetch") || message.includes("ENOTFOUND")) {
-        setError(
-          "Unable to reach the GitLab instance. Please check the URL and your network connection."
-        );
-      } else if (message.includes("already") || message.includes("exists")) {
+
+      // The backend action provides detailed error messages, so we display them directly
+      // Only fallback to generic messages for truly unexpected errors
+      if (message.includes("already") || message.includes("exists") || message.includes("duplicate")) {
         setError("This GitLab instance has already been added.");
+      } else if (message) {
+        // Display the detailed error message from the backend
+        setError(message);
       } else {
-        setError(
-          "Failed to add instance. Please verify the URL and token are correct."
-        );
+        setError("Failed to add instance. Please verify the URL and token are correct.");
       }
     } finally {
       setIsSaving(false);
