@@ -418,7 +418,7 @@ function RepositoriesPage() {
               onSync={() => handleCheck(repo._id)}
               onDelete={() => handleDelete(repo._id)}
               onConfigure={() => setConfigureRepo(repo)}
-              onUpdateName={(name) => handleUpdateName(repo._id, name)}
+              onUpdateName={handleUpdateName}
             />
           ))}
         </div>
