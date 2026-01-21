@@ -221,9 +221,40 @@ export const compileLatexInternal = internalAction({
             }, 2);
 
             if (pdfResponse.ok) {
-              // Success! Extract dependencies from file list
-              finalDependencies = files.map(f => f.path);
               console.log(`Full archive compile succeeded with ${files.length} files`);
+
+              // Get actual dependencies by calling /deps (parses .fls file for actually-used files)
+              // This avoids marking unused files as dependencies
+              await updateProgress("Detecting dependencies...");
+              try {
+                const depsResponse = await fetchWithRetry(`${latexServiceUrl}/deps`, {
+                  method: "POST",
+                  headers: getLatexServiceHeaders(),
+                  body: JSON.stringify({
+                    resources: files,
+                    target: args.filePath,
+                    compiler: "pdflatex",
+                  }),
+                  timeout: 60000,
+                });
+
+                if (depsResponse.ok) {
+                  const depsResult = await depsResponse.json();
+                  if (depsResult.dependencies && depsResult.dependencies.length > 0) {
+                    finalDependencies = depsResult.dependencies;
+                    console.log(`Detected ${finalDependencies.length} actual dependencies`);
+                  }
+                }
+              } catch (error) {
+                // If deps detection fails, fall back to all files
+                console.log(`Deps detection failed, using all files: ${error}`);
+                finalDependencies = files.map(f => f.path);
+              }
+
+              // If no dependencies detected, use all files as fallback
+              if (finalDependencies.length === 0) {
+                finalDependencies = files.map(f => f.path);
+              }
 
               // Skip to PDF storage (jump past provider-specific code)
               await updateProgress("Storing PDF...");
