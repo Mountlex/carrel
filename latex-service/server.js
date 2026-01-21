@@ -10,6 +10,7 @@ const { logger, createRequestLogger } = require("./lib/logger");
 const { spawnAsync, runLatexmk, runPdftoppm, runGit } = require("./lib/subprocess");
 const { withCleanup, cleanupAllPendingWorkDirs } = require("./lib/cleanup");
 const { rateLimit } = require("./lib/rateLimit");
+const { compilationQueue } = require("./lib/queue");
 const {
   LIMITS,
   ALLOWED_COMPILERS,
@@ -152,6 +153,7 @@ app.get("/health", async (req, res) => {
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
     checks,
+    queue: compilationQueue.stats(),
   });
 });
 
@@ -414,254 +416,280 @@ app.post("/deps", rateLimit, async (req, res) => {
 
 // Compile endpoint - accepts JSON with resources array
 app.post("/compile", rateLimit, async (req, res) => {
-  const jobId = uuidv4();
-  const workDir = `/tmp/latex-${jobId}`;
+  try {
+    await compilationQueue.run(async () => {
+      const jobId = uuidv4();
+      const workDir = `/tmp/latex-${jobId}`;
 
-  await withCleanup(workDir, async () => {
-    const { resources, target, compiler = "pdflatex" } = req.body;
+      await withCleanup(workDir, async () => {
+        const { resources, target, compiler = "pdflatex" } = req.body;
 
-    // Validate inputs
-    const resourcesValidation = validateResources(resources);
-    if (!resourcesValidation.valid) {
-      return res.status(400).json({ error: resourcesValidation.error });
-    }
-
-    const targetValidation = validateTarget(target);
-    if (!targetValidation.valid) {
-      return res.status(400).json({ error: targetValidation.error });
-    }
-
-    const compilerValidation = validateCompiler(compiler);
-    if (!compilerValidation.valid) {
-      return res.status(400).json({ error: compilerValidation.error });
-    }
-
-    // Create work directory
-    await fs.mkdir(workDir, { recursive: true });
-
-    // Write all resources to disk
-    let totalSize = 0;
-    for (const resource of resources) {
-      const filePath = safePath(workDir, resource.path);
-      if (!filePath) {
-        return res.status(400).json({ error: `Invalid resource path: ${resource.path}` });
-      }
-
-      const parseResult = validateAndParseResource(resource, totalSize);
-      if (!parseResult.valid) {
-        return res.status(400).json({ error: parseResult.error });
-      }
-
-      totalSize = parseResult.newTotalSize;
-      const fileDir = path.dirname(filePath);
-      await fs.mkdir(fileDir, { recursive: true });
-      await fs.writeFile(filePath, parseResult.content);
-    }
-
-    // Run latexmk with -recorder to track dependencies
-    const targetPath = path.join(workDir, target);
-    const targetDir = path.dirname(targetPath);
-    const targetName = path.basename(target, ".tex");
-
-    const compilerFlag = compiler === "xelatex" ? "-xelatex"
-                       : compiler === "lualatex" ? "-lualatex"
-                       : "-pdf";
-
-    const result = await runLatexmk(compilerFlag, targetPath, {
-      cwd: targetDir,
-      timeout: 180000, // 3 minutes
-      recorder: true,  // Generate .fls file for dependency tracking
-      logger: req.log,
-    });
-
-    // Check if PDF was created
-    const pdfPath = path.join(targetDir, `${targetName}.pdf`);
-
-    try {
-      await fs.access(pdfPath);
-    } catch {
-      const logPath = path.join(targetDir, `${targetName}.log`);
-      let logContent = result.log;
-      try {
-        logContent = await fs.readFile(logPath, "utf-8");
-      } catch {
-        // No log file
-      }
-
-      return res.status(400).json({
-        error: "Compilation failed",
-        log: logContent,
-        timedOut: result.timedOut,
-      });
-    }
-
-    // Parse .fls file for dependencies
-    const flsPath = path.join(targetDir, `${targetName}.fls`);
-    const deps = new Set();
-    try {
-      const flsContent = await fs.readFile(flsPath, "utf-8");
-      const lines = flsContent.split("\n");
-
-      let flsPwd = workDir;
-      for (const line of lines) {
-        if (line.startsWith("PWD ")) {
-          flsPwd = line.substring(4).trim();
-          break;
+        // Validate inputs
+        const resourcesValidation = validateResources(resources);
+        if (!resourcesValidation.valid) {
+          return res.status(400).json({ error: resourcesValidation.error });
         }
-      }
 
-      for (const line of lines) {
-        if (line.startsWith("INPUT ")) {
-          const inputPath = line.substring(6).trim();
-          let relativePath = null;
-          if (inputPath.startsWith(flsPwd + "/")) {
-            relativePath = inputPath.substring(flsPwd.length + 1);
-          } else if (inputPath.startsWith(workDir + "/")) {
-            relativePath = inputPath.substring(workDir.length + 1);
-          } else if (inputPath.startsWith("./")) {
-            relativePath = inputPath.substring(2);
-          } else if (!inputPath.startsWith("/")) {
-            relativePath = inputPath;
+        const targetValidation = validateTarget(target);
+        if (!targetValidation.valid) {
+          return res.status(400).json({ error: targetValidation.error });
+        }
+
+        const compilerValidation = validateCompiler(compiler);
+        if (!compilerValidation.valid) {
+          return res.status(400).json({ error: compilerValidation.error });
+        }
+
+        // Create work directory
+        await fs.mkdir(workDir, { recursive: true });
+
+        // Write all resources to disk
+        let totalSize = 0;
+        for (const resource of resources) {
+          const filePath = safePath(workDir, resource.path);
+          if (!filePath) {
+            return res.status(400).json({ error: `Invalid resource path: ${resource.path}` });
           }
 
-          if (relativePath && !relativePath.match(/\.(aux|log|fls|fdb_latexmk|out|toc|lof|lot|bbl|blg|bcf|run\.xml)$/)) {
-            const isProvided = resources.some(r => r.path === relativePath || r.path.endsWith("/" + relativePath));
-            if (isProvided) {
-              deps.add(relativePath);
+          const parseResult = validateAndParseResource(resource, totalSize);
+          if (!parseResult.valid) {
+            return res.status(400).json({ error: parseResult.error });
+          }
+
+          totalSize = parseResult.newTotalSize;
+          const fileDir = path.dirname(filePath);
+          await fs.mkdir(fileDir, { recursive: true });
+          await fs.writeFile(filePath, parseResult.content);
+        }
+
+        // Run latexmk with -recorder to track dependencies
+        const targetPath = path.join(workDir, target);
+        const targetDir = path.dirname(targetPath);
+        const targetName = path.basename(target, ".tex");
+
+        const compilerFlag = compiler === "xelatex" ? "-xelatex"
+                           : compiler === "lualatex" ? "-lualatex"
+                           : "-pdf";
+
+        const result = await runLatexmk(compilerFlag, targetPath, {
+          cwd: targetDir,
+          timeout: 180000, // 3 minutes
+          recorder: true,  // Generate .fls file for dependency tracking
+          logger: req.log,
+        });
+
+        // Check if PDF was created
+        const pdfPath = path.join(targetDir, `${targetName}.pdf`);
+
+        try {
+          await fs.access(pdfPath);
+        } catch {
+          const logPath = path.join(targetDir, `${targetName}.log`);
+          let logContent = result.log;
+          try {
+            logContent = await fs.readFile(logPath, "utf-8");
+          } catch {
+            // No log file
+          }
+
+          return res.status(400).json({
+            error: "Compilation failed",
+            log: logContent,
+            timedOut: result.timedOut,
+          });
+        }
+
+        // Parse .fls file for dependencies
+        const flsPath = path.join(targetDir, `${targetName}.fls`);
+        const deps = new Set();
+        try {
+          const flsContent = await fs.readFile(flsPath, "utf-8");
+          const lines = flsContent.split("\n");
+
+          let flsPwd = workDir;
+          for (const line of lines) {
+            if (line.startsWith("PWD ")) {
+              flsPwd = line.substring(4).trim();
+              break;
             }
           }
-        }
-      }
-    } catch {
-      // .fls file might not exist
-    }
 
-    // Check for .bib files used (from .aux or .bcf files, since bibtex/biber processes them separately)
-    const auxPath = path.join(targetDir, `${targetName}.aux`);
-    try {
-      const auxContent = await fs.readFile(auxPath, "utf-8");
-      const bibdataMatches = auxContent.matchAll(/\\bibdata\{([^}]+)\}/g);
-      for (const match of bibdataMatches) {
-        const bibFiles = match[1].split(",").map(f => f.trim());
-        for (const bibFile of bibFiles) {
-          const bibWithExt = bibFile.endsWith(".bib") ? bibFile : `${bibFile}.bib`;
-          const isProvided = resources.some(r => r.path === bibWithExt || r.path.endsWith("/" + bibWithExt));
-          if (isProvided) {
-            deps.add(bibWithExt);
+          for (const line of lines) {
+            if (line.startsWith("INPUT ")) {
+              const inputPath = line.substring(6).trim();
+              let relativePath = null;
+              if (inputPath.startsWith(flsPwd + "/")) {
+                relativePath = inputPath.substring(flsPwd.length + 1);
+              } else if (inputPath.startsWith(workDir + "/")) {
+                relativePath = inputPath.substring(workDir.length + 1);
+              } else if (inputPath.startsWith("./")) {
+                relativePath = inputPath.substring(2);
+              } else if (!inputPath.startsWith("/")) {
+                relativePath = inputPath;
+              }
+
+              if (relativePath && !relativePath.match(/\.(aux|log|fls|fdb_latexmk|out|toc|lof|lot|bbl|blg|bcf|run\.xml)$/)) {
+                const isProvided = resources.some(r => r.path === relativePath || r.path.endsWith("/" + relativePath));
+                if (isProvided) {
+                  deps.add(relativePath);
+                }
+              }
+            }
           }
+        } catch {
+          // .fls file might not exist
         }
-      }
-    } catch {
-      // No aux file
-    }
 
-    // Also check .bcf file for biblatex
-    const bcfPath = path.join(targetDir, `${targetName}.bcf`);
-    try {
-      const bcfContent = await fs.readFile(bcfPath, "utf-8");
-      const datasourcePattern = /<bcf:datasource[^>]*>([^<]+)<\/bcf:datasource>/g;
-      let dsMatch;
-      while ((dsMatch = datasourcePattern.exec(bcfContent)) !== null) {
-        if (dsMatch[1]) {
-          const bibFile = dsMatch[1];
-          const bibWithExt = bibFile.endsWith(".bib") ? bibFile : `${bibFile}.bib`;
-          const isProvided = resources.some(r => r.path === bibWithExt || r.path.endsWith("/" + bibWithExt));
-          if (isProvided) {
-            deps.add(bibWithExt);
+        // Check for .bib files used (from .aux or .bcf files, since bibtex/biber processes them separately)
+        const auxPath = path.join(targetDir, `${targetName}.aux`);
+        try {
+          const auxContent = await fs.readFile(auxPath, "utf-8");
+          const bibdataMatches = auxContent.matchAll(/\\bibdata\{([^}]+)\}/g);
+          for (const match of bibdataMatches) {
+            const bibFiles = match[1].split(",").map(f => f.trim());
+            for (const bibFile of bibFiles) {
+              const bibWithExt = bibFile.endsWith(".bib") ? bibFile : `${bibFile}.bib`;
+              const isProvided = resources.some(r => r.path === bibWithExt || r.path.endsWith("/" + bibWithExt));
+              if (isProvided) {
+                deps.add(bibWithExt);
+              }
+            }
           }
+        } catch {
+          // No aux file
         }
-      }
-    } catch {
-      // No bcf file
-    }
 
-    // Read and return PDF with dependencies in header
-    const pdfBuffer = await fs.readFile(pdfPath);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Length", pdfBuffer.length);
-    if (deps.size > 0) {
-      res.setHeader("X-Dependencies", JSON.stringify(Array.from(deps)));
+        // Also check .bcf file for biblatex
+        const bcfPath = path.join(targetDir, `${targetName}.bcf`);
+        try {
+          const bcfContent = await fs.readFile(bcfPath, "utf-8");
+          const datasourcePattern = /<bcf:datasource[^>]*>([^<]+)<\/bcf:datasource>/g;
+          let dsMatch;
+          while ((dsMatch = datasourcePattern.exec(bcfContent)) !== null) {
+            if (dsMatch[1]) {
+              const bibFile = dsMatch[1];
+              const bibWithExt = bibFile.endsWith(".bib") ? bibFile : `${bibFile}.bib`;
+              const isProvided = resources.some(r => r.path === bibWithExt || r.path.endsWith("/" + bibWithExt));
+              if (isProvided) {
+                deps.add(bibWithExt);
+              }
+            }
+          }
+        } catch {
+          // No bcf file
+        }
+
+        // Read and return PDF with dependencies in header
+        const pdfBuffer = await fs.readFile(pdfPath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", pdfBuffer.length);
+        if (deps.size > 0) {
+          res.setHeader("X-Dependencies", JSON.stringify(Array.from(deps)));
+        }
+        res.send(pdfBuffer);
+      }, req.log);
+    }, { logger: req.log });
+  } catch (err) {
+    if (err.code === "QUEUE_FULL") {
+      return res.status(503).json({
+        error: "Server is busy. Please try again later.",
+        queue: err.stats,
+        retryAfter: 30,
+      });
     }
-    res.send(pdfBuffer);
-  }, req.log);
+    throw err;
+  }
 });
 
 // Compile endpoint with file uploads
 app.post("/compile/upload", rateLimit, upload.array("files"), async (req, res) => {
-  const jobId = uuidv4();
-  const workDir = `/tmp/latex-${jobId}`;
+  try {
+    await compilationQueue.run(async () => {
+      const jobId = uuidv4();
+      const workDir = `/tmp/latex-${jobId}`;
 
-  await withCleanup(workDir, async () => {
-    const { target, compiler = "pdflatex" } = req.body;
-    const files = req.files;
+      await withCleanup(workDir, async () => {
+        const { target, compiler = "pdflatex" } = req.body;
+        const files = req.files;
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "No files uploaded" });
-    }
+        if (!files || files.length === 0) {
+          return res.status(400).json({ error: "No files uploaded" });
+        }
 
-    const targetValidation = validateTarget(target);
-    if (!targetValidation.valid) {
-      return res.status(400).json({ error: targetValidation.error });
-    }
+        const targetValidation = validateTarget(target);
+        if (!targetValidation.valid) {
+          return res.status(400).json({ error: targetValidation.error });
+        }
 
-    const compilerValidation = validateCompiler(compiler);
-    if (!compilerValidation.valid) {
-      return res.status(400).json({ error: compilerValidation.error });
-    }
+        const compilerValidation = validateCompiler(compiler);
+        if (!compilerValidation.valid) {
+          return res.status(400).json({ error: compilerValidation.error });
+        }
 
-    // Create work directory
-    await fs.mkdir(workDir, { recursive: true });
+        // Create work directory
+        await fs.mkdir(workDir, { recursive: true });
 
-    // Write uploaded files
-    for (const file of files) {
-      const filePath = safePath(workDir, file.originalname);
-      if (!filePath) {
-        return res.status(400).json({ error: `Invalid file path: ${file.originalname}` });
-      }
-      const fileDir = path.dirname(filePath);
-      await fs.mkdir(fileDir, { recursive: true });
-      await fs.writeFile(filePath, file.buffer);
-    }
+        // Write uploaded files
+        for (const file of files) {
+          const filePath = safePath(workDir, file.originalname);
+          if (!filePath) {
+            return res.status(400).json({ error: `Invalid file path: ${file.originalname}` });
+          }
+          const fileDir = path.dirname(filePath);
+          await fs.mkdir(fileDir, { recursive: true });
+          await fs.writeFile(filePath, file.buffer);
+        }
 
-    const targetPath = path.join(workDir, target);
-    const targetDir = path.dirname(targetPath);
-    const targetName = path.basename(target, ".tex");
+        const targetPath = path.join(workDir, target);
+        const targetDir = path.dirname(targetPath);
+        const targetName = path.basename(target, ".tex");
 
-    const compilerFlag = compiler === "xelatex" ? "-xelatex"
-                       : compiler === "lualatex" ? "-lualatex"
-                       : "-pdf";
+        const compilerFlag = compiler === "xelatex" ? "-xelatex"
+                           : compiler === "lualatex" ? "-lualatex"
+                           : "-pdf";
 
-    const result = await runLatexmk(compilerFlag, targetPath, {
-      cwd: targetDir,
-      timeout: 180000,
-      logger: req.log,
-    });
+        const result = await runLatexmk(compilerFlag, targetPath, {
+          cwd: targetDir,
+          timeout: 180000,
+          logger: req.log,
+        });
 
-    const pdfPath = path.join(targetDir, `${targetName}.pdf`);
+        const pdfPath = path.join(targetDir, `${targetName}.pdf`);
 
-    try {
-      await fs.access(pdfPath);
-    } catch {
-      const logPath = path.join(targetDir, `${targetName}.log`);
-      let logContent = result.log || "";
-      try {
-        logContent = await fs.readFile(logPath, "utf-8");
-      } catch {
-        // No log file
-      }
+        try {
+          await fs.access(pdfPath);
+        } catch {
+          const logPath = path.join(targetDir, `${targetName}.log`);
+          let logContent = result.log || "";
+          try {
+            logContent = await fs.readFile(logPath, "utf-8");
+          } catch {
+            // No log file
+          }
 
-      return res.status(400).json({
-        error: "Compilation failed",
-        log: logContent,
-        timedOut: result.timedOut,
+          return res.status(400).json({
+            error: "Compilation failed",
+            log: logContent,
+            timedOut: result.timedOut,
+          });
+        }
+
+        const pdfBuffer = await fs.readFile(pdfPath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", pdfBuffer.length);
+        res.send(pdfBuffer);
+      }, req.log);
+    }, { logger: req.log });
+  } catch (err) {
+    if (err.code === "QUEUE_FULL") {
+      return res.status(503).json({
+        error: "Server is busy. Please try again later.",
+        queue: err.stats,
+        retryAfter: 30,
       });
     }
-
-    const pdfBuffer = await fs.readFile(pdfPath);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Length", pdfBuffer.length);
-    res.send(pdfBuffer);
-  }, req.log);
+    throw err;
+  }
 });
 
 // Git refs endpoint
@@ -1350,6 +1378,10 @@ async function shutdown(signal) {
   shuttingDown = true;
   logger.info(`${signal} received, starting graceful shutdown...`);
   logger.info(`Active requests: ${activeRequests}`);
+  logger.info(`Compilation queue: ${JSON.stringify(compilationQueue.stats())}`);
+
+  // Clear queued (not yet started) compilations - they'll get 503 errors
+  compilationQueue.clear();
 
   // Stop accepting new connections
   server.close(async () => {

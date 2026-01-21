@@ -16,6 +16,15 @@ primary_region = 'fra'
   min_machines_running = 0
   processes = ['app']
 
+  # Concurrency limits for load balancing between machines
+  # soft_limit: Fly starts routing to other machines when this is reached
+  # hard_limit: Fly won't send more than this to a single machine
+  # With 4 concurrent compiles + 20 queued, we set soft=8 to balance early
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 8
+
 [[vm]]
   memory = '2gb'
   cpus = 2
