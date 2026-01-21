@@ -59,10 +59,11 @@ export async function getGitLabToken(ctx: ActionCtx): Promise<string | null> {
           return refreshed.accessToken;
         }
       }
-      // If refresh failed, return the old token (might still work briefly)
-      console.warn("GitLab token refresh failed, using potentially expired token");
+      // Token is expired and refresh failed - user needs to re-authenticate
+      throw new Error("GitLab token expired. Please disconnect and reconnect your GitLab account in Settings.");
     } else {
-      console.warn("GitLab token expired but no refresh token available");
+      // Token is expired with no refresh token - user needs to re-authenticate
+      throw new Error("GitLab token expired. Please disconnect and reconnect your GitLab account in Settings.");
     }
   }
 

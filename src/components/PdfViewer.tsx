@@ -9,6 +9,7 @@ export function PdfViewer({ url, title }: PdfViewerProps) {
       src={url}
       className="h-full w-full"
       title={title || "PDF viewer"}
+      sandbox="allow-same-origin allow-scripts"
     />
   );
 }

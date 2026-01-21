@@ -294,6 +294,24 @@ export const update = mutation({
       throw new Error("Unauthorized");
     }
 
+    // Validate field lengths to prevent storage abuse
+    if (args.title !== undefined && args.title.length > 500) {
+      throw new Error("Title must be 500 characters or less");
+    }
+    if (args.abstract !== undefined && args.abstract.length > 10000) {
+      throw new Error("Abstract must be 10,000 characters or less");
+    }
+    if (args.authors !== undefined) {
+      if (args.authors.length > 50) {
+        throw new Error("Maximum 50 authors allowed");
+      }
+      for (const author of args.authors) {
+        if (author.length > 200) {
+          throw new Error("Author names must be 200 characters or less");
+        }
+      }
+    }
+
     const { id, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
@@ -416,6 +434,11 @@ export const addTrackedFile = mutation({
     const repository = await ctx.db.get(args.repositoryId);
     if (!repository || repository.userId !== authenticatedUserId) {
       throw new Error("Unauthorized");
+    }
+
+    // Validate title length
+    if (args.title.length > 500) {
+      throw new Error("Title must be 500 characters or less");
     }
 
     // Validate file path (prevents path traversal attacks)
@@ -549,6 +572,11 @@ export const uploadPdf = mutation({
     const authenticatedUserId = await auth.getUserId(ctx);
     if (!authenticatedUserId || authenticatedUserId !== args.userId) {
       throw new Error("Unauthorized");
+    }
+
+    // Validate title length
+    if (args.title.length > 500) {
+      throw new Error("Title must be 500 characters or less");
     }
 
     const paperId = await ctx.db.insert("papers", {

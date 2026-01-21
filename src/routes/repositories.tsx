@@ -77,6 +77,8 @@ function RepositoriesPage() {
 
   // Quick check all repositories on page load
   useEffect(() => {
+    let isMounted = true;
+
     if (repositories && repositories.length > 0 && !hasQuickSyncedRef.current) {
       hasQuickSyncedRef.current = true;
       let hasErrors = false;
@@ -89,11 +91,15 @@ function RepositoriesPage() {
           })
         );
       Promise.all(checkPromises).then(() => {
-        if (hasErrors) {
+        if (isMounted && hasErrors) {
           showToast("Some repositories failed to check", "info");
         }
       });
     }
+
+    return () => {
+      isMounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositories]);
 

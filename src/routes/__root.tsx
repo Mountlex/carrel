@@ -1,7 +1,7 @@
 import { createRootRouteWithContext, Link, Outlet, Scripts, HeadContent } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { QueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "../index.css";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -199,19 +199,34 @@ function RootComponent() {
           )}
           {/* Recovery modal for failed account linking */}
           {showRecovery && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="recovery-modal-title"
+              aria-describedby="recovery-modal-description"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setShowRecovery(false);
+                  setLinkError(null);
+                }
+              }}
+            >
               <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900">
-                <h3 className="text-lg font-normal text-gray-900 dark:text-gray-100">Account Linking Failed</h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  The account linking session has expired or was invalid. This can happen if you took
-                  more than 10 minutes to complete the OAuth flow, or if you navigated away.
-                </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  You can sign out and try again, or dismiss this message and continue using your
-                  current account without linking.
-                </p>
+                <h3 id="recovery-modal-title" className="text-lg font-normal text-gray-900 dark:text-gray-100">Account Linking Failed</h3>
+                <div id="recovery-modal-description">
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    The account linking session has expired or was invalid. This can happen if you took
+                    more than 10 minutes to complete the OAuth flow, or if you navigated away.
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    You can sign out and try again, or dismiss this message and continue using your
+                    current account without linking.
+                  </p>
+                </div>
                 <div className="mt-4 flex gap-3">
                   <button
+                    autoFocus
                     onClick={() => {
                       setShowRecovery(false);
                       setLinkError(null);
