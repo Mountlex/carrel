@@ -25,7 +25,7 @@
 
 ## Testing Guidelines
 
-- No automated tests are configured yet (no test runner in `package.json`).
+- Run `bun run test` to run tests in watch mode, or `bun run test:run` for a single run. Tests use vitest.
 - Validate changes by running `bun run dev:all` and exercising key flows: auth, repo sync, and paper viewing.
 
 ## Commit & Pull Request Guidelines
