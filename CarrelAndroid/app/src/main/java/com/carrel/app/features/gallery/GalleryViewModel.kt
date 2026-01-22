@@ -52,7 +52,7 @@ class GalleryViewModel(
                     )
 
                     if (exception.isAuthError) {
-                        authManager.logout()
+                        viewModelScope.launch { authManager.logout() }
                     }
                 }
         }

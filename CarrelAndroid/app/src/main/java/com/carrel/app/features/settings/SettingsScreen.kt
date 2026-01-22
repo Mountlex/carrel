@@ -3,14 +3,16 @@ package com.carrel.app.features.settings
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -174,13 +176,13 @@ fun SettingsScreen(
                         headlineContent = { Text("Website") },
                         trailingContent = {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                imageVector = Icons.AutoMirrored.Filled.Launch,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
-                        modifier = Modifier.clickableWithoutRipple {
+                        modifier = Modifier.clickable {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://carrel.app"))
                             context.startActivity(intent)
                         }
@@ -235,10 +237,22 @@ fun SettingsScreen(
 
 @Composable
 private fun ProviderBadge(provider: String) {
-    val (icon, name) = when (provider.lowercase()) {
-        "github" -> Icons.Default.CloudQueue to "GitHub"
-        "gitlab" -> Icons.Default.Storage to "GitLab"
-        else -> Icons.Default.Key to provider.replaceFirstChar { it.uppercase() }
+    val icon: ImageVector
+    val name: String
+
+    when (provider.lowercase()) {
+        "github" -> {
+            icon = Icons.Default.Cloud
+            name = "GitHub"
+        }
+        "gitlab" -> {
+            icon = Icons.Default.Code
+            name = "GitLab"
+        }
+        else -> {
+            icon = Icons.Default.VpnKey
+            name = provider.replaceFirstChar { it.uppercase() }
+        }
     }
 
     Surface(
@@ -265,12 +279,3 @@ private fun ProviderBadge(provider: String) {
     }
 }
 
-private fun Modifier.clickableWithoutRipple(onClick: () -> Unit): Modifier {
-    return this.then(
-        androidx.compose.foundation.clickable(
-            interactionSource = null,
-            indication = null,
-            onClick = onClick
-        )
-    )
-}

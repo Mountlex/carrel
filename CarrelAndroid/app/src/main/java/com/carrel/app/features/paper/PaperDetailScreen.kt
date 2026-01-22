@@ -9,9 +9,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,7 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.ui.components.StatusBadge
@@ -39,7 +43,6 @@ fun PaperDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    var showEditDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -77,14 +80,6 @@ fun PaperDetailScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Edit Details") },
-                                onClick = {
-                                    showMenu = false
-                                    showEditDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                            )
                             DropdownMenuItem(
                                 text = { Text("Sync") },
                                 onClick = {
@@ -166,19 +161,6 @@ fun PaperDetailScreen(
             }
         }
     }
-
-    // Edit dialog
-    if (showEditDialog) {
-        EditPaperDialog(
-            title = uiState.paper?.title ?: "",
-            authors = uiState.paper?.authors ?: "",
-            onDismiss = { showEditDialog = false },
-            onSave = { title, authors ->
-                viewModel.updateMetadata(title, authors)
-                showEditDialog = false
-            }
-        )
-    }
 }
 
 @Composable
@@ -191,7 +173,7 @@ private fun NoPdfPlaceholder(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            imageVector = Icons.Default.Description,
+            imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -263,7 +245,7 @@ private fun PaperInfoPanel(
                         )
                     } else {
                         Icon(
-                            imageVector = if (paper.isPublic) Icons.Default.Public else Icons.Default.Lock,
+                            imageVector = if (paper.isPublic) Icons.Filled.Public else Icons.Default.Lock,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
@@ -307,70 +289,22 @@ private fun PaperInfoPanel(
 }
 
 @Composable
-private fun EditPaperDialog(
-    title: String,
-    authors: String,
-    onDismiss: () -> Unit,
-    onSave: (String?, String?) -> Unit
-) {
-    var editedTitle by remember { mutableStateOf(title) }
-    var editedAuthors by remember { mutableStateOf(authors) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Paper") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = editedTitle,
-                    onValueChange = { editedTitle = it },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = editedAuthors,
-                    onValueChange = { editedAuthors = it },
-                    label = { Text("Authors") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        editedTitle.takeIf { it.isNotBlank() },
-                        editedAuthors.takeIf { it.isNotBlank() }
-                    )
-                }
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
 private fun PdfViewer(
     pdfUrl: String,
     modifier: Modifier = Modifier
 ) {
-    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var pageBitmaps by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var pageCount by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
 
     LaunchedEffect(pdfUrl) {
         isLoading = true
         error = null
+        pageBitmaps = emptyList()
         try {
-            bitmap = withContext(Dispatchers.IO) {
+            val bitmaps = withContext(Dispatchers.IO) {
                 // Download PDF to temp file
                 val tempFile = File.createTempFile("pdf", ".pdf", context.cacheDir)
                 URL(pdfUrl).openStream().use { input ->
@@ -379,28 +313,36 @@ private fun PdfViewer(
                     }
                 }
 
-                // Render first page
+                // Open PDF renderer
                 val fileDescriptor = ParcelFileDescriptor.open(
                     tempFile,
                     ParcelFileDescriptor.MODE_READ_ONLY
                 )
                 val renderer = PdfRenderer(fileDescriptor)
-                val page = renderer.openPage(0)
+                pageCount = renderer.pageCount
 
-                val bmp = Bitmap.createBitmap(
-                    page.width * 2,
-                    page.height * 2,
-                    Bitmap.Config.ARGB_8888
-                )
-                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                // Render all pages
+                val result = mutableListOf<Bitmap>()
+                for (i in 0 until renderer.pageCount) {
+                    val page = renderer.openPage(i)
+                    val bmp = Bitmap.createBitmap(
+                        page.width * 2,
+                        page.height * 2,
+                        Bitmap.Config.ARGB_8888
+                    )
+                    bmp.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    result.add(bmp)
+                    page.close()
+                }
 
-                page.close()
                 renderer.close()
                 fileDescriptor.close()
                 tempFile.delete()
 
-                bmp
+                result
             }
+            pageBitmaps = bitmaps
         } catch (e: Exception) {
             error = e.message
         }
@@ -413,7 +355,11 @@ private fun PdfViewer(
     ) {
         when {
             isLoading -> {
-                CircularProgressIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Loading PDF...", style = MaterialTheme.typography.bodySmall)
+                }
             }
             error != null -> {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -425,12 +371,39 @@ private fun PdfViewer(
                     )
                 }
             }
-            bitmap != null -> {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = "PDF preview",
-                    modifier = Modifier.fillMaxSize()
-                )
+            pageBitmaps.isNotEmpty() -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(8.dp)
+                ) {
+                    itemsIndexed(pageBitmaps) { index, bitmap ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column {
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Page ${index + 1}",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentScale = ContentScale.FillWidth
+                                )
+                                Text(
+                                    text = "Page ${index + 1} of $pageCount",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

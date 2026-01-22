@@ -6,18 +6,23 @@ import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import com.carrel.app.core.network.ConvexClient
 
-enum class OAuthProvider(val id: String, val displayName: String) {
+enum class OAuthProvider(val id: String?, val displayName: String) {
     GITHUB("github", "GitHub"),
-    GITLAB("gitlab", "GitLab")
+    GITLAB("gitlab", "GitLab"),
+    EMAIL(null, "Email")  // null means no provider param - shows full auth page
 }
 
 class OAuthHandler(private val context: Context) {
 
     fun launchOAuth(provider: OAuthProvider) {
-        val uri = Uri.parse("${ConvexClient.SITE_URL}/mobile-auth")
-            .buildUpon()
-            .appendQueryParameter("provider", provider.id)
-            .build()
+        val uriBuilder = Uri.parse("${ConvexClient.SITE_URL}/mobile-auth").buildUpon()
+
+        // Only add provider param for OAuth providers, not email
+        provider.id?.let {
+            uriBuilder.appendQueryParameter("provider", it)
+        }
+
+        val uri = uriBuilder.build()
 
         val customTabsIntent = CustomTabsIntent.Builder()
             .setShowTitle(true)

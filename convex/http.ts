@@ -69,6 +69,107 @@ http.route({
   }),
 });
 
+// OPTIONS handler for mobile email auth
+http.route({
+  path: "/api/mobile/auth/email",
+  method: "OPTIONS",
+  handler: httpAction(async (_, request) => {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request.headers.get("Origin")),
+    });
+  }),
+});
+
+// POST /api/mobile/auth/email - Native email/password login for mobile apps
+http.route({
+  path: "/api/mobile/auth/email",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    try {
+      const body = await request.json();
+      const { email, password, deviceId, deviceName, platform } = body;
+
+      if (!email || !password) {
+        return jsonResponse({ error: "Email and password are required" }, 400, origin);
+      }
+
+      // Verify credentials using internal action
+      const result = await ctx.runAction(internal.mobileEmailAuth.verifyEmailPassword, {
+        email,
+        password,
+      });
+
+      if (!result.success || !result.userId) {
+        return jsonResponse({ error: result.error || "Invalid credentials" }, 401, origin);
+      }
+
+      // Get JWT secret
+      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
+
+      // Get user details
+      const user = await ctx.runQuery(internal.mobileAuth.getUserById, {
+        userId: result.userId,
+      });
+
+      if (!user) {
+        return jsonResponse({ error: "User not found" }, 404, origin);
+      }
+
+      // Generate tokens
+      const now = Date.now();
+      const accessTokenExpiry = now + ACCESS_TOKEN_EXPIRY_MS;
+      const refreshToken = generateSecureToken();
+      const refreshTokenExpiry = now + REFRESH_TOKEN_EXPIRY_MS;
+
+      // Create JWT access token
+      const accessToken = await createJwt(
+        {
+          iss: "carrel-mobile",
+          sub: result.userId,
+          email: user.email,
+          name: user.name,
+          iat: Math.floor(now / 1000),
+          exp: Math.floor(accessTokenExpiry / 1000),
+        },
+        jwtSecret
+      );
+
+      // Store refresh token hash
+      const refreshTokenHash = await hashToken(refreshToken);
+      await ctx.runMutation(internal.mobileAuth.createMobileTokenRecord, {
+        userId: result.userId,
+        refreshTokenHash,
+        deviceId,
+        deviceName,
+        platform,
+        expiresAt: refreshTokenExpiry,
+      });
+
+      return jsonResponse(
+        {
+          accessToken,
+          refreshToken,
+          expiresAt: accessTokenExpiry,
+          refreshExpiresAt: refreshTokenExpiry,
+          tokenType: "Bearer",
+        },
+        200,
+        origin
+      );
+    } catch (error) {
+      console.error("Email auth error:", error);
+      return jsonResponse(
+        { error: "Authentication failed" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
 // OPTIONS handler for CORS preflight
 http.route({
   path: "/api/mobile/token",

@@ -229,6 +229,31 @@ export const getUserById = internalQuery({
   },
 });
 
+// Internal query to get password hash for a user (for email auth)
+export const getPasswordHash = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args): Promise<string | null> => {
+    // Find the authAccount for this user with password provider
+    const account = await ctx.db
+      .query("authAccounts")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("provider"), "password")
+        )
+      )
+      .first();
+
+    if (!account || !account.secret) {
+      return null;
+    }
+
+    return account.secret;
+  },
+});
+
 // Mutation to revoke a specific token (user-facing, for logout)
 export const revokeToken = mutation({
   args: {

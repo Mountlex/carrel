@@ -84,14 +84,9 @@ function MobileAuthPage() {
   // Convex mutation for generating mobile tokens
   const generateMobileTokens = useMutation(api.mobileAuth.generateMobileTokens);
 
-  // Exchange session for tokens and send to React Native
+  // Exchange session for tokens and send to mobile app
   const exchangeAndNotify = useCallback(async () => {
     console.log("[mobile-auth] exchangeAndNotify called, isWebView:", isReactNativeWebView());
-
-    if (!isReactNativeWebView()) {
-      window.location.href = `${MOBILE_CALLBACK_URL}?success=true`;
-      return;
-    }
 
     try {
       const deviceInfo = getDeviceInfo();
@@ -100,10 +95,26 @@ function MobileAuthPage() {
       const tokens = await generateMobileTokens(deviceInfo);
       console.log("[mobile-auth] Got tokens from mutation");
 
-      sendTokensToReactNative(tokens);
+      if (isReactNativeWebView()) {
+        // Send via postMessage for React Native
+        sendTokensToReactNative(tokens);
+      } else {
+        // For Chrome Custom Tabs / native browsers, pass tokens in URL
+        const params = new URLSearchParams({
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: String(tokens.expiresAt),
+          refreshExpiresAt: String(tokens.refreshExpiresAt),
+        });
+        window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
+      }
     } catch (err) {
       console.error("[mobile-auth] Token exchange error:", err);
-      sendErrorToReactNative(String(err));
+      if (isReactNativeWebView()) {
+        sendErrorToReactNative(String(err));
+      } else {
+        window.location.href = `${MOBILE_CALLBACK_URL}?error=${encodeURIComponent(String(err))}`;
+      }
     }
   }, [generateMobileTokens]);
 

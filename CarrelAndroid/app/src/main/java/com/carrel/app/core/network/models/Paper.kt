@@ -10,15 +10,29 @@ data class Paper(
     val authors: String? = null,
     val pdfUrl: String? = null,
     val thumbnailUrl: String? = null,
-    val status: PaperStatus = PaperStatus.UNKNOWN,
+    val isUpToDate: Boolean? = null,
+    val buildStatus: String? = null,
     val isPublic: Boolean = false,
     val shareSlug: String? = null,
     val repositoryId: String? = null,
     val trackedFileId: String? = null,
+    val pdfSourceType: String? = null,
+    val lastAffectedCommitTime: Long? = null,
     val lastSyncedAt: Long? = null,
     val createdAt: Long? = null,
     val updatedAt: Long? = null
-)
+) {
+    // Derive status from isUpToDate and buildStatus
+    val status: PaperStatus
+        get() = when {
+            buildStatus == "building" -> PaperStatus.BUILDING
+            buildStatus == "error" -> PaperStatus.ERROR
+            buildStatus == "pending" -> PaperStatus.PENDING
+            isUpToDate == true -> PaperStatus.SYNCED
+            isUpToDate == false -> PaperStatus.PENDING
+            else -> PaperStatus.UNKNOWN
+        }
+}
 
 @Serializable
 enum class PaperStatus {

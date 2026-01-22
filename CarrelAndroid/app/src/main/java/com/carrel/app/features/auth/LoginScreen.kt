@@ -4,8 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,7 +22,8 @@ import com.carrel.app.core.auth.OAuthProvider
 
 @Composable
 fun LoginScreen(
-    oAuthHandler: OAuthHandler
+    oAuthHandler: OAuthHandler,
+    onEmailLoginClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -46,7 +48,7 @@ fun LoginScreen(
 
             // Logo and title
             Icon(
-                imageVector = Icons.Default.CloudQueue,
+                imageVector = Icons.Default.Cloud,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
                 tint = Color.White
@@ -71,8 +73,16 @@ fun LoginScreen(
 
             // Sign in buttons
             SignInButton(
+                provider = OAuthProvider.EMAIL,
+                icon = Icons.Default.Email,
+                onClick = onEmailLoginClick
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SignInButton(
                 provider = OAuthProvider.GITHUB,
-                icon = Icons.Default.CloudQueue,
+                icon = Icons.Default.Cloud,
                 onClick = { oAuthHandler.launchOAuth(OAuthProvider.GITHUB) }
             )
 
@@ -80,7 +90,7 @@ fun LoginScreen(
 
             SignInButton(
                 provider = OAuthProvider.GITLAB,
-                icon = Icons.Default.Storage,
+                icon = Icons.Default.Code,
                 onClick = { oAuthHandler.launchOAuth(OAuthProvider.GITLAB) }
             )
 

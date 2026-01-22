@@ -81,6 +81,26 @@ class ConvexClient(
 
     // MARK: - Auth (no auth required)
 
+    suspend fun loginWithEmail(
+        email: String,
+        password: String,
+        deviceId: String? = null,
+        deviceName: String? = null,
+        platform: String = "android"
+    ): ApiResult<AuthTokens> {
+        return post(
+            "$BASE_URL/api/mobile/auth/email",
+            null,
+            mapOf(
+                "email" to email,
+                "password" to password,
+                "deviceId" to (deviceId ?: ""),
+                "deviceName" to (deviceName ?: "Android Device"),
+                "platform" to platform
+            )
+        )
+    }
+
     suspend fun refreshToken(refreshToken: String): ApiResult<RefreshTokenResponse> {
         return post("$BASE_URL/api/mobile/refresh", null, mapOf("refreshToken" to refreshToken))
     }
@@ -198,7 +218,7 @@ class ConvexClient(
 
     companion object {
         // Update this to your Convex deployment URL
-        const val BASE_URL = "https://earnest-eel-967.convex.site"
+        const val BASE_URL = "https://earnest-beagle-217.convex.site"
         const val SITE_URL = "https://carrel.app"
     }
 }
