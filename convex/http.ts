@@ -170,18 +170,6 @@ http.route({
   }),
 });
 
-// OPTIONS handler for CORS preflight
-http.route({
-  path: "/api/mobile/token",
-  method: "OPTIONS",
-  handler: httpAction(async (_, request) => {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders(request.headers.get("Origin")),
-    });
-  }),
-});
-
 http.route({
   path: "/api/mobile/refresh",
   method: "OPTIONS",
@@ -201,99 +189,6 @@ http.route({
       status: 204,
       headers: corsHeaders(request.headers.get("Origin")),
     });
-  }),
-});
-
-// POST /api/mobile/token - Exchange session for JWT tokens
-// This endpoint requires an existing authenticated session (cookie-based)
-http.route({
-  path: "/api/mobile/token",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const origin = request.headers.get("Origin");
-
-    try {
-      // Verify the user is authenticated via session
-      const identity = await ctx.auth.getUserIdentity();
-      if (!identity) {
-        return jsonResponse({ error: "Not authenticated" }, 401, origin);
-      }
-
-      // Parse request body for device info
-      let deviceId: string | undefined;
-      let deviceName: string | undefined;
-      let platform: "ios" | "android" | "unknown" | undefined;
-
-      try {
-        const body = await request.json();
-        deviceId = body.deviceId;
-        deviceName = body.deviceName;
-        platform = body.platform;
-      } catch {
-        // Body is optional
-      }
-
-      // Get JWT secret
-      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
-
-      // Find the user in the database
-      const user = await ctx.runQuery(internal.users.getUserByEmail, {
-        email: identity.email!,
-      });
-
-      if (!user) {
-        return jsonResponse({ error: "User not found" }, 404, origin);
-      }
-
-      // Generate tokens
-      const now = Date.now();
-      const accessTokenExpiry = now + ACCESS_TOKEN_EXPIRY_MS;
-      const refreshToken = generateSecureToken();
-      const refreshTokenExpiry = now + REFRESH_TOKEN_EXPIRY_MS;
-
-      // Create JWT access token
-      const accessToken = await createJwt(
-        {
-          iss: "carrel-mobile",
-          sub: user._id,
-          email: identity.email,
-          name: identity.name,
-          iat: Math.floor(now / 1000),
-          exp: Math.floor(accessTokenExpiry / 1000),
-        },
-        jwtSecret
-      );
-
-      // Store refresh token hash
-      const refreshTokenHash = await hashToken(refreshToken);
-      await ctx.runMutation(internal.mobileAuth.createMobileTokenRecord, {
-        userId: user._id,
-        refreshTokenHash,
-        deviceId,
-        deviceName,
-        platform,
-        expiresAt: refreshTokenExpiry,
-      });
-
-      return jsonResponse(
-        {
-          accessToken,
-          refreshToken,
-          expiresAt: accessTokenExpiry,
-          refreshExpiresAt: refreshTokenExpiry,
-          tokenType: "Bearer",
-        },
-        200,
-        origin
-      );
-    } catch (error) {
-      console.error("Token issuance error:", error);
-      return jsonResponse(
-        { error: "Internal server error" },
-        500,
-        origin
-      );
-    }
   }),
 });
 
@@ -565,65 +460,6 @@ http.route({
       console.error("Build error:", error);
       return jsonResponse(
         { error: error instanceof Error ? error.message : "Build failed" },
-        500,
-        origin
-      );
-    }
-  }),
-});
-
-// POST /api/mobile/verify - Verify an access token (for debugging/testing)
-http.route({
-  path: "/api/mobile/verify",
-  method: "OPTIONS",
-  handler: httpAction(async (_, request) => {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders(request.headers.get("Origin")),
-    });
-  }),
-});
-
-http.route({
-  path: "/api/mobile/verify",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const origin = request.headers.get("Origin");
-
-    try {
-      // Get token from Authorization header
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "Missing or invalid Authorization header" }, 401, origin);
-      }
-
-      const accessToken = authHeader.substring(7);
-
-      // Get JWT secret
-      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
-
-      // Verify the token
-      const payload = await verifyJwt(accessToken, jwtSecret);
-
-      if (!payload) {
-        return jsonResponse({ error: "Invalid or expired token" }, 401, origin);
-      }
-
-      return jsonResponse(
-        {
-          valid: true,
-          userId: payload.sub,
-          email: payload.email,
-          name: payload.name,
-          expiresAt: (payload.exp as number) * 1000,
-        },
-        200,
-        origin
-      );
-    } catch (error) {
-      console.error("Token verification error:", error);
-      return jsonResponse(
-        { error: "Internal server error" },
         500,
         origin
       );

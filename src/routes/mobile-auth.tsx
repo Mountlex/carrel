@@ -9,11 +9,6 @@ import { api } from "../../convex/_generated/api";
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
 
-// Check if running in React Native WebView
-function isReactNativeWebView(): boolean {
-  return typeof window !== "undefined" && !!(window as unknown as { ReactNativeWebView?: unknown }).ReactNativeWebView;
-}
-
 // Get device info from user agent
 function getDeviceInfo() {
   const ua = navigator.userAgent;
@@ -26,37 +21,9 @@ function getDeviceInfo() {
   };
 }
 
-// Send cancel message to React Native or redirect
+// Redirect back to mobile app
 function notifyCancel() {
-  if (isReactNativeWebView()) {
-    (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
-      JSON.stringify({ type: "auth_cancelled" })
-    );
-  } else {
-    window.location.href = `${MOBILE_CALLBACK_URL}?cancelled=true`;
-  }
-}
-
-// Send tokens to React Native
-function sendTokensToReactNative(tokens: {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  refreshExpiresAt: number;
-  tokenType: string;
-}) {
-  console.log("[mobile-auth] Sending tokens to RN");
-  (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
-    JSON.stringify({ type: "auth_tokens", ...tokens })
-  );
-}
-
-// Send error to React Native
-function sendErrorToReactNative(error: string) {
-  console.error("[mobile-auth] Sending error to RN:", error);
-  (window as unknown as { ReactNativeWebView: { postMessage: (msg: string) => void } }).ReactNativeWebView.postMessage(
-    JSON.stringify({ type: "auth_error", error })
-  );
+  window.location.href = `${MOBILE_CALLBACK_URL}?cancelled=true`;
 }
 
 interface MobileAuthSearch {
@@ -84,37 +51,23 @@ function MobileAuthPage() {
   // Convex mutation for generating mobile tokens
   const generateMobileTokens = useMutation(api.mobileAuth.generateMobileTokens);
 
-  // Exchange session for tokens and send to mobile app
+  // Exchange session for tokens and redirect to mobile app
   const exchangeAndNotify = useCallback(async () => {
-    console.log("[mobile-auth] exchangeAndNotify called, isWebView:", isReactNativeWebView());
-
     try {
       const deviceInfo = getDeviceInfo();
-      console.log("[mobile-auth] Calling generateMobileTokens mutation");
-
       const tokens = await generateMobileTokens(deviceInfo);
-      console.log("[mobile-auth] Got tokens from mutation");
 
-      if (isReactNativeWebView()) {
-        // Send via postMessage for React Native
-        sendTokensToReactNative(tokens);
-      } else {
-        // For Chrome Custom Tabs / native browsers, pass tokens in URL
-        const params = new URLSearchParams({
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: String(tokens.expiresAt),
-          refreshExpiresAt: String(tokens.refreshExpiresAt),
-        });
-        window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
-      }
+      // Redirect to mobile app with tokens in URL
+      const params = new URLSearchParams({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: String(tokens.expiresAt),
+        refreshExpiresAt: String(tokens.refreshExpiresAt),
+      });
+      window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
     } catch (err) {
       console.error("[mobile-auth] Token exchange error:", err);
-      if (isReactNativeWebView()) {
-        sendErrorToReactNative(String(err));
-      } else {
-        window.location.href = `${MOBILE_CALLBACK_URL}?error=${encodeURIComponent(String(err))}`;
-      }
+      window.location.href = `${MOBILE_CALLBACK_URL}?error=${encodeURIComponent(String(err))}`;
     }
   }, [generateMobileTokens]);
 
