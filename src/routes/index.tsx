@@ -1,15 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useUser } from "../hooks/useUser";
 import { useDebounce } from "../hooks/useDebounce";
+import { usePdfUpload } from "../hooks/usePdfUpload";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { PaperCardSkeletonGrid, LiveRegion } from "../components/ui";
 import { DropZone } from "../components/DropZone";
-import { generateThumbnailFromPdf } from "../lib/thumbnail";
+import { PaperCard } from "../components/PaperCard";
 
 export const Route = createFileRoute("/")({
   component: GalleryPage,
@@ -76,13 +77,10 @@ function GalleryPage() {
   const repositories = useQuery(api.repositories.list, isAuthenticated && user ? { userId: user._id } : "skip");
   const updatePaper = useMutation(api.papers.update);
   const deletePaper = useMutation(api.papers.deletePaper);
-  const generateUploadUrl = useMutation(api.papers.generateUploadUrl);
-  const uploadPdf = useMutation(api.papers.uploadPdf);
   const refreshRepository = useAction(api.sync.refreshRepository);
 
   const [editingPaperId, setEditingPaperId] = useState<Id<"papers"> | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
   const [deletingPaperId, setDeletingPaperId] = useState<Id<"papers"> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
@@ -100,6 +98,11 @@ function GalleryPage() {
 
   // Toast state using hook
   const { toast, showError, showToast, clearToast } = useToast();
+
+  // PDF upload hook
+  const { isUploading, uploadFile } = usePdfUpload(user?._id, {
+    onError: showError,
+  });
 
   // Track if we've already synced on page load
   const hasSyncedOnLoad = useRef(false);
@@ -240,63 +243,14 @@ function GalleryPage() {
   const handleFileDrop = useCallback(
     async (files: File[]) => {
       const file = files[0];
-      if (!file || !user) return;
+      if (!file) return;
 
-      if (!file.name.toLowerCase().endsWith(".pdf") || file.type !== "application/pdf") {
-        showToast("Please drop a valid PDF file", "error");
-        return;
-      }
-
-      setIsUploading(true);
-      try {
-        // Generate thumbnail client-side
-        let thumbnailStorageId: Id<"_storage"> | undefined;
-        try {
-          const { blob: thumbnailBlob } = await generateThumbnailFromPdf(file);
-          const thumbnailUploadUrl = await generateUploadUrl();
-          const thumbnailResponse = await fetch(thumbnailUploadUrl, {
-            method: "POST",
-            headers: { "Content-Type": "image/png" },
-            body: thumbnailBlob,
-          });
-          if (thumbnailResponse.ok) {
-            const { storageId } = await thumbnailResponse.json();
-            thumbnailStorageId = storageId;
-          }
-        } catch (thumbnailError) {
-          console.warn("Client-side thumbnail generation failed:", thumbnailError);
-          // Continue without thumbnail - not critical
-        }
-
-        // Upload PDF
-        const uploadUrl = await generateUploadUrl();
-        const response = await fetch(uploadUrl, {
-          method: "POST",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to upload file");
-        }
-
-        const { storageId } = await response.json();
-        const title = file.name.replace(/\.pdf$/i, "");
-        await uploadPdf({
-          userId: user._id,
-          title,
-          pdfStorageId: storageId,
-          thumbnailStorageId,
-          fileSize: file.size,
-        });
-      } catch (error) {
-        console.error("Upload failed:", error);
-        showError(error, "Failed to upload PDF");
-      } finally {
-        setIsUploading(false);
+      const result = await uploadFile(file);
+      if (!result.success && result.error) {
+        showToast(result.error, "error");
       }
     },
-    [user, generateUploadUrl, uploadPdf, showToast, showError]
+    [uploadFile, showToast]
   );
 
   const clearFilters = () => {
@@ -436,68 +390,16 @@ function GalleryPage() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith(".pdf") || file.type !== "application/pdf") {
-      showToast("Please select a valid PDF file", "error");
-      return;
+    const result = await uploadFile(file);
+    if (!result.success && result.error) {
+      showToast(result.error, "error");
     }
 
-    setIsUploading(true);
-    try {
-      // Generate thumbnail client-side
-      let thumbnailStorageId: Id<"_storage"> | undefined;
-      try {
-        const { blob: thumbnailBlob } = await generateThumbnailFromPdf(file);
-        const thumbnailUploadUrl = await generateUploadUrl();
-        const thumbnailResponse = await fetch(thumbnailUploadUrl, {
-          method: "POST",
-          headers: { "Content-Type": "image/png" },
-          body: thumbnailBlob,
-        });
-        if (thumbnailResponse.ok) {
-          const { storageId } = await thumbnailResponse.json();
-          thumbnailStorageId = storageId;
-        }
-      } catch (thumbnailError) {
-        console.warn("Client-side thumbnail generation failed:", thumbnailError);
-        // Continue without thumbnail - not critical
-      }
-
-      // Get upload URL from Convex
-      const uploadUrl = await generateUploadUrl();
-
-      // Upload the file
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upload file");
-      }
-
-      const { storageId } = await response.json();
-
-      // Create the paper with the uploaded PDF
-      const title = file.name.replace(/\.pdf$/i, "");
-      await uploadPdf({
-        userId: user._id,
-        title,
-        pdfStorageId: storageId,
-        thumbnailStorageId,
-        fileSize: file.size,
-      });
-    } catch (error) {
-      console.error("Upload failed:", error);
-      showError(error, "Failed to upload PDF");
-    } finally {
-      setIsUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -726,284 +628,22 @@ function GalleryPage() {
         </div>
       ) : (
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredPapers.map((paper) => {
-            const isEditing = editingPaperId === paper._id;
-            const cardClassName = "group overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:border-gray-200 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700";
-
-            const cardContent = (
-              <>
-              {/* Thumbnail */}
-              <div className="relative aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800">
-                {paper.thumbnailUrl ? (
-                  <img
-                    src={paper.thumbnailUrl}
-                    alt={paper.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-gray-400">
-                    <svg
-                      className="h-12 w-12"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                  </div>
-                )}
-                {/* Fullscreen button overlay */}
-                {paper.pdfUrl && (
-                  <a
-                    href={paper.pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
-                    title="View PDF fullscreen"
-                    aria-label={`View ${paper.title} PDF fullscreen`}
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                    </svg>
-                  </a>
-                )}
-              </div>
-
-              {/* Info */}
-              <div className="p-4">
-                <div className="flex items-start gap-1">
-                  {isEditing ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={handleSaveTitle}
-                      onKeyDown={handleKeyDown}
-                      className="flex-1 truncate rounded border border-blue-400 px-1 py-0.5 text-sm font-normal text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
-                    />
-                  ) : (
-                    <>
-                      <h3 className="font-serif flex-1 truncate font-normal text-gray-900 group-hover:text-blue-600 dark:text-gray-100 dark:group-hover:text-blue-400">
-                        {paper.title}
-                      </h3>
-                      <button
-                        onClick={(e) => handleStartEdit(e, paper._id, paper.title)}
-                        className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-                        title="Rename"
-                        aria-label={`Rename ${paper.title}`}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteClick(e, paper._id)}
-                        className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100 dark:hover:bg-red-900/30"
-                        title="Delete"
-                        aria-label={`Delete ${paper.title}`}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </>
-                  )}
-                </div>
-                {paper.authors && paper.authors.length > 0 && (
-                  <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-                    {paper.authors.join(", ")}
-                  </p>
-                )}
-                <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
-                  {paper.repository ? (
-                    <span className="flex items-center gap-1 truncate">
-                      {(() => {
-                        const webUrl = getRepoWebUrl(paper.repository.gitUrl, paper.repository.provider);
-                        return webUrl ? (
-                          <a
-                            href={webUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
-                            title={`Open ${paper.repository.name} on ${paper.repository.provider}`}
-                          >
-                            {paper.repository.name}
-                          </a>
-                        ) : (
-                          <span className="truncate">{paper.repository.name}</span>
-                        );
-                      })()}
-                      {paper.buildStatus === "building" ? (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-blue-600"
-                          title={paper.compilationProgress || (paper.pdfSourceType === "compile" ? "Compiling LaTeX..." : "Fetching PDF...")}
-                        >
-                          <svg
-                            className="h-3 w-3 animate-spin"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          <span className="text-[10px]">
-                            {paper.pdfSourceType === "compile" ? "Compiling" : "Fetching"}
-                          </span>
-                        </span>
-                      ) : paper.repository.syncStatus === "syncing" ? (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-gray-500"
-                          title="Checking for updates..."
-                        >
-                          <svg
-                            className="h-3 w-3 animate-spin"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          <span className="text-[10px]">Checking</span>
-                        </span>
-                      ) : null}
-                      {paper.buildStatus !== "building" && paper.repository.syncStatus !== "syncing" && paper.isUpToDate === true && (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-green-600"
-                          title={`Up to date - committed ${formatRelativeTime(paper.repository.lastCommitTime ?? paper.repository.lastSyncedAt)}`}
-                        >
-                          <svg
-                            className="h-3 w-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                          <span className="text-[10px]">
-                            {formatRelativeTime(paper.repository.lastCommitTime ?? paper.repository.lastSyncedAt)}
-                          </span>
-                        </span>
-                      )}
-                      {paper.buildStatus !== "building" && paper.repository.syncStatus !== "syncing" && paper.isUpToDate === false && !paper.lastSyncError && (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-yellow-600"
-                          title={`New commit available - committed ${formatRelativeTime(paper.repository.lastCommitTime ?? paper.repository.lastSyncedAt)}`}
-                        >
-                          <svg
-                            className="h-3 w-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                          </svg>
-                          <span className="text-[10px]">
-                            {formatRelativeTime(paper.repository.lastCommitTime ?? paper.repository.lastSyncedAt)}
-                          </span>
-                        </span>
-                      )}
-                      {paper.buildStatus !== "building" && paper.repository.syncStatus !== "syncing" && paper.lastSyncError && (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-red-600"
-                          title={`${paper.pdfSourceType === "compile" ? "Compilation" : "Sync"} failed: ${paper.lastSyncError}`}
-                        >
-                          <svg
-                            className="h-3 w-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                            />
-                          </svg>
-                          <span className="text-[10px]">
-                            {paper.pdfSourceType === "compile" ? "Compilation failed" : "Sync failed"}
-                          </span>
-                        </span>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">Uploaded</span>
-                  )}
-                  <span className="flex items-center">
-                    {paper.isPublic ? (
-                      <span className="flex items-center text-green-600">
-                        <svg
-                          className="mr-1 h-3 w-3"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                          />
-                        </svg>
-                        Public
-                      </span>
-                    ) : paper.repository ? (
-                      <span className="flex items-center">
-                        <svg
-                          className="mr-1 h-3 w-3"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                          />
-                        </svg>
-                        Private
-                      </span>
-                    ) : null}
-                  </span>
-                </div>
-              </div>
-              </>
-            );
-
-            return isEditing ? (
-              <div key={paper._id} className={cardClassName}>
-                {cardContent}
-              </div>
-            ) : (
-              <Link
-                key={paper._id}
-                to="/papers/$id"
-                params={{ id: paper._id }}
-                className={cardClassName}
-              >
-                {cardContent}
-              </Link>
-            );
-          })}
+          {filteredPapers.map((paper) => (
+            <PaperCard
+              key={paper._id}
+              paper={paper}
+              isEditing={editingPaperId === paper._id}
+              editTitle={editTitle}
+              inputRef={inputRef}
+              onEditTitleChange={setEditTitle}
+              onSaveTitle={handleSaveTitle}
+              onKeyDown={handleKeyDown}
+              onStartEdit={handleStartEdit}
+              onDeleteClick={handleDeleteClick}
+              getRepoWebUrl={getRepoWebUrl}
+              formatRelativeTime={formatRelativeTime}
+            />
+          ))}
         </div>
       )}
       </DropZone>

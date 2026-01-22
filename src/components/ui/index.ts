@@ -6,3 +6,4 @@ export { LiveRegion } from "./LiveRegion";
 export { ProgressBar } from "./ProgressBar";
 export { BuildProgress } from "./BuildProgress";
 export { CompilationLog } from "./CompilationLog";
+export { LoadingSpinner } from "./LoadingSpinner";

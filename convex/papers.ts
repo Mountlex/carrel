@@ -3,6 +3,8 @@ import { mutation, query, internalMutation, internalQuery } from "./_generated/s
 import { auth } from "./auth";
 import { validateFilePath } from "./lib/validation";
 import { Id } from "./_generated/dataModel";
+import { determineIfUpToDate, checkPaperOwnership } from "./lib/paperHelpers";
+import { deletePaperAndAssociatedData } from "./lib/cascadeDelete";
 
 // List all papers for a user (via repositories + direct uploads)
 export const list = query({
@@ -74,27 +76,7 @@ export const list = query({
           ? await ctx.storage.getUrl(paper.pdfFileId)
           : null;
 
-        // Determine if paper is up-to-date with repository
-        // null = no repository (uploaded PDF), true = up-to-date, false = needs sync
-        let isUpToDate: boolean | null = null;
-        if (paper.repositoryId && repository) {
-          if (!paper.pdfFileId) {
-            // Paper has repo but hasn't been synced yet
-            isUpToDate = false;
-          } else if (paper.needsSync === true) {
-            // Paper has been marked as needing sync (dependencies changed)
-            isUpToDate = false;
-          } else if (paper.needsSync === false) {
-            // Paper has been explicitly marked as up-to-date
-            isUpToDate = true;
-          } else if (repository.lastCommitHash) {
-            // Fallback to commit hash comparison (for papers without needsSync set)
-            isUpToDate = paper.cachedCommitHash === repository.lastCommitHash;
-          } else {
-            // Repository hasn't been synced yet
-            isUpToDate = false;
-          }
-        }
+        const isUpToDate = determineIfUpToDate(paper, repository);
 
         return {
           ...paper,
@@ -191,21 +173,7 @@ export const listForMobile = internalQuery({
           ? await ctx.storage.getUrl(paper.pdfFileId)
           : null;
 
-        // Determine if paper is up-to-date
-        let isUpToDate: boolean | null = null;
-        if (paper.repositoryId && repository) {
-          if (!paper.pdfFileId) {
-            isUpToDate = false;
-          } else if (paper.needsSync === true) {
-            isUpToDate = false;
-          } else if (paper.needsSync === false) {
-            isUpToDate = true;
-          } else if (repository.lastCommitHash) {
-            isUpToDate = paper.cachedCommitHash === repository.lastCommitHash;
-          } else {
-            isUpToDate = false;
-          }
-        }
+        const isUpToDate = determineIfUpToDate(paper, repository);
 
         return {
           _id: paper._id,
@@ -276,21 +244,7 @@ export const getForMobile = internalQuery({
       ? await ctx.storage.getUrl(paper.pdfFileId)
       : null;
 
-    // Determine if paper is up-to-date
-    let isUpToDate: boolean | null = null;
-    if (paper.repositoryId && repository) {
-      if (!paper.pdfFileId) {
-        isUpToDate = false;
-      } else if (paper.needsSync === true) {
-        isUpToDate = false;
-      } else if (paper.needsSync === false) {
-        isUpToDate = true;
-      } else if (repository.lastCommitHash) {
-        isUpToDate = paper.cachedCommitHash === repository.lastCommitHash;
-      } else {
-        isUpToDate = false;
-      }
-    }
+    const isUpToDate = determineIfUpToDate(paper, repository);
 
     return {
       _id: paper._id,
@@ -390,26 +344,7 @@ export const get = query({
       ? await ctx.storage.getUrl(paper.pdfFileId)
       : null;
 
-    // Determine if paper is up-to-date with repository
-    let isUpToDate: boolean | null = null;
-    if (paper.repositoryId && repository) {
-      if (!paper.pdfFileId) {
-        // Paper has repo but hasn't been synced yet
-        isUpToDate = false;
-      } else if (paper.needsSync === true) {
-        // Paper has been marked as needing sync (dependencies changed)
-        isUpToDate = false;
-      } else if (paper.needsSync === false) {
-        // Paper has been explicitly marked as up-to-date
-        isUpToDate = true;
-      } else if (repository.lastCommitHash) {
-        // Fallback to commit hash comparison (for papers without needsSync set)
-        isUpToDate = paper.cachedCommitHash === repository.lastCommitHash;
-      } else {
-        // Repository hasn't been synced yet
-        isUpToDate = false;
-      }
-    }
+    const isUpToDate = determineIfUpToDate(paper, repository);
 
     return {
       ...paper,
@@ -820,53 +755,16 @@ export const deletePaper = mutation({
       throw new Error("Unauthorized");
     }
 
-    // Delete version history and their stored files
-    const versions = await ctx.db
-      .query("paperVersions")
-      .withIndex("by_paper", (q) => q.eq("paperId", args.id))
-      .collect();
+    // Store tracked file ID before deletion (cascade delete removes the paper)
+    const trackedFileId = paper.trackedFileId;
 
-    // Collect all storage delete promises for parallel execution
-    const storageDeletePromises: Promise<void>[] = [];
-    for (const version of versions) {
-      if (version.pdfFileId) {
-        storageDeletePromises.push(ctx.storage.delete(version.pdfFileId));
-      }
-      if (version.thumbnailFileId) {
-        storageDeletePromises.push(ctx.storage.delete(version.thumbnailFileId));
-      }
-    }
-
-    // Execute all storage deletions in parallel, then delete DB records
-    await Promise.all(storageDeletePromises);
-    for (const version of versions) {
-      await ctx.db.delete(version._id);
-    }
-
-    // Delete any compilation jobs for this paper
-    const compilationJobs = await ctx.db
-      .query("compilationJobs")
-      .withIndex("by_paper", (q) => q.eq("paperId", args.id))
-      .collect();
-
-    for (const job of compilationJobs) {
-      await ctx.db.delete(job._id);
-    }
-
-    // Delete stored files
-    if (paper.pdfFileId) {
-      await ctx.storage.delete(paper.pdfFileId);
-    }
-    if (paper.thumbnailFileId) {
-      await ctx.storage.delete(paper.thumbnailFileId);
-    }
+    // Use shared helper to delete paper and all associated data
+    await deletePaperAndAssociatedData(ctx, paper);
 
     // Delete associated tracked file if it exists
-    if (paper.trackedFileId) {
-      await ctx.db.delete(paper.trackedFileId);
+    if (trackedFileId) {
+      await ctx.db.delete(trackedFileId);
     }
-
-    await ctx.db.delete(args.id);
   },
 });
 

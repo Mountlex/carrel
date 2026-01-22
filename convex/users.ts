@@ -1,9 +1,10 @@
 import { v } from "convex/values";
-import { query, mutation, internalQuery, internalMutation, type MutationCtx } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { logAudit } from "./lib/audit";
 import { encryptTokenIfNeeded } from "./lib/crypto";
+import { deleteRepositoriesAndData, deletePaperAndAssociatedData } from "./lib/cascadeDelete";
 
 async function requireUserId(ctx: Parameters<typeof auth.getUserId>[0]) {
   const userId = await auth.getUserId(ctx);
@@ -29,88 +30,6 @@ async function requireDevAdmin(ctx: Parameters<typeof auth.getUserId>[0] & { db:
   }
 
   return userId;
-}
-
-// Helper to delete repositories and all associated data (papers, tracked files, etc.)
-async function deleteRepositoriesAndData(
-  ctx: MutationCtx,
-  repositories: Array<{ _id: Id<"repositories"> }>
-) {
-  const deletedCounts: Record<string, number> = {};
-
-  // For each repository, delete tracked files
-  for (const repo of repositories) {
-    const trackedFiles = await ctx.db
-      .query("trackedFiles")
-      .withIndex("by_repository", (q) => q.eq("repositoryId", repo._id))
-      .collect();
-    for (const file of trackedFiles) {
-      await ctx.db.delete(file._id);
-    }
-    deletedCounts.trackedFiles = (deletedCounts.trackedFiles || 0) + trackedFiles.length;
-  }
-
-  // Get all papers from these repositories
-  const allPapers = [];
-  for (const repo of repositories) {
-    const papers = await ctx.db
-      .query("papers")
-      .withIndex("by_repository", (q) => q.eq("repositoryId", repo._id))
-      .collect();
-    allPapers.push(...papers);
-  }
-
-  // For each paper, delete paper versions, compilation jobs, and storage files
-  const storageIdsToDelete: Id<"_storage">[] = [];
-  for (const paper of allPapers) {
-    // Delete paper versions
-    const versions = await ctx.db
-      .query("paperVersions")
-      .withIndex("by_paper", (q) => q.eq("paperId", paper._id))
-      .collect();
-    for (const version of versions) {
-      if (version.pdfFileId) storageIdsToDelete.push(version.pdfFileId);
-      if (version.thumbnailFileId) storageIdsToDelete.push(version.thumbnailFileId);
-      await ctx.db.delete(version._id);
-    }
-    deletedCounts.paperVersions = (deletedCounts.paperVersions || 0) + versions.length;
-
-    // Delete compilation jobs
-    const jobs = await ctx.db
-      .query("compilationJobs")
-      .withIndex("by_paper", (q) => q.eq("paperId", paper._id))
-      .collect();
-    for (const job of jobs) {
-      await ctx.db.delete(job._id);
-    }
-    deletedCounts.compilationJobs = (deletedCounts.compilationJobs || 0) + jobs.length;
-
-    // Collect storage IDs from paper
-    if (paper.pdfFileId) storageIdsToDelete.push(paper.pdfFileId);
-    if (paper.thumbnailFileId) storageIdsToDelete.push(paper.thumbnailFileId);
-
-    // Delete the paper
-    await ctx.db.delete(paper._id);
-  }
-  deletedCounts.papers = allPapers.length;
-
-  // Delete storage files
-  for (const storageId of storageIdsToDelete) {
-    try {
-      await ctx.storage.delete(storageId);
-    } catch {
-      // Storage file may already be deleted, continue
-    }
-  }
-  deletedCounts.storageFiles = storageIdsToDelete.length;
-
-  // Delete repositories
-  for (const repo of repositories) {
-    await ctx.db.delete(repo._id);
-  }
-  deletedCounts.repositories = repositories.length;
-
-  return deletedCounts;
 }
 
 // Get the currently authenticated user (returns only non-sensitive fields)
@@ -1252,97 +1171,30 @@ export const deleteAccount = mutation({
 
     const deletedCounts: Record<string, number> = {};
 
-    // 1. Get all user's repositories
+    // 1. Get all user's repositories and delete them with cascade
     const repositories = await ctx.db
       .query("repositories")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    // 2. For each repository, delete tracked files
-    for (const repo of repositories) {
-      const trackedFiles = await ctx.db
-        .query("trackedFiles")
-        .withIndex("by_repository", (q) => q.eq("repositoryId", repo._id))
-        .collect();
-      for (const file of trackedFiles) {
-        await ctx.db.delete(file._id);
-      }
-      deletedCounts.trackedFiles = (deletedCounts.trackedFiles || 0) + trackedFiles.length;
-    }
+    const repoCounts = await deleteRepositoriesAndData(ctx, repositories);
+    Object.assign(deletedCounts, repoCounts);
 
-    // 3. Get all user's papers (both from repos and direct uploads)
-    const papersByRepo = [];
-    for (const repo of repositories) {
-      const papers = await ctx.db
-        .query("papers")
-        .withIndex("by_repository", (q) => q.eq("repositoryId", repo._id))
-        .collect();
-      papersByRepo.push(...papers);
-    }
-    const papersByUser = await ctx.db
+    // 2. Delete directly uploaded papers (those with userId but no repositoryId)
+    const directPapers = await ctx.db
       .query("papers")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
-    const allPapers = [...papersByRepo, ...papersByUser];
-    // Deduplicate papers by ID
-    const paperIds = new Set<string>();
-    const uniquePapers = allPapers.filter((p) => {
-      if (paperIds.has(p._id)) return false;
-      paperIds.add(p._id);
-      return true;
-    });
 
-    // 4. For each paper, delete paper versions, compilation jobs, and storage files
-    const storageIdsToDelete: string[] = [];
-    for (const paper of uniquePapers) {
-      // Delete paper versions
-      const versions = await ctx.db
-        .query("paperVersions")
-        .withIndex("by_paper", (q) => q.eq("paperId", paper._id))
-        .collect();
-      for (const version of versions) {
-        if (version.pdfFileId) storageIdsToDelete.push(version.pdfFileId);
-        if (version.thumbnailFileId) storageIdsToDelete.push(version.thumbnailFileId);
-        await ctx.db.delete(version._id);
-      }
-      deletedCounts.paperVersions = (deletedCounts.paperVersions || 0) + versions.length;
-
-      // Delete compilation jobs
-      const jobs = await ctx.db
-        .query("compilationJobs")
-        .withIndex("by_paper", (q) => q.eq("paperId", paper._id))
-        .collect();
-      for (const job of jobs) {
-        await ctx.db.delete(job._id);
-      }
-      deletedCounts.compilationJobs = (deletedCounts.compilationJobs || 0) + jobs.length;
-
-      // Collect storage IDs from paper
-      if (paper.pdfFileId) storageIdsToDelete.push(paper.pdfFileId);
-      if (paper.thumbnailFileId) storageIdsToDelete.push(paper.thumbnailFileId);
-
-      // Delete the paper
-      await ctx.db.delete(paper._id);
+    for (const paper of directPapers) {
+      const result = await deletePaperAndAssociatedData(ctx, paper);
+      deletedCounts.paperVersions = (deletedCounts.paperVersions || 0) + result.versionsDeleted;
+      deletedCounts.compilationJobs = (deletedCounts.compilationJobs || 0) + result.jobsDeleted;
+      deletedCounts.storageFiles = (deletedCounts.storageFiles || 0) + result.storageFilesDeleted;
     }
-    deletedCounts.papers = uniquePapers.length;
+    deletedCounts.papers = (deletedCounts.papers || 0) + directPapers.length;
 
-    // 5. Delete storage files
-    for (const storageId of storageIdsToDelete) {
-      try {
-        await ctx.storage.delete(storageId as typeof uniquePapers[0]["pdfFileId"] & string);
-      } catch {
-        // Storage file may already be deleted, continue
-      }
-    }
-    deletedCounts.storageFiles = storageIdsToDelete.length;
-
-    // 6. Delete repositories
-    for (const repo of repositories) {
-      await ctx.db.delete(repo._id);
-    }
-    deletedCounts.repositories = repositories.length;
-
-    // 7. Delete self-hosted GitLab instances
+    // 4. Delete self-hosted GitLab instances
     const instances = await ctx.db
       .query("selfHostedGitLabInstances")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1352,7 +1204,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.selfHostedGitLabInstances = instances.length;
 
-    // 8. Delete mobile tokens
+    // 5. Delete mobile tokens
     const mobileTokens = await ctx.db
       .query("mobileTokens")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1362,7 +1214,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.mobileTokens = mobileTokens.length;
 
-    // 9. Delete link intents
+    // 6. Delete link intents
     const linkIntents = await ctx.db
       .query("linkIntents")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1372,7 +1224,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.linkIntents = linkIntents.length;
 
-    // 10. Delete password change codes
+    // 7. Delete password change codes
     const passwordCodes = await ctx.db
       .query("passwordChangeCodes")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1382,7 +1234,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.passwordChangeCodes = passwordCodes.length;
 
-    // 11. Delete email rate limits (by user's email)
+    // 8. Delete email rate limits (by user's email)
     if (user.email) {
       const rateLimits = await ctx.db
         .query("emailRateLimits")
@@ -1394,7 +1246,7 @@ export const deleteAccount = mutation({
       deletedCounts.emailRateLimits = rateLimits.length;
     }
 
-    // 12. Delete audit logs
+    // 9. Delete audit logs
     const auditLogs = await ctx.db
       .query("auditLogs")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1404,7 +1256,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.auditLogs = auditLogs.length;
 
-    // 13. Delete auth data
+    // 10. Delete auth data
     // Auth sessions
     const sessions = await ctx.db
       .query("authSessions")
@@ -1435,7 +1287,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.authRefreshTokens = refreshTokens.length;
 
-    // 14. Delete the user record
+    // 11. Delete the user record
     await ctx.db.delete(userId);
     deletedCounts.users = 1;
 
