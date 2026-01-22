@@ -523,7 +523,8 @@ function generateSlug(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 30);
-  const randomSuffix = Math.random().toString(36).substring(2, 10);
+  // Use crypto.randomUUID() for unpredictable suffix
+  const randomSuffix = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
   return `${base}-${randomSuffix}`;
 }
 

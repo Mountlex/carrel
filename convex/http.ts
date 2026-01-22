@@ -17,8 +17,24 @@ auth.addHttpRoutes(http);
 
 // CORS headers for mobile auth endpoints
 function corsHeaders(origin?: string | null): Record<string, string> {
+  // Only allow configured origins, or same-origin requests
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
+  const siteUrl = process.env.SITE_URL;
+  if (siteUrl) allowedOrigins.push(siteUrl);
+  // Always allow Capacitor mobile origins
+  allowedOrigins.push("capacitor://localhost", "http://localhost");
+
+  const allowedOrigin = origin && allowedOrigins.some(allowed => {
+    try {
+      const allowedHost = new URL(allowed).host;
+      return origin === allowed || origin.endsWith(`.${allowedHost}`);
+    } catch {
+      return origin === allowed;
+    }
+  }) ? origin : null;
+
   return {
-    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Origin": allowedOrigin || "",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Credentials": "true",

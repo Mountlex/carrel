@@ -22,6 +22,18 @@ import { decryptTokenIfNeeded, encryptTokenIfNeeded } from "./lib/crypto";
 // Token refresh buffer: refresh 5 minutes before expiry to avoid race conditions
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
+// Safe JSON parsing helper to handle corrupted/HTML responses
+async function safeJsonParse<T>(response: Response, context: string): Promise<T> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Log first 200 chars to help debug without exposing full response
+    console.error(`JSON parse failed for ${context}: ${text.slice(0, 200)}`);
+    throw new Error(`Invalid JSON response from ${context}`);
+  }
+}
+
 // Helper to get GitHub token for authenticated user
 export async function getGitHubToken(ctx: ActionCtx): Promise<string | null> {
   const userId = await auth.getUserId(ctx);
@@ -225,7 +237,10 @@ async function refreshGitLabToken(
       return null;
     }
 
-    const data = await response.json();
+    const data = await safeJsonParse<{ access_token: string; refresh_token: string; expires_in?: number }>(
+      response,
+      "GitLab token refresh"
+    );
     const expiresIn = data.expires_in ?? 7200;
     const expiresAt = Date.now() + expiresIn * 1000;
 
@@ -302,7 +317,13 @@ export const fetchRepositoryInfo = action({
         throw new Error(`GitHub API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await safeJsonParse<{
+        name: string;
+        full_name: string;
+        default_branch: string;
+        description: string;
+        private: boolean;
+      }>(response, "GitHub repository info");
 
       return {
         name: data.name,
@@ -340,7 +361,13 @@ export const fetchRepositoryInfo = action({
         throw new Error(`GitLab API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await safeJsonParse<{
+        name: string;
+        path_with_namespace: string;
+        default_branch: string;
+        description: string;
+        visibility: string;
+      }>(response, "GitLab repository info");
 
       return {
         name: data.name,
@@ -386,7 +413,10 @@ export const fetchLatestCommit = action({
         throw new Error(`GitHub API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await safeJsonParse<{
+        sha: string;
+        commit: { message: string; committer: { date: string } };
+      }>(response, "GitHub commit info");
 
       return {
         sha: data.sha,
@@ -422,7 +452,11 @@ export const fetchLatestCommit = action({
         throw new Error(`GitLab API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await safeJsonParse<{
+        id: string;
+        message: string;
+        committed_date: string;
+      }>(response, "GitLab commit info");
 
       return {
         sha: data.id,

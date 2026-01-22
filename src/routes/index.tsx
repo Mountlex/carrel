@@ -125,58 +125,49 @@ function GalleryPage() {
   }, []);
 
   // Quick check all repositories on page load (just check for new commits, no compilation)
-  // Uses requestIdleCallback to avoid blocking UI and sequential checking to reduce load
   useEffect(() => {
-    if (
+    const shouldSync =
       repositories &&
       repositories.length > 0 &&
       !hasSyncedOnLoad.current &&
-      !isSyncing
-    ) {
+      !isSyncing;
+
+    if (!shouldSync) return;
+
+    const reposToCheck = repositories.filter((repo) => repo.syncStatus !== "syncing");
+    if (reposToCheck.length === 0) return;
+
+    // Check all repositories in parallel (same as Check All button)
+    const runSync = async () => {
+      // Mark as synced at start of async work (after any strict mode remounts)
+      if (hasSyncedOnLoad.current) return;
       hasSyncedOnLoad.current = true;
 
-      const reposToCheck = repositories.filter((repo) => repo.syncStatus !== "syncing");
-      if (reposToCheck.length === 0) return;
+      setIsSyncing(true);
+      setSyncProgress({ current: 0, total: reposToCheck.length });
 
-      // Use requestIdleCallback to defer check until browser is idle
-      const scheduleCheck = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 100));
+      let failedCount = 0;
 
-      scheduleCheck(() => {
-        setIsSyncing(true);
-        setSyncProgress({ current: 0, total: reposToCheck.length });
-
-        let hasErrors = false;
-        let currentIndex = 0;
-
-        // Check repos sequentially with idle callbacks between each
-        const checkNext = async () => {
-          if (currentIndex >= reposToCheck.length) {
-            setIsSyncing(false);
-            setSyncProgress(null);
-            if (hasErrors) {
-              showToast("Some repositories failed to check", "info");
-            }
-            return;
-          }
-
-          const repo = reposToCheck[currentIndex];
-          try {
-            await refreshRepository({ repositoryId: repo._id });
-          } catch (err) {
-            console.error(`Quick check failed for ${repo.name}:`, err);
-            hasErrors = true;
-          }
-
-          currentIndex++;
-          setSyncProgress({ current: currentIndex, total: reposToCheck.length });
-
-          // Use idle callback for next check to keep UI responsive
-          scheduleCheck(checkNext);
-        };
-
-        checkNext();
+      const checkPromises = reposToCheck.map(async (repo) => {
+        try {
+          await refreshRepository({ repositoryId: repo._id });
+        } catch (err) {
+          console.error(`Quick check failed for ${repo.name}:`, err);
+          failedCount++;
+        }
+        setSyncProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
       });
-    }
+
+      await Promise.all(checkPromises);
+
+      setIsSyncing(false);
+      setSyncProgress(null);
+      if (failedCount > 0) {
+        showToast("Some repositories failed to check", "info");
+      }
+    };
+
+    runSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on load
   }, [repositories]);
 
@@ -375,7 +366,6 @@ function GalleryPage() {
 
     // Quick check all repositories in parallel
     let failedCount = 0;
-    let completedCount = 0;
     const checkPromises = reposToCheck.map(async (repo) => {
       try {
         await refreshRepository({ repositoryId: repo._id });
@@ -383,8 +373,8 @@ function GalleryPage() {
         console.error(`Quick check failed for ${repo.name}:`, err);
         failedCount++;
       }
-      completedCount++;
-      setSyncProgress((prev) => prev ? { ...prev, current: completedCount } : null);
+      // Use functional update to avoid race conditions
+      setSyncProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
     });
 
     await Promise.all(checkPromises);
@@ -415,7 +405,6 @@ function GalleryPage() {
     setRefreshProgress({ current: 0, total: papersToRefresh.length });
 
     let failedCount = 0;
-    let completedCount = 0;
 
     // Refresh papers in parallel
     const refreshPromises = papersToRefresh.map(async (paper) => {
@@ -425,8 +414,8 @@ function GalleryPage() {
         console.error(`Refresh failed for ${paper.title}:`, err);
         failedCount++;
       }
-      completedCount++;
-      setRefreshProgress((prev) => prev ? { ...prev, current: completedCount } : null);
+      // Use functional update to avoid race conditions
+      setRefreshProgress((prev) => prev ? { ...prev, current: prev.current + 1 } : null);
     });
 
     await Promise.all(refreshPromises);

@@ -13,11 +13,21 @@ async function requireUserId(ctx: Parameters<typeof auth.getUserId>[0]) {
   return userId;
 }
 
-async function requireDevAdmin(ctx: Parameters<typeof auth.getUserId>[0]) {
+async function requireDevAdmin(ctx: Parameters<typeof auth.getUserId>[0] & { db: { get: (id: Id<"users">) => Promise<{ email?: string } | null> } }) {
   const userId = await requireUserId(ctx);
   if (process.env.ALLOW_DEV_ADMIN !== "true") {
     throw new Error("Admin operation not allowed");
   }
+
+  // Additional check: only specific admin users can perform these operations
+  const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").filter(Boolean);
+  if (adminEmails.length > 0) {
+    const user = await ctx.db.get(userId);
+    if (!user?.email || !adminEmails.includes(user.email)) {
+      throw new Error("Admin operation not allowed for this user");
+    }
+  }
+
   return userId;
 }
 
