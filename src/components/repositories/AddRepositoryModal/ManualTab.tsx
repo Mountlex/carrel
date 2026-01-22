@@ -32,7 +32,7 @@ export function ManualTab({
         <button
           onClick={() => onAddFromUrl(urlValue.trim())}
           disabled={isAdding || !urlValue.trim()}
-          className="shrink-0 rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 dark:text-gray-100 hover:bg-primary-100 disabled:opacity-50"
+          className="shrink-0 rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
         >
           {isAdding ? "Adding..." : "Add"}
         </button>

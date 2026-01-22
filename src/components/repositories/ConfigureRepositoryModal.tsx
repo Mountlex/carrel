@@ -105,7 +105,7 @@ export function ConfigureRepositoryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800">
+      <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800">
         <div className="flex items-center justify-between border-b p-4 dark:border-gray-700">
           <div>
             <h2 className="text-lg font-normal text-gray-900 dark:text-gray-100">Configure Papers</h2>
@@ -238,7 +238,7 @@ export function ConfigureRepositoryModal({
           <button
             onClick={handleAddFiles}
             disabled={selectedFiles.length === 0 || isAddingFiles}
-            className="rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 dark:text-gray-100 hover:bg-primary-100 disabled:opacity-50"
+            className="rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
           >
             {isAddingFiles ? "Adding..." : `Add ${selectedFiles.length} Paper${selectedFiles.length !== 1 ? "s" : ""}`}
           </button>
