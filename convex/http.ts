@@ -35,7 +35,7 @@ function corsHeaders(origin?: string | null): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin || "",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
@@ -523,6 +523,165 @@ http.route({
       console.error("Token verification error:", error);
       return jsonResponse(
         { error: "Internal server error" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
+// GET /api/mobile/user - Get authenticated user's profile
+http.route({
+  path: "/api/mobile/user",
+  method: "OPTIONS",
+  handler: httpAction(async (_, request) => {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request.headers.get("Origin")),
+    });
+  }),
+});
+
+http.route({
+  path: "/api/mobile/user",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    const profile = await ctx.runQuery(internal.users.getUserProfileForMobile, {
+      userId: user.userId,
+    });
+
+    if (!profile) {
+      return jsonResponse({ error: "User not found" }, 404, origin);
+    }
+
+    return jsonResponse(profile, 200, origin);
+  }),
+});
+
+// DELETE /api/mobile/paper - Delete a paper
+http.route({
+  path: "/api/mobile/paper",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    try {
+      const body = await request.json();
+      const { paperId } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
+      }
+
+      await ctx.runMutation(internal.papers.deletePaperForMobile, {
+        paperId,
+        userId: user.userId,
+      });
+
+      return jsonResponse({ success: true }, 200, origin);
+    } catch (error) {
+      console.error("Delete paper error:", error);
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "Delete failed" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
+// PATCH /api/mobile/paper - Update paper metadata
+http.route({
+  path: "/api/mobile/paper",
+  method: "PATCH",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    try {
+      const body = await request.json();
+      const { paperId, title, authors } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
+      }
+
+      await ctx.runMutation(internal.papers.updatePaperForMobile, {
+        paperId,
+        userId: user.userId,
+        title,
+        authors,
+      });
+
+      return jsonResponse({ success: true }, 200, origin);
+    } catch (error) {
+      console.error("Update paper error:", error);
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "Update failed" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
+// POST /api/mobile/paper/toggle-public - Toggle paper public/private
+http.route({
+  path: "/api/mobile/paper/toggle-public",
+  method: "OPTIONS",
+  handler: httpAction(async (_, request) => {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request.headers.get("Origin")),
+    });
+  }),
+});
+
+http.route({
+  path: "/api/mobile/paper/toggle-public",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    try {
+      const body = await request.json();
+      const { paperId } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
+      }
+
+      const result = await ctx.runMutation(internal.papers.togglePublicForMobile, {
+        paperId,
+        userId: user.userId,
+      });
+
+      return jsonResponse(result, 200, origin);
+    } catch (error) {
+      console.error("Toggle public error:", error);
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "Toggle failed" },
         500,
         origin
       );
