@@ -263,6 +263,175 @@ export const getForMobile = internalQuery({
   },
 });
 
+// Delete paper for mobile app (internal, auth handled by HTTP layer)
+export const deletePaperForMobile = internalMutation({
+  args: { paperId: v.string(), userId: v.string() },
+  handler: async (ctx, args) => {
+    const paperId = args.paperId as Id<"papers">;
+    const userId = args.userId as Id<"users">;
+
+    const paper = await ctx.db.get(paperId);
+    if (!paper) {
+      throw new Error("Paper not found");
+    }
+
+    // Authorization: paper must be owned directly or via repository
+    let hasValidOwnership = false;
+
+    if (paper.userId) {
+      if (paper.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (paper.repositoryId) {
+      const repository = await ctx.db.get(paper.repositoryId);
+      if (!repository || repository.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (!hasValidOwnership) {
+      throw new Error("Unauthorized");
+    }
+
+    // Store tracked file ID before deletion
+    const trackedFileId = paper.trackedFileId;
+
+    // Use shared helper to delete paper and all associated data
+    await deletePaperAndAssociatedData(ctx, paper);
+
+    // Delete associated tracked file if it exists
+    if (trackedFileId) {
+      await ctx.db.delete(trackedFileId);
+    }
+  },
+});
+
+// Update paper metadata for mobile app (internal, auth handled by HTTP layer)
+export const updatePaperForMobile = internalMutation({
+  args: {
+    paperId: v.string(),
+    userId: v.string(),
+    title: v.optional(v.string()),
+    authors: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const paperId = args.paperId as Id<"papers">;
+    const userId = args.userId as Id<"users">;
+
+    const paper = await ctx.db.get(paperId);
+    if (!paper) {
+      throw new Error("Paper not found");
+    }
+
+    // Authorization: paper must be owned directly or via repository
+    let hasValidOwnership = false;
+
+    if (paper.userId) {
+      if (paper.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (paper.repositoryId) {
+      const repository = await ctx.db.get(paper.repositoryId);
+      if (!repository || repository.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (!hasValidOwnership) {
+      throw new Error("Unauthorized");
+    }
+
+    // Validate field lengths
+    if (args.title !== undefined && args.title.length > 500) {
+      throw new Error("Title must be 500 characters or less");
+    }
+    if (args.authors !== undefined) {
+      if (args.authors.length > 50) {
+        throw new Error("Maximum 50 authors allowed");
+      }
+      for (const author of args.authors) {
+        if (author.length > 200) {
+          throw new Error("Author names must be 200 characters or less");
+        }
+      }
+    }
+
+    const updates: { title?: string; authors?: string[]; updatedAt: number } = {
+      updatedAt: Date.now(),
+    };
+    if (args.title !== undefined) updates.title = args.title;
+    if (args.authors !== undefined) updates.authors = args.authors;
+
+    await ctx.db.patch(paperId, updates);
+  },
+});
+
+// Generate a share slug (duplicated from below for internal use)
+function generateSlugForMobile(title: string): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 30);
+  const randomSuffix = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+  return `${base}-${randomSuffix}`;
+}
+
+// Toggle public/private for mobile app (internal, auth handled by HTTP layer)
+export const togglePublicForMobile = internalMutation({
+  args: { paperId: v.string(), userId: v.string() },
+  handler: async (ctx, args) => {
+    const paperId = args.paperId as Id<"papers">;
+    const userId = args.userId as Id<"users">;
+
+    const paper = await ctx.db.get(paperId);
+    if (!paper) {
+      throw new Error("Paper not found");
+    }
+
+    // Authorization: paper must be owned directly or via repository
+    let hasValidOwnership = false;
+
+    if (paper.userId) {
+      if (paper.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (paper.repositoryId) {
+      const repository = await ctx.db.get(paper.repositoryId);
+      if (!repository || repository.userId !== userId) {
+        throw new Error("Unauthorized");
+      }
+      hasValidOwnership = true;
+    }
+
+    if (!hasValidOwnership) {
+      throw new Error("Unauthorized");
+    }
+
+    const isPublic = !paper.isPublic;
+    const shareSlug = isPublic && !paper.shareSlug ? generateSlugForMobile(paper.title) : paper.shareSlug;
+
+    await ctx.db.patch(paperId, {
+      isPublic,
+      shareSlug,
+      updatedAt: Date.now(),
+    });
+
+    return { isPublic, shareSlug };
+  },
+});
+
 // Get public papers (for gallery)
 export const listPublic = query({
   handler: async (ctx) => {

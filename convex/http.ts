@@ -35,7 +35,7 @@ function corsHeaders(origin?: string | null): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin || "",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
@@ -69,15 +69,104 @@ http.route({
   }),
 });
 
-// OPTIONS handler for CORS preflight
+// OPTIONS handler for mobile email auth
 http.route({
-  path: "/api/mobile/token",
+  path: "/api/mobile/auth/email",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
       status: 204,
       headers: corsHeaders(request.headers.get("Origin")),
     });
+  }),
+});
+
+// POST /api/mobile/auth/email - Native email/password login for mobile apps
+http.route({
+  path: "/api/mobile/auth/email",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    try {
+      const body = await request.json();
+      const { email, password, deviceId, deviceName, platform } = body;
+
+      if (!email || !password) {
+        return jsonResponse({ error: "Email and password are required" }, 400, origin);
+      }
+
+      // Verify credentials using internal action
+      const result = await ctx.runAction(internal.mobileEmailAuth.verifyEmailPassword, {
+        email,
+        password,
+      });
+
+      if (!result.success || !result.userId) {
+        return jsonResponse({ error: result.error || "Invalid credentials" }, 401, origin);
+      }
+
+      // Get JWT secret
+      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
+
+      // Get user details
+      const user = await ctx.runQuery(internal.mobileAuth.getUserById, {
+        userId: result.userId,
+      });
+
+      if (!user) {
+        return jsonResponse({ error: "User not found" }, 404, origin);
+      }
+
+      // Generate tokens
+      const now = Date.now();
+      const accessTokenExpiry = now + ACCESS_TOKEN_EXPIRY_MS;
+      const refreshToken = generateSecureToken();
+      const refreshTokenExpiry = now + REFRESH_TOKEN_EXPIRY_MS;
+
+      // Create JWT access token
+      const accessToken = await createJwt(
+        {
+          iss: "carrel-mobile",
+          sub: result.userId,
+          email: user.email,
+          name: user.name,
+          iat: Math.floor(now / 1000),
+          exp: Math.floor(accessTokenExpiry / 1000),
+        },
+        jwtSecret
+      );
+
+      // Store refresh token hash
+      const refreshTokenHash = await hashToken(refreshToken);
+      await ctx.runMutation(internal.mobileAuth.createMobileTokenRecord, {
+        userId: result.userId,
+        refreshTokenHash,
+        deviceId,
+        deviceName,
+        platform,
+        expiresAt: refreshTokenExpiry,
+      });
+
+      return jsonResponse(
+        {
+          accessToken,
+          refreshToken,
+          expiresAt: accessTokenExpiry,
+          refreshExpiresAt: refreshTokenExpiry,
+          tokenType: "Bearer",
+        },
+        200,
+        origin
+      );
+    } catch (error) {
+      console.error("Email auth error:", error);
+      return jsonResponse(
+        { error: "Authentication failed" },
+        500,
+        origin
+      );
+    }
   }),
 });
 
@@ -100,99 +189,6 @@ http.route({
       status: 204,
       headers: corsHeaders(request.headers.get("Origin")),
     });
-  }),
-});
-
-// POST /api/mobile/token - Exchange session for JWT tokens
-// This endpoint requires an existing authenticated session (cookie-based)
-http.route({
-  path: "/api/mobile/token",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const origin = request.headers.get("Origin");
-
-    try {
-      // Verify the user is authenticated via session
-      const identity = await ctx.auth.getUserIdentity();
-      if (!identity) {
-        return jsonResponse({ error: "Not authenticated" }, 401, origin);
-      }
-
-      // Parse request body for device info
-      let deviceId: string | undefined;
-      let deviceName: string | undefined;
-      let platform: "ios" | "android" | "unknown" | undefined;
-
-      try {
-        const body = await request.json();
-        deviceId = body.deviceId;
-        deviceName = body.deviceName;
-        platform = body.platform;
-      } catch {
-        // Body is optional
-      }
-
-      // Get JWT secret
-      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
-
-      // Find the user in the database
-      const user = await ctx.runQuery(internal.users.getUserByEmail, {
-        email: identity.email!,
-      });
-
-      if (!user) {
-        return jsonResponse({ error: "User not found" }, 404, origin);
-      }
-
-      // Generate tokens
-      const now = Date.now();
-      const accessTokenExpiry = now + ACCESS_TOKEN_EXPIRY_MS;
-      const refreshToken = generateSecureToken();
-      const refreshTokenExpiry = now + REFRESH_TOKEN_EXPIRY_MS;
-
-      // Create JWT access token
-      const accessToken = await createJwt(
-        {
-          iss: "carrel-mobile",
-          sub: user._id,
-          email: identity.email,
-          name: identity.name,
-          iat: Math.floor(now / 1000),
-          exp: Math.floor(accessTokenExpiry / 1000),
-        },
-        jwtSecret
-      );
-
-      // Store refresh token hash
-      const refreshTokenHash = await hashToken(refreshToken);
-      await ctx.runMutation(internal.mobileAuth.createMobileTokenRecord, {
-        userId: user._id,
-        refreshTokenHash,
-        deviceId,
-        deviceName,
-        platform,
-        expiresAt: refreshTokenExpiry,
-      });
-
-      return jsonResponse(
-        {
-          accessToken,
-          refreshToken,
-          expiresAt: accessTokenExpiry,
-          refreshExpiresAt: refreshTokenExpiry,
-          tokenType: "Bearer",
-        },
-        200,
-        origin
-      );
-    } catch (error) {
-      console.error("Token issuance error:", error);
-      return jsonResponse(
-        { error: "Internal server error" },
-        500,
-        origin
-      );
-    }
   }),
 });
 
@@ -471,9 +467,9 @@ http.route({
   }),
 });
 
-// POST /api/mobile/verify - Verify an access token (for debugging/testing)
+// GET /api/mobile/user - Get authenticated user's profile
 http.route({
-  path: "/api/mobile/verify",
+  path: "/api/mobile/user",
   method: "OPTIONS",
   handler: httpAction(async (_, request) => {
     return new Response(null, {
@@ -484,45 +480,145 @@ http.route({
 });
 
 http.route({
-  path: "/api/mobile/verify",
+  path: "/api/mobile/user",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    const profile = await ctx.runQuery(internal.users.getUserProfileForMobile, {
+      userId: user.userId,
+    });
+
+    if (!profile) {
+      return jsonResponse({ error: "User not found" }, 404, origin);
+    }
+
+    return jsonResponse(profile, 200, origin);
+  }),
+});
+
+// DELETE /api/mobile/paper - Delete a paper
+http.route({
+  path: "/api/mobile/paper",
+  method: "DELETE",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    try {
+      const body = await request.json();
+      const { paperId } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
+      }
+
+      await ctx.runMutation(internal.papers.deletePaperForMobile, {
+        paperId,
+        userId: user.userId,
+      });
+
+      return jsonResponse({ success: true }, 200, origin);
+    } catch (error) {
+      console.error("Delete paper error:", error);
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "Delete failed" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
+// PATCH /api/mobile/paper - Update paper metadata
+http.route({
+  path: "/api/mobile/paper",
+  method: "PATCH",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
+    try {
+      const body = await request.json();
+      const { paperId, title, authors } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
+      }
+
+      await ctx.runMutation(internal.papers.updatePaperForMobile, {
+        paperId,
+        userId: user.userId,
+        title,
+        authors,
+      });
+
+      return jsonResponse({ success: true }, 200, origin);
+    } catch (error) {
+      console.error("Update paper error:", error);
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "Update failed" },
+        500,
+        origin
+      );
+    }
+  }),
+});
+
+// POST /api/mobile/paper/toggle-public - Toggle paper public/private
+http.route({
+  path: "/api/mobile/paper/toggle-public",
+  method: "OPTIONS",
+  handler: httpAction(async (_, request) => {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request.headers.get("Origin")),
+    });
+  }),
+});
+
+http.route({
+  path: "/api/mobile/paper/toggle-public",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("Origin");
 
+    const user = await verifyMobileAuth(ctx, request);
+    if (!user) {
+      return jsonResponse({ error: "Unauthorized" }, 401, origin);
+    }
+
     try {
-      // Get token from Authorization header
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "Missing or invalid Authorization header" }, 401, origin);
+      const body = await request.json();
+      const { paperId } = body;
+
+      if (!paperId) {
+        return jsonResponse({ error: "Missing paperId" }, 400, origin);
       }
 
-      const accessToken = authHeader.substring(7);
+      const result = await ctx.runMutation(internal.papers.togglePublicForMobile, {
+        paperId,
+        userId: user.userId,
+      });
 
-      // Get JWT secret
-      const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret);
-
-      // Verify the token
-      const payload = await verifyJwt(accessToken, jwtSecret);
-
-      if (!payload) {
-        return jsonResponse({ error: "Invalid or expired token" }, 401, origin);
-      }
-
-      return jsonResponse(
-        {
-          valid: true,
-          userId: payload.sub,
-          email: payload.email,
-          name: payload.name,
-          expiresAt: (payload.exp as number) * 1000,
-        },
-        200,
-        origin
-      );
+      return jsonResponse(result, 200, origin);
     } catch (error) {
-      console.error("Token verification error:", error);
+      console.error("Toggle public error:", error);
       return jsonResponse(
-        { error: "Internal server error" },
+        { error: error instanceof Error ? error.message : "Toggle failed" },
         500,
         origin
       );

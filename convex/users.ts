@@ -1159,6 +1159,26 @@ export const getUserByEmail = internalQuery({
   },
 });
 
+// Internal query to get user profile by ID (for mobile user endpoint)
+export const getUserProfileForMobile = internalQuery({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId as Id<"users">;
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+
+    return {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+      createdAt: user._creationTime,
+    };
+  },
+});
+
 // Delete the current user's account and all associated data
 export const deleteAccount = mutation({
   args: {},
