@@ -61,6 +61,23 @@ async function checkDependenciesChanged(
   return true;
 }
 
+/**
+ * Calculate commit time from a commit response.
+ *
+ * When the commit is unchanged (Overleaf optimization), use the repository's
+ * cached lastCommitTime to ensure consistency between repo and paper timestamps.
+ * Falls back to Date.now() only if no cached time is available.
+ */
+function getCommitTime(
+  latestCommit: { unchanged?: boolean; date?: string },
+  repositoryLastCommitTime: number | undefined
+): number {
+  if (latestCommit.unchanged) {
+    return repositoryLastCommitTime ?? Date.now();
+  }
+  return new Date(latestCommit.date!).getTime();
+}
+
 // Check if repository is currently syncing (used for optimistic locking)
 export const getRepositorySyncStatus = internalQuery({
   args: { id: v.id("repositories") },
@@ -360,10 +377,7 @@ export const refreshRepository = action({
       });
 
       // Convert commit date to Unix timestamp
-      // If unchanged, use existing lastCommitTime from repository
-      const commitTime = latestCommit.unchanged
-        ? (repository.lastCommitTime ?? Date.now())
-        : new Date(latestCommit.date).getTime();
+      const commitTime = getCommitTime(latestCommit, repository.lastCommitTime);
 
       // Get all papers for this repository
       const papers = await ctx.runQuery(internal.sync.getPapersForRepository, {
@@ -955,9 +969,7 @@ export const buildPaper = action({
       }
 
       // Compute commit time for last affected tracking
-      const commitTime = latestCommit.unchanged
-        ? Date.now() // Shouldn't happen since we only reach here if something changed
-        : new Date(latestCommit.date).getTime();
+      const commitTime = getCommitTime(latestCommit, repository.lastCommitTime);
 
       // Update paper with new PDF using paper-level lock validation (also clears lastSyncError and buildStatus)
       const updateResult = await ctx.runMutation(internal.sync.updatePaperPdfWithBuildLock, {
@@ -1128,9 +1140,7 @@ export const buildPaperForMobile = internalAction({
         fileSize = result.size;
       }
 
-      const commitTime = latestCommit.unchanged
-        ? Date.now()
-        : new Date(latestCommit.date).getTime();
+      const commitTime = getCommitTime(latestCommit, repository.lastCommitTime);
 
       await ctx.runMutation(internal.sync.updatePaperPdfWithBuildLock, {
         id: paperId,
