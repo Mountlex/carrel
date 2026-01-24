@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
-import { StatusBadge, BuildProgress, CompilationLog } from "../components/ui";
+import { StatusBadge, BuildProgress, CompilationLog, PaperDetailSkeleton } from "../components/ui";
 import { PdfViewer } from "../components/PdfViewer";
 
 export const Route = createFileRoute("/papers/$id")({
@@ -26,7 +26,7 @@ function PaperDetailPage() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const { toast, showError, clearToast } = useToast();
+  const { toast, showError, showSuccess, clearToast } = useToast();
 
   // Check if the error indicates the source file was deleted from the repository
   const isSourceFileNotFound = (error: string | null | undefined): boolean => {
@@ -56,6 +56,7 @@ function PaperDetailPage() {
     if (!paper) return;
     try {
       await togglePublic({ id: paper._id });
+      showSuccess(paper.isPublic ? "Paper is now private" : "Paper is now public");
     } catch (error) {
       console.error("Failed to toggle public status:", error);
       showError(error, "Failed to update sharing status");
@@ -75,11 +76,7 @@ function PaperDetailPage() {
   };
 
   if (paper === undefined) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500 dark:text-gray-400">Loading paper...</div>
-      </div>
-    );
+    return <PaperDetailSkeleton />;
   }
 
   if (paper === null) {
@@ -462,7 +459,11 @@ function PaperDetailPage() {
                   onClick={() => {
                     navigator.clipboard.writeText(
                       `${window.location.origin}/share/${paper.shareSlug}`
-                    );
+                    ).then(() => {
+                      showSuccess("Link copied to clipboard");
+                    }).catch(() => {
+                      showError(null, "Failed to copy link");
+                    });
                   }}
                   className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
                   aria-label="Copy share link to clipboard"
@@ -518,6 +519,7 @@ function PaperDetailPage() {
             <div className="rounded-lg border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
               <button
                 onClick={() => setShowVersionHistory(!showVersionHistory)}
+                aria-expanded={showVersionHistory}
                 className="flex w-full items-center justify-between text-sm font-normal text-gray-900 dark:text-gray-100"
               >
                 <span>Version History ({versions.length})</span>
@@ -562,7 +564,10 @@ function PaperDetailPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => toggleVersionPinned({ versionId: version._id })}
+                            onClick={async () => {
+                              await toggleVersionPinned({ versionId: version._id });
+                              showSuccess(version.pinned ? "Version unpinned" : "Version pinned");
+                            }}
                             className={`rounded p-0.5 transition-colors ${
                               version.pinned
                                 ? "text-yellow-500 hover:text-yellow-600"

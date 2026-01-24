@@ -6,6 +6,7 @@ interface CompilationLogProps {
 
 export function CompilationLog({ error }: CompilationLogProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showFullError, setShowFullError] = useState(false);
 
   // Parse the error to separate the message from the log
   const logSeparator = "\n\nLog:\n";
@@ -15,9 +16,24 @@ export function CompilationLog({ error }: CompilationLogProps) {
   const errorMessage = hasLog ? error.slice(0, separatorIndex) : error;
   const logContent = hasLog ? error.slice(separatorIndex + logSeparator.length) : null;
 
+  const isLongError = errorMessage.length > 200;
+  const displayedMessage = isLongError && !showFullError
+    ? errorMessage.slice(0, 200) + "..."
+    : errorMessage;
+
   return (
     <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-      <p className="font-normal">{errorMessage}</p>
+      <p className="font-normal">
+        {displayedMessage}
+        {isLongError && (
+          <button
+            onClick={() => setShowFullError(!showFullError)}
+            className="ml-1 underline hover:no-underline"
+          >
+            {showFullError ? "Show less" : "Show more"}
+          </button>
+        )}
+      </p>
 
       {logContent && (
         <div className="mt-2">

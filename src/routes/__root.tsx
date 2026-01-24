@@ -1,7 +1,7 @@
 import { createRootRouteWithContext, Link, Outlet, Scripts, HeadContent } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { QueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "../index.css";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -39,6 +39,7 @@ function RootComponent() {
   const [isLinking, setIsLinking] = useState(() => isLinkInProgress());
   const [linkError, setLinkError] = useState<string | null>(null);
   const [showRecovery, setShowRecovery] = useState(false);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Detect link completion after OAuth redirect
   useEffect(() => {
@@ -79,6 +80,7 @@ function RootComponent() {
         setIsLinking(false);
         // Show recovery UI for critical errors
         if (errorMessage.includes("expired") || errorMessage.includes("Invalid")) {
+          previousFocusRef.current = document.activeElement as HTMLElement;
           setShowRecovery(true);
         }
       }
@@ -88,6 +90,19 @@ function RootComponent() {
       handleLinkCompletion();
     }
   }, [isAuthenticated, user, isLoading, linkProviderToAccount]);
+
+  // Timeout for linking state
+  useEffect(() => {
+    if (!isLinking) return;
+
+    const timeout = setTimeout(() => {
+      setIsLinking(false);
+      setLinkError("Account linking timed out. Please try again.");
+      clearPendingLink();
+    }, 30000);
+
+    return () => clearTimeout(timeout);
+  }, [isLinking]);
 
   return (
     <RootDocument>
@@ -234,6 +249,7 @@ function RootComponent() {
                     onClick={() => {
                       setShowRecovery(false);
                       setLinkError(null);
+                      previousFocusRef.current?.focus();
                       signOut();
                     }}
                     className="flex-1 rounded-md bg-gray-900 px-4 py-2 text-sm font-normal text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
@@ -244,6 +260,7 @@ function RootComponent() {
                     onClick={() => {
                       setShowRecovery(false);
                       setLinkError(null);
+                      previousFocusRef.current?.focus();
                     }}
                     className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-normal text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                   >

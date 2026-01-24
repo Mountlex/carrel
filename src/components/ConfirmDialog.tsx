@@ -23,11 +23,15 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  // Focus cancel button when dialog opens
+  // Focus cancel button when dialog opens, restore focus when closing
   useEffect(() => {
     if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
       cancelButtonRef.current?.focus();
+    } else {
+      previousFocusRef.current?.focus();
     }
   }, [isOpen]);
 
@@ -143,10 +147,13 @@ interface ToastProps {
 }
 
 export function Toast({ message, type = "info", onClose }: ToastProps) {
+  const [isPaused, setIsPaused] = useState(false);
+
   useEffect(() => {
-    const timer = setTimeout(onClose, 5000);
+    if (isPaused) return;
+    const timer = setTimeout(onClose, 7000);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, isPaused]);
 
   const typeStyles = {
     error: "bg-red-50 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-800",
@@ -158,6 +165,8 @@ export function Toast({ message, type = "info", onClose }: ToastProps) {
     <div
       className={`fixed bottom-4 right-4 z-[100] max-w-sm rounded-lg border px-4 py-3 shadow-lg ${typeStyles[type]}`}
       role="alert"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
     >
       <div className="flex items-center gap-3">
         <p className="text-sm">{message}</p>

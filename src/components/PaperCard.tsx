@@ -113,6 +113,7 @@ export function PaperCard({
               ref={inputRef}
               type="text"
               value={editTitle}
+              maxLength={200}
               onChange={(e) => onEditTitleChange(e.target.value)}
               onBlur={onSaveTitle}
               onKeyDown={onKeyDown}
@@ -125,7 +126,7 @@ export function PaperCard({
               </h3>
               <button
                 onClick={(e) => onStartEdit(e, paper._id, paper.title)}
-                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:hover:bg-gray-800 dark:hover:text-gray-300"
                 title="Rename"
                 aria-label={`Rename ${paper.title}`}
               >
@@ -140,7 +141,7 @@ export function PaperCard({
               </button>
               <button
                 onClick={(e) => onDeleteClick(e, paper._id)}
-                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100 dark:hover:bg-red-900/30"
+                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:hover:bg-red-900/30"
                 title="Delete"
                 aria-label={`Delete ${paper.title}`}
               >

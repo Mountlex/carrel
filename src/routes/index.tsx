@@ -265,13 +265,24 @@ function GalleryPage() {
   };
 
   const handleSaveTitle = async () => {
-    if (editingPaperId && editTitle.trim()) {
-      try {
-        await updatePaper({ id: editingPaperId, title: editTitle.trim() });
-      } catch (error) {
-        console.error("Failed to update title:", error);
-        showError(error, "Failed to update paper title");
-      }
+    if (!editingPaperId) {
+      setEditingPaperId(null);
+      setEditTitle("");
+      return;
+    }
+
+    const trimmedTitle = editTitle.trim();
+    if (!trimmedTitle) {
+      showToast("Title cannot be empty", "error");
+      return;
+    }
+
+    try {
+      await updatePaper({ id: editingPaperId, title: trimmedTitle });
+      showToast("Title updated", "success");
+    } catch (error) {
+      console.error("Failed to update title:", error);
+      showError(error, "Failed to update paper title");
     }
     setEditingPaperId(null);
     setEditTitle("");

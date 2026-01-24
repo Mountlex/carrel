@@ -2,6 +2,7 @@ export { Button } from "./Button";
 export { Input } from "./Input";
 export { StatusBadge } from "./StatusBadge";
 export { PaperCardSkeleton, PaperCardSkeletonGrid } from "./PaperCardSkeleton";
+export { PaperDetailSkeleton } from "./PaperDetailSkeleton";
 export { LiveRegion } from "./LiveRegion";
 export { ProgressBar } from "./ProgressBar";
 export { BuildProgress } from "./BuildProgress";
