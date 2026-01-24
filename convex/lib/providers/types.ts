@@ -32,6 +32,10 @@ export interface CommitInfo {
   sha: string;
   message: string;
   date?: string;
+  /** Author name (e.g., "John Doe"). */
+  authorName?: string;
+  /** Author email (e.g., "john@example.com"). */
+  authorEmail?: string;
   /** If true, the SHA matches the known SHA (Overleaf optimization). */
   unchanged?: boolean;
 }

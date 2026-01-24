@@ -1,12 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { StatusBadge, BuildProgress, CompilationLog, PaperDetailSkeleton } from "../components/ui";
-import { PdfViewer } from "../components/PdfViewer";
+import { PdfViewer, type PdfViewerRef } from "../components/PdfViewer";
+
+// Format timestamp as DD.MM.YY HH:MM
+function formatDateTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const year = d.getFullYear().toString().slice(-2);
+  const hours = d.getHours().toString().padStart(2, "0");
+  const minutes = d.getMinutes().toString().padStart(2, "0");
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
+}
 
 export const Route = createFileRoute("/papers/$id")({
   component: PaperDetailPage,
@@ -27,6 +38,7 @@ function PaperDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const { toast, showError, showSuccess, clearToast } = useToast();
+  const pdfViewerRef = useRef<PdfViewerRef>(null);
 
   // Check if the error indicates the source file was deleted from the repository
   const isSourceFileNotFound = (error: string | null | undefined): boolean => {
@@ -119,7 +131,7 @@ function PaperDetailPage() {
         <div className="lg:col-span-2">
           <div className="h-[calc(100vh-12rem)] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-sm dark:border-gray-800 dark:bg-gray-800">
             {paper.pdfUrl ? (
-              <PdfViewer url={paper.pdfUrl} title={paper.title} />
+              <PdfViewer ref={pdfViewerRef} url={paper.pdfUrl} title={paper.title} />
             ) : (
               <div className="flex h-full items-center justify-center text-gray-400">
                 <div className="text-center">
@@ -194,46 +206,6 @@ function PaperDetailPage() {
                   <dd className="text-gray-900 dark:text-gray-100">{paper.repository.name}</dd>
                 </div>
               )}
-              <div className="flex justify-between">
-                <dt className="text-gray-500 dark:text-gray-400">Status</dt>
-                <dd className="flex items-center gap-2">
-                  {paper.buildStatus === "building" ? (
-                    <StatusBadge
-                      status="building"
-                      label={paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
-                    />
-                  ) : (buildError || paper.lastSyncError) ? (
-                    <>
-                      <StatusBadge
-                        status="error"
-                        label={
-                          isSourceFileNotFound(buildError || paper.lastSyncError)
-                            ? "Source file missing"
-                            : paper.trackedFile?.pdfSourceType === "compile"
-                              ? "Compilation failed"
-                              : "Fetch failed"
-                        }
-                        title={buildError || paper.lastSyncError || undefined}
-                      />
-                      {paper.repository && !isSourceFileNotFound(buildError || paper.lastSyncError) && (
-                        <button
-                          onClick={handleBuild}
-                          disabled={isBuilding}
-                          className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </>
-                  ) : !paper.repository ? (
-                    <StatusBadge status="info" label="Uploaded" />
-                  ) : paper.isUpToDate === true ? (
-                    <StatusBadge status="success" label="Up to date" />
-                  ) : (
-                    <StatusBadge status="warning" label="Needs update" />
-                  )}
-                </dd>
-              </div>
               {paper.pageCount && (
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Pages</dt>
@@ -252,28 +224,38 @@ function PaperDetailPage() {
               {paper.repository?.lastCommitHash && paper.cachedDependencies && paper.cachedDependencies.length > 0 ? (
                 <>
                   <div className="flex justify-between items-center">
-                    <dt className="text-gray-500 dark:text-gray-400">Latest repo commit</dt>
-                    <dd className="flex items-center gap-2">
-                      <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                    <dt className="text-gray-500 dark:text-gray-400">Repo commit</dt>
+                    <dd className="flex items-center gap-1.5 text-xs">
+                      <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                         {paper.repository.lastCommitHash.slice(0, 7)}
                       </span>
+                      {paper.repository?.lastCommitAuthor && (
+                        <span className="text-gray-500 dark:text-gray-400 truncate max-w-32">
+                          {paper.repository.lastCommitAuthor}
+                        </span>
+                      )}
                       {paper.repository?.lastCommitTime && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {new Date(paper.repository.lastCommitTime).toLocaleString()}
+                        <span className="text-gray-400 dark:text-gray-500">
+                          {formatDateTime(paper.repository.lastCommitTime)}
                         </span>
                       )}
                     </dd>
                   </div>
                   {paper.lastAffectedCommitHash && (
                     <div className="flex justify-between items-center">
-                      <dt className="text-gray-500 dark:text-gray-400">Latest paper commit</dt>
-                      <dd className="flex items-center gap-2">
-                        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                      <dt className="text-gray-500 dark:text-gray-400">Paper commit</dt>
+                      <dd className="flex items-center gap-1.5 text-xs">
+                        <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                           {paper.lastAffectedCommitHash.slice(0, 7)}
                         </span>
+                        {paper.lastAffectedCommitAuthor && (
+                          <span className="text-gray-500 dark:text-gray-400 truncate max-w-32">
+                            {paper.lastAffectedCommitAuthor}
+                          </span>
+                        )}
                         {paper.lastAffectedCommitTime && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {new Date(paper.lastAffectedCommitTime).toLocaleString()}
+                          <span className="text-gray-400 dark:text-gray-500">
+                            {formatDateTime(paper.lastAffectedCommitTime)}
                           </span>
                         )}
                       </dd>
@@ -282,32 +264,115 @@ function PaperDetailPage() {
                 </>
               ) : paper.repository?.lastCommitHash && (
                 <div className="flex justify-between items-center">
-                  <dt className="text-gray-500 dark:text-gray-400">Latest commit</dt>
-                  <dd className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                  <dt className="text-gray-500 dark:text-gray-400">Commit</dt>
+                  <dd className="flex items-center gap-1.5 text-xs">
+                    <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                       {paper.repository.lastCommitHash.slice(0, 7)}
                     </span>
+                    {paper.repository?.lastCommitAuthor && (
+                      <span className="text-gray-500 dark:text-gray-400 truncate max-w-32">
+                        {paper.repository.lastCommitAuthor}
+                      </span>
+                    )}
                     {paper.repository?.lastCommitTime && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(paper.repository.lastCommitTime).toLocaleString()}
+                      <span className="text-gray-400 dark:text-gray-500">
+                        {formatDateTime(paper.repository.lastCommitTime)}
                       </span>
                     )}
                   </dd>
                 </div>
               )}
-              {paper.builtFromCommitHash && (
+              {paper.builtFromCommitHash ? (
                 <div className="flex justify-between items-center">
-                  <dt className="text-gray-500 dark:text-gray-400">Current PDF commit</dt>
-                  <dd className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                  <dt className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                    PDF
+                    {paper.buildStatus === "building" ? (
+                      <StatusBadge
+                        status="building"
+                        label={paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
+                      />
+                    ) : (buildError || paper.lastSyncError) ? (
+                      <>
+                        <StatusBadge
+                          status="error"
+                          label={
+                            isSourceFileNotFound(buildError || paper.lastSyncError)
+                              ? "Missing"
+                              : "Failed"
+                          }
+                          title={buildError || paper.lastSyncError || undefined}
+                        />
+                        {paper.repository && !isSourceFileNotFound(buildError || paper.lastSyncError) && (
+                          <button
+                            onClick={() => handleBuild()}
+                            disabled={isBuilding}
+                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </>
+                    ) : !paper.repository ? (
+                      <StatusBadge status="info" label="Uploaded" />
+                    ) : paper.isUpToDate === true ? (
+                      <StatusBadge status="success" label="Current" />
+                    ) : (
+                      <StatusBadge status="warning" label="Outdated" />
+                    )}
+                  </dt>
+                  <dd className="flex items-center gap-1.5 text-xs">
+                    <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                       {paper.builtFromCommitHash.slice(0, 7)}
                     </span>
+                    {paper.builtFromCommitAuthor && (
+                      <span className="text-gray-500 dark:text-gray-400 truncate max-w-32">
+                        {paper.builtFromCommitAuthor}
+                      </span>
+                    )}
                     {paper.builtFromCommitTime && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(paper.builtFromCommitTime).toLocaleString()}
+                      <span className="text-gray-400 dark:text-gray-500">
+                        {formatDateTime(paper.builtFromCommitTime)}
                       </span>
                     )}
                   </dd>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center">
+                  <dt className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                    PDF
+                    {paper.buildStatus === "building" ? (
+                      <StatusBadge
+                        status="building"
+                        label={paper.trackedFile?.pdfSourceType === "compile" ? "Compiling..." : "Fetching..."}
+                      />
+                    ) : (buildError || paper.lastSyncError) ? (
+                      <>
+                        <StatusBadge
+                          status="error"
+                          label={
+                            isSourceFileNotFound(buildError || paper.lastSyncError)
+                              ? "Source missing"
+                              : "Failed"
+                          }
+                          title={buildError || paper.lastSyncError || undefined}
+                        />
+                        {paper.repository && !isSourceFileNotFound(buildError || paper.lastSyncError) && (
+                          <button
+                            onClick={() => handleBuild()}
+                            disabled={isBuilding}
+                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </>
+                    ) : !paper.repository ? (
+                      <StatusBadge status="info" label="Uploaded" />
+                    ) : (
+                      <StatusBadge status="warning" label="Not built" />
+                    )}
+                  </dt>
+                  <dd></dd>
                 </div>
               )}
             </dl>
@@ -400,17 +465,15 @@ function PaperDetailPage() {
                 </a>
               )}
               {paper.pdfUrl && (
-                <a
-                  href={paper.pdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => pdfViewerRef.current?.toggleFullscreen()}
                   className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                  title="View Full Screen"
+                  title="View Full Screen (F)"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                   </svg>
-                </a>
+                </button>
               )}
               <button
                 onClick={handleTogglePublic}

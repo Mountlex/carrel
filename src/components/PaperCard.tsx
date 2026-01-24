@@ -40,6 +40,7 @@ interface PaperCardProps {
   onKeyDown: (e: KeyboardEvent) => void;
   onStartEdit: (e: React.MouseEvent, paperId: Id<"papers">, title: string) => void;
   onDeleteClick: (e: React.MouseEvent, paperId: Id<"papers">) => void;
+  onFullscreen: (e: React.MouseEvent, pdfUrl: string, title: string) => void;
   getRepoWebUrl: (gitUrl: string, provider: string) => string | null;
   formatRelativeTime: (timestamp: number | undefined) => string;
 }
@@ -54,6 +55,7 @@ export function PaperCard({
   onKeyDown,
   onStartEdit,
   onDeleteClick,
+  onFullscreen,
   getRepoWebUrl,
   formatRelativeTime,
 }: PaperCardProps) {
@@ -68,7 +70,7 @@ export function PaperCard({
           <img
             src={paper.thumbnailUrl}
             alt={paper.title}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover dark:invert dark:hue-rotate-180"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-400">
@@ -84,13 +86,10 @@ export function PaperCard({
         )}
         {/* Fullscreen button overlay */}
         {paper.pdfUrl && (
-          <a
-            href={paper.pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
-            title="View PDF fullscreen"
+          <button
+            onClick={(e) => onFullscreen(e, paper.pdfUrl!, paper.title)}
+            className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100 focus:opacity-100"
+            title="View PDF fullscreen (F)"
             aria-label={`View ${paper.title} PDF fullscreen`}
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -101,7 +100,7 @@ export function PaperCard({
                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
               />
             </svg>
-          </a>
+          </button>
         )}
       </div>
 

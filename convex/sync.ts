@@ -329,6 +329,7 @@ export const updateRepositoryAfterSync = internalMutation({
     id: v.id("repositories"),
     lastCommitHash: v.string(),
     lastCommitTime: v.optional(v.number()),
+    lastCommitAuthor: v.optional(v.union(v.string(), v.null())),
     lastSyncedAt: v.number(),
     syncStatus: v.union(v.literal("idle"), v.literal("syncing"), v.literal("error")),
     attemptId: v.optional(v.string()),
@@ -343,12 +344,18 @@ export const updateRepositoryAfterSync = internalMutation({
       }
     }
 
-    await ctx.db.patch(args.id, {
+    const patchData: Record<string, unknown> = {
       lastCommitHash: args.lastCommitHash,
       lastCommitTime: args.lastCommitTime,
       lastSyncedAt: args.lastSyncedAt,
       syncStatus: args.syncStatus,
-    });
+    };
+
+    if (args.lastCommitAuthor && args.lastCommitAuthor !== null) {
+      patchData.lastCommitAuthor = args.lastCommitAuthor;
+    }
+
+    await ctx.db.patch(args.id, patchData);
     return { success: true };
   },
 });
@@ -416,6 +423,7 @@ export const refreshRepository = action({
           id: args.repositoryId,
           lastCommitHash: latestCommit.sha,
           lastCommitTime: commitTime,
+          lastCommitAuthor: latestCommit.authorName,
           lastSyncedAt: Date.now(),
           syncStatus: "idle",
           attemptId,
@@ -546,6 +554,7 @@ export const refreshRepository = action({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
+              lastAffectedCommitAuthor: latestCommit.authorName,
             });
             continue;
           }
@@ -581,6 +590,7 @@ export const refreshRepository = action({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
+              lastAffectedCommitAuthor: latestCommit.authorName,
             });
             continue;
           }
@@ -602,6 +612,7 @@ export const refreshRepository = action({
         id: args.repositoryId,
         lastCommitHash: latestCommit.sha,
         lastCommitTime: commitTime,
+        lastCommitAuthor: latestCommit.authorName,
         lastSyncedAt: Date.now(),
         syncStatus: "idle",
         attemptId,
@@ -641,8 +652,10 @@ export const updatePaperPdfWithBuildLock = internalMutation({
     lastAffectedCommitHash: v.optional(v.string()),
     lastAffectedCommitTime: v.optional(v.number()),
     lastAffectedCommitMessage: v.optional(v.string()),
+    lastAffectedCommitAuthor: v.optional(v.union(v.string(), v.null())),
     builtFromCommitHash: v.optional(v.string()),
     builtFromCommitTime: v.optional(v.number()),
+    builtFromCommitAuthor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<{ success: boolean; reason?: string }> => {
     // If attemptId is provided, validate against paper's build attempt
@@ -698,6 +711,9 @@ export const updatePaperPdfWithBuildLock = internalMutation({
     if (args.lastAffectedCommitMessage) {
       patchData.lastAffectedCommitMessage = args.lastAffectedCommitMessage;
     }
+    if (args.lastAffectedCommitAuthor && args.lastAffectedCommitAuthor !== null) {
+      patchData.lastAffectedCommitAuthor = args.lastAffectedCommitAuthor;
+    }
 
     // Update builtFromCommit fields (the commit used to build this PDF)
     if (args.builtFromCommitHash) {
@@ -705,6 +721,9 @@ export const updatePaperPdfWithBuildLock = internalMutation({
     }
     if (args.builtFromCommitTime) {
       patchData.builtFromCommitTime = args.builtFromCommitTime;
+    }
+    if (args.builtFromCommitAuthor && args.builtFromCommitAuthor !== null) {
+      patchData.builtFromCommitAuthor = args.builtFromCommitAuthor;
     }
 
     await ctx.db.patch(args.id, patchData);
@@ -796,6 +815,7 @@ export const updatePaperNeedsSync = internalMutation({
     lastAffectedCommitHash: v.optional(v.string()),
     lastAffectedCommitTime: v.optional(v.number()),
     lastAffectedCommitMessage: v.optional(v.string()),
+    lastAffectedCommitAuthor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     // If attemptId and repositoryId are provided, validate first to prevent stale updates
@@ -822,6 +842,9 @@ export const updatePaperNeedsSync = internalMutation({
     }
     if (args.lastAffectedCommitMessage) {
       patchData.lastAffectedCommitMessage = args.lastAffectedCommitMessage;
+    }
+    if (args.lastAffectedCommitAuthor && args.lastAffectedCommitAuthor !== null) {
+      patchData.lastAffectedCommitAuthor = args.lastAffectedCommitAuthor;
     }
 
     await ctx.db.patch(args.id, patchData);
@@ -887,11 +910,12 @@ export const buildPaper = action({
     });
 
     try {
-      // Fetch latest commit to check if we need to update (pass knownSha to skip expensive date fetch if unchanged)
+      // Fetch latest commit to check if we need to update
+      // Don't pass knownSha when force=true so we always get full commit info including author
       const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
-        knownSha: repository.lastCommitHash,
+        knownSha: args.force ? undefined : repository.lastCommitHash,
       });
 
       // Validate attempt before expensive operations
@@ -1017,8 +1041,10 @@ export const buildPaper = action({
         lastAffectedCommitHash: latestCommit.sha,
         lastAffectedCommitTime: commitTime,
         lastAffectedCommitMessage: latestCommit.message,
+        lastAffectedCommitAuthor: latestCommit.authorName,
         builtFromCommitHash: latestCommit.sha,
         builtFromCommitTime: commitTime,
+        builtFromCommitAuthor: latestCommit.authorName,
       });
 
       if (!updateResult.success) {
@@ -1186,8 +1212,10 @@ export const buildPaperForMobile = internalAction({
         lastAffectedCommitHash: latestCommit.sha,
         lastAffectedCommitTime: commitTime,
         lastAffectedCommitMessage: latestCommit.message,
+        lastAffectedCommitAuthor: latestCommit.authorName,
         builtFromCommitHash: latestCommit.sha,
         builtFromCommitTime: commitTime,
+        builtFromCommitAuthor: latestCommit.authorName,
       });
 
       // Generate thumbnail

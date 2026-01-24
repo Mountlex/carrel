@@ -11,6 +11,7 @@ import { useToast } from "../hooks/useToast";
 import { PaperCardSkeletonGrid, LiveRegion } from "../components/ui";
 import { DropZone } from "../components/DropZone";
 import { PaperCard } from "../components/PaperCard";
+import { FullscreenPdfOverlay } from "../components/FullscreenPdfOverlay";
 
 export const Route = createFileRoute("/")({
   component: GalleryPage,
@@ -82,6 +83,7 @@ function GalleryPage() {
   const [editingPaperId, setEditingPaperId] = useState<Id<"papers"> | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [deletingPaperId, setDeletingPaperId] = useState<Id<"papers"> | null>(null);
+  const [fullscreenPdf, setFullscreenPdf] = useState<{ url: string; title: string } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -305,6 +307,12 @@ function GalleryPage() {
     e.preventDefault();
     e.stopPropagation();
     setDeletingPaperId(paperId);
+  };
+
+  const handleFullscreen = (e: React.MouseEvent, pdfUrl: string, title: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFullscreenPdf({ url: pdfUrl, title });
   };
 
   const handleConfirmDelete = async () => {
@@ -650,6 +658,7 @@ function GalleryPage() {
               onKeyDown={handleKeyDown}
               onStartEdit={handleStartEdit}
               onDeleteClick={handleDeleteClick}
+              onFullscreen={handleFullscreen}
               getRepoWebUrl={getRepoWebUrl}
               formatRelativeTime={formatRelativeTime}
             />
@@ -675,6 +684,15 @@ function GalleryPage() {
           message={toast.message}
           type={toast.type}
           onClose={clearToast}
+        />
+      )}
+
+      {/* Fullscreen PDF Overlay */}
+      {fullscreenPdf && (
+        <FullscreenPdfOverlay
+          url={fullscreenPdf.url}
+          title={fullscreenPdf.title}
+          onClose={() => setFullscreenPdf(null)}
         />
       )}
     </div>

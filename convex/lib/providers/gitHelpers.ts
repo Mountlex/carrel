@@ -78,15 +78,23 @@ export function parseGitHubCommit(data: unknown): {
   sha: string;
   message: string;
   date: string;
+  authorName?: string;
+  authorEmail?: string;
 } {
   const d = data as {
     sha: string;
-    commit: { message: string; committer: { date: string } };
+    commit: {
+      message: string;
+      committer: { date: string };
+      author?: { name?: string; email?: string };
+    };
   };
   return {
     sha: d.sha,
     message: d.commit.message,
     date: d.commit.committer.date,
+    authorName: d.commit.author?.name,
+    authorEmail: d.commit.author?.email,
   };
 }
 
@@ -97,12 +105,22 @@ export function parseGitLabCommit(data: unknown): {
   sha: string;
   message: string;
   date: string;
+  authorName?: string;
+  authorEmail?: string;
 } {
-  const d = data as { id: string; message: string; committed_date: string };
+  const d = data as {
+    id: string;
+    message: string;
+    committed_date: string;
+    author_name?: string;
+    author_email?: string;
+  };
   return {
     sha: d.id,
     message: d.message,
     date: d.committed_date,
+    authorName: d.author_name,
+    authorEmail: d.author_email,
   };
 }
 

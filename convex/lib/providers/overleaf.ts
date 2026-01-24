@@ -100,6 +100,8 @@ export class OverleafProvider implements GitProvider {
       sha: data.sha,
       message: data.message || "Overleaf commit",
       date: data.date || new Date().toISOString(),
+      authorName: data.authorName,
+      authorEmail: data.authorEmail,
     };
   }
 

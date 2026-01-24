@@ -444,6 +444,8 @@ export const fetchLatestCommitInternal = internalAction({
       sha: commit.sha,
       message: commit.message,
       date: commit.date || new Date().toISOString(),
+      authorName: commit.authorName,
+      authorEmail: commit.authorEmail,
     };
   },
 });

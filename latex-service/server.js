@@ -405,6 +405,8 @@ app.post("/git/refs", rateLimit, async (req, res) => {
   await withCleanup(workDir, async () => {
     let commitDate = null;
     let commitMessage = "Latest commit";
+    let authorName = null;
+    let authorEmail = null;
 
     if (sha) {
       try {
@@ -421,17 +423,20 @@ app.post("/git/refs", rateLimit, async (req, res) => {
         );
 
         if (fetchResult.success) {
-          // Get commit date and message
+          // Get commit date, message, and author
+          // Format: date, author name, author email, subject
           const logResult = await spawnAsync(
             "git",
-            ["log", "-1", "--format=%cI%n%s", sha],
+            ["log", "-1", "--format=%cI%n%an%n%ae%n%s", sha],
             { cwd: workDir, logger: req.log }
           );
 
           if (logResult.success && logResult.stdout.trim()) {
-            const [date, ...messageParts] = logResult.stdout.trim().split("\n");
-            commitDate = date;
-            commitMessage = messageParts.join("\n") || "Latest commit";
+            const lines = logResult.stdout.trim().split("\n");
+            commitDate = lines[0];
+            authorName = lines[1] || null;
+            authorEmail = lines[2] || null;
+            commitMessage = lines.slice(3).join("\n") || "Latest commit";
           }
         }
       } catch (err) {
@@ -444,6 +449,8 @@ app.post("/git/refs", rateLimit, async (req, res) => {
       defaultBranch,
       message: commitMessage,
       date: commitDate || new Date().toISOString(),
+      authorName,
+      authorEmail,
     });
   }, req.log);
 });

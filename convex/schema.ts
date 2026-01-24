@@ -61,6 +61,7 @@ export default defineSchema({
     currentSyncAttemptId: v.optional(v.string()), // UUID to track current sync attempt (prevents stale writes)
     lastCommitHash: v.optional(v.string()),
     lastCommitTime: v.optional(v.number()), // Unix timestamp of the latest commit
+    lastCommitAuthor: v.optional(v.string()), // Author name of the latest commit
     syncStatus: v.union(
       v.literal("idle"),
       v.literal("syncing"),
@@ -137,10 +138,12 @@ export default defineSchema({
     lastAffectedCommitHash: v.optional(v.string()),
     lastAffectedCommitTime: v.optional(v.number()),
     lastAffectedCommitMessage: v.optional(v.string()),
+    lastAffectedCommitAuthor: v.optional(v.string()),
 
     // Commit used to build the current PDF
     builtFromCommitHash: v.optional(v.string()),
     builtFromCommitTime: v.optional(v.number()),
+    builtFromCommitAuthor: v.optional(v.string()),
 
     // Whether this paper needs recompilation (computed during quick sync)
     needsSync: v.optional(v.boolean()),
