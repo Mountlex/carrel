@@ -131,10 +131,12 @@ function GalleryPage() {
 
   // Quick check all repositories on page load (just check for new commits, no compilation)
   useEffect(() => {
+    // Check synchronously before any async work to prevent StrictMode race condition
+    if (hasSyncedOnLoad.current) return;
+
     const shouldSync =
       repositories &&
       repositories.length > 0 &&
-      !hasSyncedOnLoad.current &&
       !isSyncing;
 
     if (!shouldSync) return;
@@ -142,12 +144,11 @@ function GalleryPage() {
     const reposToCheck = repositories.filter((repo) => repo.syncStatus !== "syncing");
     if (reposToCheck.length === 0) return;
 
-    // Check all repositories in parallel (same as Check All button)
-    const runSync = async () => {
-      // Mark as synced at start of async work (after any strict mode remounts)
-      if (hasSyncedOnLoad.current) return;
-      hasSyncedOnLoad.current = true;
+    // Set flag IMMEDIATELY, synchronously, before async work
+    hasSyncedOnLoad.current = true;
 
+    // Now start async work
+    const runSync = async () => {
       setIsSyncing(true);
       setSyncProgress({ current: 0, total: reposToCheck.length });
 
@@ -173,7 +174,7 @@ function GalleryPage() {
     };
 
     runSync();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositories]);
 
   // Filter and sort papers

@@ -15,6 +15,9 @@ export const DEFAULT_LATEX_SERVICE_TIMEOUT = 180000;
 // Default timeout for thumbnail generation (30 seconds)
 export const THUMBNAIL_TIMEOUT = 30000;
 
+// Timeout for git archive operations (5 minutes - large repos can take longer)
+export const ARCHIVE_FETCH_TIMEOUT = 300000;
+
 /**
  * Wrap a promise with a timeout
  */

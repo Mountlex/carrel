@@ -22,6 +22,7 @@ import {
   fetchWithRetry,
   getLatexServiceHeaders,
   DEFAULT_LATEX_SERVICE_TIMEOUT,
+  ARCHIVE_FETCH_TIMEOUT,
   type DependencyHash,
 } from "./lib/http";
 
@@ -144,173 +145,179 @@ export const compileLatexInternal = internalAction({
       }
     };
 
-    // Get the LaTeX service URL from environment
-    const latexServiceUrl = process.env.LATEX_SERVICE_URL;
-    if (!latexServiceUrl) {
-      throw new Error("LATEX_SERVICE_URL not configured. Required for LaTeX compilation.");
-    }
-
-    // Get all self-hosted GitLab instances - use userId if provided (mobile)
-    const selfHostedInstances = args.userId
-      ? await getAllSelfHostedGitLabInstancesByUserId(ctx, args.userId)
-      : await getAllSelfHostedGitLabInstances(ctx);
-    const provider = getProviderFromUrl(args.gitUrl, selfHostedInstances);
-
-    // Get authentication for the provider
-    const auth = await getAuthForProvider(ctx, provider, args.gitUrl, selfHostedInstances, args.userId);
-
-    // For Overleaf, convert project URL to git URL
-    let archiveGitUrl = args.gitUrl;
-    if (provider === "overleaf") {
-      const overleafParsed = parseOverleafUrl(args.gitUrl);
-      if (overleafParsed) {
-        archiveGitUrl = overleafParsed.gitUrl;
+    try {
+      // Get the LaTeX service URL from environment
+      const latexServiceUrl = process.env.LATEX_SERVICE_URL;
+      if (!latexServiceUrl) {
+        throw new Error("LATEX_SERVICE_URL not configured. Required for LaTeX compilation.");
       }
-    }
 
-    // Fetch all LaTeX-related files via selective archive
-    await updateProgress("Fetching all LaTeX files...");
+      // Get all self-hosted GitLab instances - use userId if provided (mobile)
+      const selfHostedInstances = args.userId
+        ? await getAllSelfHostedGitLabInstancesByUserId(ctx, args.userId)
+        : await getAllSelfHostedGitLabInstances(ctx);
+      const provider = getProviderFromUrl(args.gitUrl, selfHostedInstances);
 
-    const archiveResponse = await fetchWithRetry(`${latexServiceUrl}/git/selective-archive`, {
-      method: "POST",
-      headers: getLatexServiceHeaders(),
-      body: JSON.stringify({
-        gitUrl: archiveGitUrl,
-        branch: args.branch,
-        auth,
-        extensions: LATEX_EXTENSIONS,
-      }),
-      timeout: 120000,
-    });
+      // Get authentication for the provider
+      const auth = await getAuthForProvider(ctx, provider, args.gitUrl, selfHostedInstances, args.userId);
 
-    if (!archiveResponse.ok) {
-      await updateProgress(null);
-      let errorMessage = "Failed to fetch repository files";
-      try {
-        const responseText = await archiveResponse.text();
-        if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-          errorMessage = `Failed to fetch repository files (HTTP ${archiveResponse.status}). ` +
-            "This usually indicates an authentication error or service issue.";
-        } else {
-          try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.error || errorMessage;
-          } catch {
-            errorMessage = responseText.length > 500
-              ? `Failed to fetch repository files: ${responseText.substring(0, 500)}...`
-              : `Failed to fetch repository files: ${responseText}`;
-          }
+      // For Overleaf, convert project URL to git URL
+      let archiveGitUrl = args.gitUrl;
+      if (provider === "overleaf") {
+        const overleafParsed = parseOverleafUrl(args.gitUrl);
+        if (overleafParsed) {
+          archiveGitUrl = overleafParsed.gitUrl;
         }
-      } catch {
-        errorMessage = `Failed to fetch repository files (HTTP ${archiveResponse.status})`;
       }
-      throw new Error(errorMessage);
-    }
 
-    const { files } = await archiveResponse.json() as { files: Array<{ path: string; content: string; encoding?: string }> };
-    console.log(`Fetched ${files.length} files for ${provider}`);
+      // Fetch all LaTeX-related files via selective archive
+      await updateProgress("Fetching all LaTeX files...");
 
-    if (files.length === 0) {
-      await updateProgress(null);
-      throw new Error("No LaTeX files found in repository.");
-    }
+      const archiveResponse = await fetchWithRetry(`${latexServiceUrl}/git/selective-archive`, {
+        method: "POST",
+        headers: getLatexServiceHeaders(),
+        body: JSON.stringify({
+          gitUrl: archiveGitUrl,
+          branch: args.branch,
+          auth,
+          extensions: LATEX_EXTENSIONS,
+        }),
+        timeout: ARCHIVE_FETCH_TIMEOUT,
+      });
 
-    // Compile
-    await updateProgress("Compiling LaTeX...");
-
-    const pdfResponse = await fetchWithRetry(`${latexServiceUrl}/compile`, {
-      method: "POST",
-      headers: getLatexServiceHeaders(),
-      body: JSON.stringify({
-        resources: files,
-        target: args.filePath,
-        compiler: "pdflatex",
-      }),
-      timeout: DEFAULT_LATEX_SERVICE_TIMEOUT,
-    }, 2);
-
-    if (!pdfResponse.ok) {
-      await updateProgress(null);
-      let errorMessage = "LaTeX compilation failed";
-      try {
-        const responseText = await pdfResponse.text();
-
-        // Check if response is an HTML error page (proxy error, login page, etc.)
-        if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-          errorMessage = `LaTeX service returned an HTML error page (HTTP ${pdfResponse.status}). ` +
-            "This usually indicates a proxy error, service outage, or misconfiguration.";
-        } else {
-          // Try to parse as JSON
-          try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.error || errorMessage;
-            if (errorData.log) {
-              errorMessage += "\n\nLog:\n" + errorData.log;
+      if (!archiveResponse.ok) {
+        await updateProgress(null);
+        let errorMessage = "Failed to fetch repository files";
+        try {
+          const responseText = await archiveResponse.text();
+          if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
+            errorMessage = `Failed to fetch repository files (HTTP ${archiveResponse.status}). ` +
+              "This usually indicates an authentication error or service issue.";
+          } else {
+            try {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error || errorMessage;
+            } catch {
+              errorMessage = responseText.length > 500
+                ? `Failed to fetch repository files: ${responseText.substring(0, 500)}...`
+                : `Failed to fetch repository files: ${responseText}`;
             }
-          } catch {
-            // Not JSON, use raw text (truncated if too long)
-            errorMessage = responseText.length > 500
-              ? responseText.substring(0, 500) + "..."
-              : responseText;
           }
+        } catch {
+          errorMessage = `Failed to fetch repository files (HTTP ${archiveResponse.status})`;
         }
-      } catch {
-        errorMessage = `LaTeX compilation failed with HTTP ${pdfResponse.status}`;
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
-    }
 
-    console.log(`Compile succeeded with ${files.length} files`);
+      const { files } = await archiveResponse.json() as { files: Array<{ path: string; content: string; encoding?: string }> };
+      console.log(`Fetched ${files.length} files for ${provider}`);
 
-    // Get dependencies from X-Dependencies header (parsed from .fls file by latex-service)
-    let finalDependencies: string[] = [];
-    const depsHeader = pdfResponse.headers.get("X-Dependencies");
-    if (depsHeader) {
-      try {
-        const parsed = JSON.parse(depsHeader) as string[];
-        finalDependencies = [...new Set(parsed)];
-        console.log(`Detected ${finalDependencies.length} dependencies from .fls`);
-      } catch {
-        console.log("Failed to parse X-Dependencies header");
+      if (files.length === 0) {
+        await updateProgress(null);
+        throw new Error("No LaTeX files found in repository.");
       }
+
+      // Compile
+      await updateProgress("Compiling LaTeX...");
+
+      const pdfResponse = await fetchWithRetry(`${latexServiceUrl}/compile`, {
+        method: "POST",
+        headers: getLatexServiceHeaders(),
+        body: JSON.stringify({
+          resources: files,
+          target: args.filePath,
+          compiler: "pdflatex",
+        }),
+        timeout: DEFAULT_LATEX_SERVICE_TIMEOUT,
+      }, 2);
+
+      if (!pdfResponse.ok) {
+        await updateProgress(null);
+        let errorMessage = "LaTeX compilation failed";
+        try {
+          const responseText = await pdfResponse.text();
+
+          // Check if response is an HTML error page (proxy error, login page, etc.)
+          if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
+            errorMessage = `LaTeX service returned an HTML error page (HTTP ${pdfResponse.status}). ` +
+              "This usually indicates a proxy error, service outage, or misconfiguration.";
+          } else {
+            // Try to parse as JSON
+            try {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error || errorMessage;
+              if (errorData.log) {
+                errorMessage += "\n\nLog:\n" + errorData.log;
+              }
+            } catch {
+              // Not JSON, use raw text (truncated if too long)
+              errorMessage = responseText.length > 500
+                ? responseText.substring(0, 500) + "..."
+                : responseText;
+            }
+          }
+        } catch {
+          errorMessage = `LaTeX compilation failed with HTTP ${pdfResponse.status}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      console.log(`Compile succeeded with ${files.length} files`);
+
+      // Get dependencies from X-Dependencies header (parsed from .fls file by latex-service)
+      let finalDependencies: string[] = [];
+      const depsHeader = pdfResponse.headers.get("X-Dependencies");
+      if (depsHeader) {
+        try {
+          const parsed = JSON.parse(depsHeader) as string[];
+          finalDependencies = [...new Set(parsed)];
+          console.log(`Detected ${finalDependencies.length} dependencies from .fls`);
+        } catch {
+          console.log("Failed to parse X-Dependencies header");
+        }
+      }
+
+      // Fallback if no dependencies in header - use all source files
+      if (finalDependencies.length === 0) {
+        const sourceExtensions = [".tex", ".sty", ".cls", ".bst", ".bib", ".bbx", ".cbx", ".lbx", ".dbx", ".def", ".cfg", ".fd"];
+        finalDependencies = files
+          .map(f => f.path)
+          .filter(p => sourceExtensions.some(ext => p.endsWith(ext)));
+        console.log(`Using ${finalDependencies.length} source files as dependencies (fallback)`);
+      }
+
+      // Store PDF
+      await updateProgress("Storing PDF...");
+      const pdfBuffer = await pdfResponse.arrayBuffer();
+
+      const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+      const storageId = await ctx.storage.store(blob);
+
+      // Fetch blob hashes for dependencies (for file-level change detection)
+      let dependencyHashes: DependencyHash[] = [];
+      if (finalDependencies.length > 0) {
+        await updateProgress("Caching dependency info...");
+        dependencyHashes = await fetchDependencyHashes(
+          ctx,
+          args.gitUrl,
+          args.branch,
+          finalDependencies,
+          args.userId
+        );
+        console.log(`Cached ${dependencyHashes.length} dependency hashes`);
+      }
+
+      await updateProgress(null);
+
+      return {
+        storageId,
+        size: pdfBuffer.byteLength,
+        dependencies: dependencyHashes,
+      };
+    } catch (error) {
+      // Clear progress on any error before re-throwing
+      await updateProgress(null);
+      throw error;
     }
-
-    // Fallback if no dependencies in header - use all source files
-    if (finalDependencies.length === 0) {
-      const sourceExtensions = [".tex", ".sty", ".cls", ".bst", ".bib", ".bbx", ".cbx", ".lbx", ".dbx", ".def", ".cfg", ".fd"];
-      finalDependencies = files
-        .map(f => f.path)
-        .filter(p => sourceExtensions.some(ext => p.endsWith(ext)));
-      console.log(`Using ${finalDependencies.length} source files as dependencies (fallback)`);
-    }
-
-    // Store PDF
-    await updateProgress("Storing PDF...");
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-
-    const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-    const storageId = await ctx.storage.store(blob);
-
-    // Fetch blob hashes for dependencies (for file-level change detection)
-    let dependencyHashes: DependencyHash[] = [];
-    if (finalDependencies.length > 0) {
-      await updateProgress("Caching dependency info...");
-      dependencyHashes = await fetchDependencyHashes(
-        ctx,
-        args.gitUrl,
-        args.branch,
-        finalDependencies,
-        args.userId
-      );
-      console.log(`Cached ${dependencyHashes.length} dependency hashes`);
-    }
-
-    await updateProgress(null);
-
-    return {
-      storageId,
-      size: pdfBuffer.byteLength,
-      dependencies: dependencyHashes,
-    };
   },
 });

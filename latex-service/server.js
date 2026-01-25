@@ -607,7 +607,7 @@ app.post("/git/archive", rateLimit, async (req, res) => {
     cloneArgs.push(authenticatedUrl, workDir);
 
     const cloneResult = await spawnAsync("git", cloneArgs, {
-      timeout: 120000,
+      timeout: 180000,
       logger: req.log,
     });
 
@@ -739,7 +739,7 @@ app.post("/git/selective-archive", rateLimit, async (req, res) => {
     cloneArgs.push(authenticatedUrl, workDir);
 
     const cloneResult = await spawnAsync("git", cloneArgs, {
-      timeout: 120000,
+      timeout: 180000,
       logger: req.log,
     });
 

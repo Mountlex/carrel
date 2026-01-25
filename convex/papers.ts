@@ -60,46 +60,62 @@ export const list = query({
     // Create repository lookup map for faster access
     const repositoryMap = new Map(repositories.map((r) => [r._id, r]));
 
-    // Enrich with thumbnail URLs, repository info, and up-to-date status
-    const enrichedPapers = await Promise.all(
-      papers.map(async (paper) => {
-        const repository = paper.repositoryId
-          ? repositoryMap.get(paper.repositoryId) ?? null
-          : null;
-        const trackedFile = paper.trackedFileId
-          ? trackedFileMap.get(paper.trackedFileId) ?? null
-          : null;
-        const thumbnailUrl = paper.thumbnailFileId
-          ? await ctx.storage.getUrl(paper.thumbnailFileId)
-          : null;
-        const pdfUrl = paper.pdfFileId
-          ? await ctx.storage.getUrl(paper.pdfFileId)
-          : null;
+    // Batch fetch all storage URLs upfront to avoid N+1 queries
+    const thumbnailIds = papers
+      .filter((p) => p.thumbnailFileId)
+      .map((p) => p.thumbnailFileId!);
+    const pdfIds = papers
+      .filter((p) => p.pdfFileId)
+      .map((p) => p.pdfFileId!);
 
-        const isUpToDate = determineIfUpToDate(paper, repository);
+    const [thumbnailUrls, pdfUrls] = await Promise.all([
+      Promise.all(thumbnailIds.map((id) => ctx.storage.getUrl(id))),
+      Promise.all(pdfIds.map((id) => ctx.storage.getUrl(id))),
+    ]);
 
-        return {
-          ...paper,
-          thumbnailUrl,
-          pdfUrl,
-          isUpToDate,
-          pdfSourceType: trackedFile?.pdfSourceType ?? null,
-          repository: repository
-            ? {
-                _id: repository._id,
-                name: repository.name,
-                gitUrl: repository.gitUrl,
-                provider: repository.provider,
-                lastSyncedAt: repository.lastSyncedAt,
-                lastCommitHash: repository.lastCommitHash,
-                lastCommitTime: repository.lastCommitTime,
-                lastCommitAuthor: repository.lastCommitAuthor,
-                syncStatus: repository.syncStatus,
-              }
-            : null,
-        };
-      })
+    const thumbnailUrlMap = new Map(
+      thumbnailIds.map((id, i) => [id, thumbnailUrls[i]])
     );
+    const pdfUrlMap = new Map(pdfIds.map((id, i) => [id, pdfUrls[i]]));
+
+    // Enrich with thumbnail URLs, repository info, and up-to-date status
+    const enrichedPapers = papers.map((paper) => {
+      const repository = paper.repositoryId
+        ? repositoryMap.get(paper.repositoryId) ?? null
+        : null;
+      const trackedFile = paper.trackedFileId
+        ? trackedFileMap.get(paper.trackedFileId) ?? null
+        : null;
+      const thumbnailUrl = paper.thumbnailFileId
+        ? thumbnailUrlMap.get(paper.thumbnailFileId) ?? null
+        : null;
+      const pdfUrl = paper.pdfFileId
+        ? pdfUrlMap.get(paper.pdfFileId) ?? null
+        : null;
+
+      const isUpToDate = determineIfUpToDate(paper, repository);
+
+      return {
+        ...paper,
+        thumbnailUrl,
+        pdfUrl,
+        isUpToDate,
+        pdfSourceType: trackedFile?.pdfSourceType ?? null,
+        repository: repository
+          ? {
+              _id: repository._id,
+              name: repository.name,
+              gitUrl: repository.gitUrl,
+              provider: repository.provider,
+              lastSyncedAt: repository.lastSyncedAt,
+              lastCommitHash: repository.lastCommitHash,
+              lastCommitTime: repository.lastCommitTime,
+              lastCommitAuthor: repository.lastCommitAuthor,
+              syncStatus: repository.syncStatus,
+            }
+          : null,
+      };
+    });
 
     // Sort by last affected time (when dependencies changed), falling back to updatedAt
     return enrichedPapers.sort((a, b) => {
@@ -159,38 +175,54 @@ export const listForMobile = internalQuery({
     // Create repository lookup map
     const repositoryMap = new Map(repositories.map((r) => [r._id, r]));
 
-    // Enrich with thumbnail URLs and status
-    const enrichedPapers = await Promise.all(
-      papers.map(async (paper) => {
-        const repository = paper.repositoryId
-          ? repositoryMap.get(paper.repositoryId) ?? null
-          : null;
-        const trackedFile = paper.trackedFileId
-          ? trackedFileMap.get(paper.trackedFileId) ?? null
-          : null;
-        const thumbnailUrl = paper.thumbnailFileId
-          ? await ctx.storage.getUrl(paper.thumbnailFileId)
-          : null;
-        const pdfUrl = paper.pdfFileId
-          ? await ctx.storage.getUrl(paper.pdfFileId)
-          : null;
+    // Batch fetch all storage URLs upfront to avoid N+1 queries
+    const thumbnailIds = papers
+      .filter((p) => p.thumbnailFileId)
+      .map((p) => p.thumbnailFileId!);
+    const pdfIds = papers
+      .filter((p) => p.pdfFileId)
+      .map((p) => p.pdfFileId!);
 
-        const isUpToDate = determineIfUpToDate(paper, repository);
+    const [thumbnailUrls, pdfUrls] = await Promise.all([
+      Promise.all(thumbnailIds.map((id) => ctx.storage.getUrl(id))),
+      Promise.all(pdfIds.map((id) => ctx.storage.getUrl(id))),
+    ]);
 
-        return {
-          _id: paper._id,
-          title: paper.title,
-          authors: paper.authors,
-          thumbnailUrl,
-          pdfUrl,
-          isUpToDate,
-          buildStatus: paper.buildStatus,
-          pdfSourceType: trackedFile?.pdfSourceType ?? null,
-          lastAffectedCommitTime: paper.lastAffectedCommitTime,
-          updatedAt: paper.updatedAt,
-        };
-      })
+    const thumbnailUrlMap = new Map(
+      thumbnailIds.map((id, i) => [id, thumbnailUrls[i]])
     );
+    const pdfUrlMap = new Map(pdfIds.map((id, i) => [id, pdfUrls[i]]));
+
+    // Enrich with thumbnail URLs and status
+    const enrichedPapers = papers.map((paper) => {
+      const repository = paper.repositoryId
+        ? repositoryMap.get(paper.repositoryId) ?? null
+        : null;
+      const trackedFile = paper.trackedFileId
+        ? trackedFileMap.get(paper.trackedFileId) ?? null
+        : null;
+      const thumbnailUrl = paper.thumbnailFileId
+        ? thumbnailUrlMap.get(paper.thumbnailFileId) ?? null
+        : null;
+      const pdfUrl = paper.pdfFileId
+        ? pdfUrlMap.get(paper.pdfFileId) ?? null
+        : null;
+
+      const isUpToDate = determineIfUpToDate(paper, repository);
+
+      return {
+        _id: paper._id,
+        title: paper.title,
+        authors: paper.authors,
+        thumbnailUrl,
+        pdfUrl,
+        isUpToDate,
+        buildStatus: paper.buildStatus,
+        pdfSourceType: trackedFile?.pdfSourceType ?? null,
+        lastAffectedCommitTime: paper.lastAffectedCommitTime,
+        updatedAt: paper.updatedAt,
+      };
+    });
 
     // Sort by last affected time
     return enrichedPapers.sort((a, b) => {
@@ -1140,15 +1172,21 @@ export const toggleVersionPinned = mutation({
   },
 });
 
+// Max age for non-pinned versions (90 days in milliseconds)
+const VERSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
 // Internal mutation to clean up old versions (called after version creation)
-// Keeps all pinned versions + last N non-pinned versions
+// Keeps all pinned versions + last N non-pinned versions that are less than 90 days old
 export const cleanupOldVersions = internalMutation({
   args: {
     paperId: v.id("papers"),
     keepCount: v.optional(v.number()),
+    maxAgeMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const keepCount = args.keepCount ?? 5;
+    const maxAgeMs = args.maxAgeMs ?? VERSION_MAX_AGE_MS;
+    const now = Date.now();
 
     // Get all versions for this paper
     const versions = await ctx.db
@@ -1160,11 +1198,19 @@ export const cleanupOldVersions = internalMutation({
     const pinnedVersions = versions.filter((v) => v.pinned);
     const nonPinnedVersions = versions.filter((v) => !v.pinned);
 
-    // Sort non-pinned by date (newest first) and keep only the most recent keepCount
+    // Sort non-pinned by date (newest first)
     const sortedNonPinned = nonPinnedVersions.sort(
       (a, b) => b.versionCreatedAt - a.versionCreatedAt
     );
-    const versionsToDelete = sortedNonPinned.slice(keepCount);
+
+    // Delete versions that are either:
+    // 1. Beyond the keepCount threshold, OR
+    // 2. Older than maxAgeMs (even if within keepCount)
+    const versionsToDelete = sortedNonPinned.filter((version, index) => {
+      const isOverCount = index >= keepCount;
+      const isOverAge = now - version.versionCreatedAt > maxAgeMs;
+      return isOverCount || isOverAge;
+    });
 
     if (versionsToDelete.length === 0) {
       return { deletedCount: 0, keptPinned: pinnedVersions.length };

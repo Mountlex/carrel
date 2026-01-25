@@ -108,6 +108,15 @@ export const getTrackedFileById = internalQuery({
   },
 });
 
+// Get multiple tracked files by IDs (batch query for sync optimization)
+export const getTrackedFilesByIds = internalQuery({
+  args: { ids: v.array(v.id("trackedFiles")) },
+  handler: async (ctx, args) => {
+    const files = await Promise.all(args.ids.map(id => ctx.db.get(id)));
+    return files.filter((f): f is NonNullable<typeof f> => f !== null);
+  },
+});
+
 // Sync lock timeout in milliseconds (2 minutes - reduced from 5 to prevent long stuck syncs)
 const SYNC_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -399,7 +408,10 @@ export const refreshRepository = action({
     const attemptId = lockResult.attemptId;
 
     try {
-      // Repository already loaded and authorized above
+      // Clear stale sync errors from previous attempts at the start
+      await ctx.runMutation(internal.sync.clearPaperSyncErrors, {
+        repositoryId: args.repositoryId,
+      });
 
       // Fetch latest commit (pass knownSha to skip expensive date fetch if unchanged)
       const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
@@ -456,14 +468,19 @@ export const refreshRepository = action({
       }
       const changedFilesSet = new Set(changedFiles);
 
+      // Batch load all tracked files upfront to avoid O(n) sequential queries
+      const trackedFileIds = papers
+        .map(p => p.trackedFileId)
+        .filter((id): id is Id<"trackedFiles"> => id !== undefined);
+      const trackedFiles = await ctx.runQuery(internal.sync.getTrackedFilesByIds, { ids: trackedFileIds });
+      const trackedFileMap = new Map(trackedFiles.map(tf => [tf._id, tf]));
+
       // Process each paper
       for (const paper of papers) {
         // Skip papers without tracked files
         if (!paper.trackedFileId) continue;
 
-        const trackedFile = await ctx.runQuery(internal.sync.getTrackedFileById, {
-          id: paper.trackedFileId,
-        });
+        const trackedFile = trackedFileMap.get(paper.trackedFileId);
 
         // If paper has never been synced, it needs sync
         if (!paper.pdfFileId || !paper.cachedCommitHash) {
@@ -805,6 +822,28 @@ export const updatePaperCommitOnly = internalMutation({
   },
 });
 
+// Clear sync errors for all papers in a repository (called at start of refresh)
+export const clearPaperSyncErrors = internalMutation({
+  args: {
+    repositoryId: v.id("repositories"),
+  },
+  handler: async (ctx, args) => {
+    const papers = await ctx.db
+      .query("papers")
+      .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
+      .collect();
+
+    // Clear lastSyncError for all papers that have one
+    for (const paper of papers) {
+      if (paper.lastSyncError) {
+        await ctx.db.patch(paper._id, { lastSyncError: undefined });
+      }
+    }
+
+    return { clearedCount: papers.filter((p) => p.lastSyncError).length };
+  },
+});
+
 // Update paper's needsSync flag (used during quick sync)
 export const updatePaperNeedsSync = internalMutation({
   args: {
@@ -854,7 +893,11 @@ export const updatePaperNeedsSync = internalMutation({
 // Build a single paper - compile/fetch its PDF using paper-level locks
 // (renamed from syncPaper for clearer terminology, uses paper-level locks instead of repo-level)
 export const buildPaper = action({
-  args: { paperId: v.id("papers"), force: v.optional(v.boolean()) },
+  args: {
+    paperId: v.id("papers"),
+    force: v.optional(v.boolean()),
+    isRetry: v.optional(v.boolean()), // Internal: set when retrying after file-not-found
+  },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) {
@@ -1066,6 +1109,21 @@ export const buildPaper = action({
     } catch (error) {
       // Check if file was not found (deleted from repository)
       if (isFileNotFoundError(error)) {
+        // For compile-type PDFs, retry once after a delay (file might be mid-rename/update)
+        if (trackedFile.pdfSourceType === "compile" && !args.isRetry) {
+          console.log(`File not found for compile paper ${args.paperId}, retrying in 5s...`);
+
+          // Wait 5 seconds before retry
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+
+          // Recursive call with retry flag to prevent infinite retries
+          return ctx.runAction(internal.sync.buildPaper, {
+            paperId: args.paperId,
+            force: args.force,
+            isRetry: true,
+          });
+        }
+
         const errorMessage = `Source file not found: ${error.filePath}. The file may have been deleted or renamed in the repository.`;
         await ctx.runMutation(internal.sync.updatePaperBuildError, {
           id: args.paperId,
