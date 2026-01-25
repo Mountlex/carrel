@@ -80,13 +80,20 @@ export function ConfigureRepositoryModal({
     } else {
       const title = file.name.replace(/\.(tex|pdf)$/, "");
       const pdfSourceType = file.name.endsWith(".pdf") ? "committed" : "compile";
-      setSelectedFiles([...selectedFiles, { path: file.path, title, pdfSourceType }]);
+      const compiler = pdfSourceType === "compile" ? "pdflatex" : undefined;
+      setSelectedFiles([...selectedFiles, { path: file.path, title, pdfSourceType, compiler }]);
     }
   };
 
   const updateFileTitle = (path: string, title: string) => {
     setSelectedFiles(
       selectedFiles.map((f) => (f.path === path ? { ...f, title } : f))
+    );
+  };
+
+  const updateFileCompiler = (path: string, compiler: "pdflatex" | "xelatex" | "lualatex") => {
+    setSelectedFiles(
+      selectedFiles.map((f) => (f.path === path ? { ...f, compiler } : f))
     );
   };
 
@@ -215,7 +222,21 @@ export function ConfigureRepositoryModal({
                       />
                       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                         {file.pdfSourceType === "compile" ? (
-                          <span className="text-green-600 dark:text-green-400">Will be compiled from LaTeX</span>
+                          <div className="flex flex-col gap-2">
+                            <span className="text-green-600 dark:text-green-400">Will be compiled from LaTeX</span>
+                            <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                              <span>Compiler</span>
+                              <select
+                                value={file.compiler ?? "pdflatex"}
+                                onChange={(e) => updateFileCompiler(file.path, e.target.value as "pdflatex" | "xelatex" | "lualatex")}
+                                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                              >
+                                <option value="pdflatex">pdfLaTeX</option>
+                                <option value="xelatex">XeLaTeX</option>
+                                <option value="lualatex">LuaLaTeX</option>
+                              </select>
+                            </label>
+                          </div>
                         ) : (
                           <span className="text-blue-600 dark:text-blue-400">PDF from repository</span>
                         )}

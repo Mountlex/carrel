@@ -80,6 +80,11 @@ export default defineSchema({
       v.literal("committed"),
       v.literal("compile")
     ),
+    compiler: v.optional(v.union(
+      v.literal("pdflatex"),
+      v.literal("xelatex"),
+      v.literal("lualatex")
+    )),
     isActive: v.boolean(),
   }).index("by_repository", ["repositoryId"]),
 

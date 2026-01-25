@@ -23,6 +23,7 @@ import {
   getLatexServiceHeaders,
   type DependencyHash,
 } from "./lib/http";
+import { FileNotFoundError } from "./lib/providers/types";
 
 // Helper to get authentication for any git provider
 async function getAuthForProvider(
@@ -103,6 +104,11 @@ export const compileLatex = action({
     gitUrl: v.string(),
     filePath: v.string(),
     branch: v.string(),
+    compiler: v.optional(v.union(
+      v.literal("pdflatex"),
+      v.literal("xelatex"),
+      v.literal("lualatex")
+    )),
   },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
@@ -120,10 +126,16 @@ export const compileLatexInternal = internalAction({
     gitUrl: v.string(),
     filePath: v.string(),
     branch: v.string(),
+    compiler: v.optional(v.union(
+      v.literal("pdflatex"),
+      v.literal("xelatex"),
+      v.literal("lualatex")
+    )),
     paperId: v.optional(v.id("papers")),
     userId: v.optional(v.id("users")), // Optional userId for mobile auth
   },
   handler: async (ctx, args) => {
+    const MAX_LOG_CHARS = 20000;
     // Helper to update progress in UI
     const updateProgress = async (message: string | null) => {
       if (args.paperId) {
@@ -185,7 +197,7 @@ export const compileLatexInternal = internalAction({
           branch: args.branch,
           auth,
           target: args.filePath,
-          compiler: "pdflatex",
+          compiler: args.compiler ?? "pdflatex",
           progressCallback,
         }),
         timeout: 600000, // 10 minutes for clone + compile of large repos
@@ -196,27 +208,48 @@ export const compileLatexInternal = internalAction({
         let errorMessage = "LaTeX compilation failed";
         try {
           const responseText = await pdfResponse.text();
+          let parsedError: { error?: string; log?: string } | null = null;
+
+          if (!responseText.trim().startsWith("<")) {
+            try {
+              parsedError = JSON.parse(responseText) as { error?: string; log?: string };
+            } catch {
+              parsedError = null;
+            }
+          }
+
+          if (pdfResponse.status === 404) {
+            const notFoundMessage = parsedError?.error ?? responseText;
+            if (notFoundMessage.includes("Target file not found")) {
+              throw new FileNotFoundError(args.filePath, "latex-service");
+            }
+          }
 
           // Check if response is an HTML error page (proxy error, login page, etc.)
           if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
             errorMessage = `LaTeX service returned an HTML error page (HTTP ${pdfResponse.status}). ` +
               "This usually indicates a proxy error, service outage, or misconfiguration.";
           } else {
-            // Try to parse as JSON
-            try {
-              const errorData = JSON.parse(responseText);
-              errorMessage = errorData.error || errorMessage;
-              if (errorData.log) {
-                errorMessage += "\n\nLog:\n" + errorData.log;
+            // Use parsed JSON if available
+            if (parsedError) {
+              errorMessage = parsedError.error || errorMessage;
+              if (parsedError.log) {
+                const trimmedLog = parsedError.log.length > MAX_LOG_CHARS
+                  ? parsedError.log.substring(0, MAX_LOG_CHARS) + "\n...(truncated)"
+                  : parsedError.log;
+                errorMessage += "\n\nLog:\n" + trimmedLog;
               }
-            } catch {
+            } else {
               // Not JSON, use raw text (truncated if too long)
               errorMessage = responseText.length > 500
                 ? responseText.substring(0, 500) + "..."
                 : responseText;
             }
           }
-        } catch {
+        } catch (error) {
+          if (error instanceof FileNotFoundError) {
+            throw error;
+          }
           errorMessage = `LaTeX compilation failed with HTTP ${pdfResponse.status}`;
         }
         throw new Error(errorMessage);

@@ -218,10 +218,37 @@ function validateGitUrl(gitUrl) {
   }
 
   // Basic URL validation
+  let parsed;
   try {
-    new URL(gitUrl);
+    parsed = new URL(gitUrl);
   } catch {
     return { valid: false, error: "Invalid gitUrl format" };
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { valid: false, error: "Invalid gitUrl protocol" };
+  }
+
+  const hostname = parsed.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0") {
+    return { valid: false, error: "Invalid gitUrl host" };
+  }
+
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const octets = ipv4Match.slice(1).map((o) => Number(o));
+    const [a, b] = octets;
+    if (octets.some((o) => o < 0 || o > 255)) {
+      return { valid: false, error: "Invalid gitUrl host" };
+    }
+    const isPrivate = a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254);
+    if (isPrivate) {
+      return { valid: false, error: "Invalid gitUrl host" };
+    }
   }
 
   return { valid: true };

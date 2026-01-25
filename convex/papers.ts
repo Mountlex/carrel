@@ -280,6 +280,11 @@ export const getForMobile = internalQuery({
 
     const isUpToDate = determineIfUpToDate(paper, repository);
 
+    const compiler =
+      trackedFile?.pdfSourceType === "compile"
+        ? trackedFile.compiler ?? "pdflatex"
+        : undefined;
+
     return {
       _id: paper._id,
       title: paper.title,
@@ -291,7 +296,7 @@ export const getForMobile = internalQuery({
       compilationProgress: paper.compilationProgress,
       lastSyncError: paper.lastSyncError,
       trackedFile: trackedFile
-        ? { pdfSourceType: trackedFile.pdfSourceType }
+        ? { pdfSourceType: trackedFile.pdfSourceType, compiler }
         : null,
     };
   },
@@ -727,6 +732,11 @@ export const addTrackedFile = mutation({
       v.literal("committed"),
       v.literal("compile")
     ),
+    compiler: v.optional(v.union(
+      v.literal("pdflatex"),
+      v.literal("xelatex"),
+      v.literal("lualatex")
+    )),
   },
   handler: async (ctx, args) => {
     // Authorization check: verify the caller owns this repository
@@ -752,13 +762,25 @@ export const addTrackedFile = mutation({
     const fileType = filePathValidation.normalized.endsWith(".pdf") ? "pdf" : "tex";
 
     // Create tracked file
-    const trackedFileId = await ctx.db.insert("trackedFiles", {
+    const trackedFileData: {
+      repositoryId: Id<"repositories">;
+      filePath: string;
+      fileType: "tex" | "pdf";
+      pdfSourceType: "committed" | "compile";
+      isActive: boolean;
+      compiler?: "pdflatex" | "xelatex" | "lualatex";
+    } = {
       repositoryId: args.repositoryId,
       filePath: filePathValidation.normalized, // Use normalized path
       fileType: fileType as "tex" | "pdf",
       pdfSourceType: args.pdfSourceType,
       isActive: true,
-    });
+    };
+    if (args.pdfSourceType === "compile") {
+      trackedFileData.compiler = args.compiler ?? "pdflatex";
+    }
+
+    const trackedFileId = await ctx.db.insert("trackedFiles", trackedFileData);
 
     // Create paper
     const paperId = await ctx.db.insert("papers", {

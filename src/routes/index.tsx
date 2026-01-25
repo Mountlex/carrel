@@ -430,45 +430,49 @@ function GalleryPage() {
         className="hidden"
       />
 
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">Your Papers</h1>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search papers... (Ctrl+K)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-56 rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                aria-label="Clear search"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-          >
-            <option value="recent">Recent</option>
-            <option value="least-recent">Least recent</option>
-            <option value="a-z">A-Z</option>
-            <option value="repository">By repository</option>
-          </select>
-          <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="mb-6 md:mb-8">
+        <div className="flex items-center justify-between">
+          <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">Your Papers</h1>
+          <div className="flex items-center gap-1 md:gap-3">
+            {/* Search - desktop only */}
+            <div className="relative hidden md:block">
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search papers..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-56 rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Clear search"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {/* Sort - desktop only */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 md:block"
+            >
+              <option value="recent">Recent</option>
+              <option value="least-recent">Least recent</option>
+              <option value="a-z">A-Z</option>
+              <option value="repository">By repository</option>
+            </select>
+            {/* Check All */}
             <button
               onClick={handleCheckAll}
               disabled={isSyncing || isRefreshing || !repositories || repositories.length === 0}
-              className="relative inline-flex w-[140px] items-center justify-center gap-2 overflow-hidden rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              className="relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:min-w-[125px] md:px-4 md:py-2"
               title="Check all repositories for new commits"
               aria-label={isSyncing ? "Checking repositories" : "Check all repositories"}
             >
@@ -481,26 +485,29 @@ function GalleryPage() {
               <span className="relative flex items-center gap-2">
                 {isSyncing ? (
                   <>
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className="h-5 w-5 animate-spin md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    {syncProgress ? `${syncProgress.current}/${syncProgress.total}` : "Checking"}
+                    <span className="hidden text-sm font-normal md:inline">
+                      {syncProgress ? `${syncProgress.current}/${syncProgress.total}` : "Checking"}
+                    </span>
                   </>
                 ) : (
                   <>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    Check All
+                    <span className="hidden text-sm font-normal md:inline">Check All</span>
                   </>
                 )}
               </span>
             </button>
+            {/* Refresh All */}
             <button
               onClick={handleRefreshAll}
               disabled={isRefreshing || isSyncing || !papers || papers.length === 0}
-              className="relative inline-flex w-[140px] items-center justify-center gap-2 overflow-hidden rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              className="relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:min-w-[135px] md:px-4 md:py-2"
               title="Refresh PDFs for all papers that are not up to date"
               aria-label={isRefreshing ? "Refreshing papers" : "Refresh all outdated papers"}
             >
@@ -513,41 +520,44 @@ function GalleryPage() {
               <span className="relative flex items-center gap-2">
                 {isRefreshing ? (
                   <>
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className="h-5 w-5 animate-spin md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    {refreshProgress ? `${refreshProgress.current}/${refreshProgress.total}` : "Refreshing"}
+                    <span className="hidden text-sm font-normal md:inline">
+                      {refreshProgress ? `${refreshProgress.current}/${refreshProgress.total}` : "Refreshing"}
+                    </span>
                   </>
                 ) : (
                   <>
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg className="h-5 w-5 md:h-4 md:w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8 5v14l11-7z" />
                     </svg>
-                    Refresh All
+                    <span className="hidden text-sm font-normal md:inline">Refresh All</span>
                   </>
                 )}
               </span>
             </button>
+            {/* Upload */}
+            <button
+              onClick={handleUploadClick}
+              disabled={isUploading}
+              className="inline-flex items-center justify-center rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              aria-label={isUploading ? "Uploading PDF" : "Upload PDF"}
+              title="Upload PDF"
+            >
+              {isUploading ? (
+                <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              )}
+            </button>
           </div>
-          <button
-            onClick={handleUploadClick}
-            disabled={isUploading}
-            className="inline-flex items-center justify-center rounded-lg border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
-            aria-label={isUploading ? "Uploading PDF" : "Upload PDF"}
-            title="Upload PDF"
-          >
-            {isUploading ? (
-              <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-            )}
-          </button>
         </div>
       </div>
 

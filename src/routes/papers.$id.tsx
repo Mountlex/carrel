@@ -27,6 +27,7 @@ function PaperDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const paper = useQuery(api.papers.get, { id: id as Id<"papers"> });
+  const selfHostedInstances = useQuery(api.users.getSelfHostedGitLabInstances, {});
   const versions = useQuery(api.papers.listVersions, { paperId: id as Id<"papers"> });
   const togglePublic = useMutation(api.papers.togglePublic);
   const deletePaper = useMutation(api.papers.deletePaper);
@@ -39,6 +40,35 @@ function PaperDetailPage() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const { toast, showError, showSuccess, clearToast } = useToast();
   const pdfViewerRef = useRef<PdfViewerRef>(null);
+
+  const trackedFile = paper?.trackedFile ?? null;
+  const compilerLabelMap: Record<string, string> = {
+    pdflatex: "pdfLaTeX",
+    xelatex: "XeLaTeX",
+    lualatex: "LuaLaTeX",
+  };
+  const providerLabelMap: Record<string, string> = {
+    github: "GitHub",
+    gitlab: "GitLab",
+    overleaf: "Overleaf",
+  };
+  const compilerValue =
+    trackedFile && "compiler" in trackedFile ? trackedFile.compiler : undefined;
+  const compileLabel = compilerLabelMap[compilerValue ?? "pdflatex"] ?? (compilerValue ?? "pdflatex");
+  const providerValue = paper?.repository?.provider ?? null;
+  const selfHostedInstanceName = (() => {
+    if (!paper?.repository || !selfHostedInstances) return null;
+    if (paper.repository.provider !== "selfhosted-gitlab") return null;
+    const instanceId = paper.repository.selfHostedGitLabInstanceId;
+    if (!instanceId) return null;
+    const match = selfHostedInstances.find((inst) => inst._id === instanceId);
+    return match?.name ?? null;
+  })();
+  const providerLabel = providerValue
+    ? (providerValue === "selfhosted-gitlab"
+      ? (selfHostedInstanceName ?? "Self-hosted GitLab")
+      : (providerLabelMap[providerValue] ?? providerValue))
+    : null;
 
   // Check if the error indicates the source file was deleted from the repository
   const isSourceFileNotFound = (error: string | null | undefined): boolean => {
@@ -200,12 +230,6 @@ function PaperDetailPage() {
           <div className="rounded-lg border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <h3 className="mb-3 text-sm font-normal text-gray-900 dark:text-gray-100">Details</h3>
             <dl className="space-y-2 text-sm">
-              {paper.repository && (
-                <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Repository</dt>
-                  <dd className="text-gray-900 dark:text-gray-100">{paper.repository.name}</dd>
-                </div>
-              )}
               {paper.pageCount && (
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Pages</dt>
@@ -544,6 +568,14 @@ function PaperDetailPage() {
                 Source
               </h3>
               <dl className="space-y-2 text-sm">
+                {paper.repository && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500 dark:text-gray-400">Repository</dt>
+                    <dd className="text-gray-900 dark:text-gray-100">
+                      {providerLabel ? `${providerLabel} / ${paper.repository.name}` : paper.repository.name}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">File</dt>
                   <dd className="font-mono text-xs text-gray-900 dark:text-gray-100">
@@ -552,8 +584,10 @@ function PaperDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Type</dt>
-                  <dd className="text-gray-900 capitalize dark:text-gray-100">
-                    {paper.trackedFile.pdfSourceType}
+                  <dd className="text-gray-900 dark:text-gray-100">
+                    {paper.trackedFile.pdfSourceType === "compile"
+                      ? `Compile / ${compileLabel}`
+                      : "Committed"}
                   </dd>
                 </div>
                 {paper.cachedDependencies && paper.cachedDependencies.length > 0 && (() => {

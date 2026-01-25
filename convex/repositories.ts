@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { validateFilePath, validateRepositoryNameOrThrow } from "./lib/validation";
 import { parseRepoUrl } from "./lib/gitProviders";
@@ -277,6 +278,11 @@ export const addTrackedFile = mutation({
       v.literal("committed"),
       v.literal("compile")
     ),
+    compiler: v.optional(v.union(
+      v.literal("pdflatex"),
+      v.literal("xelatex"),
+      v.literal("lualatex")
+    )),
   },
   handler: async (ctx, args) => {
     // Authorization check: verify the caller owns this repository
@@ -295,13 +301,25 @@ export const addTrackedFile = mutation({
       throw new Error(filePathValidation.error);
     }
 
-    const trackedFileId = await ctx.db.insert("trackedFiles", {
+    const trackedFileData: {
+      repositoryId: Id<"repositories">;
+      filePath: string;
+      fileType: "tex" | "pdf";
+      pdfSourceType: "committed" | "compile";
+      isActive: boolean;
+      compiler?: "pdflatex" | "xelatex" | "lualatex";
+    } = {
       repositoryId: args.repositoryId,
       filePath: filePathValidation.normalized, // Use normalized path
       fileType: args.fileType,
       pdfSourceType: args.pdfSourceType,
       isActive: true,
-    });
+    };
+    if (args.pdfSourceType === "compile") {
+      trackedFileData.compiler = args.compiler ?? "pdflatex";
+    }
+
+    const trackedFileId = await ctx.db.insert("trackedFiles", trackedFileData);
 
     // Create a paper entry for this tracked file
     const repo = await ctx.db.get(args.repositoryId);

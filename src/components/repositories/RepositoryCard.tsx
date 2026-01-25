@@ -11,6 +11,34 @@ interface RepositoryCardProps {
   onUpdateName: (repoId: Id<"repositories">, name: string) => Promise<void>;
 }
 
+function formatDateTime(timestamp: number | undefined): string {
+  if (!timestamp) return "";
+
+  const date = new Date(timestamp);
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear().toString().slice(-2);
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
+}
+
+function formatProviderName(provider: string): string {
+  switch (provider) {
+    case "github":
+      return "GitHub";
+    case "gitlab":
+      return "GitLab";
+    case "overleaf":
+      return "Overleaf";
+    case "selfhosted-gitlab":
+      return "Self-hosted";
+    default:
+      return provider;
+  }
+}
+
 // Provider icons
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -84,130 +112,134 @@ export function RepositoryCard({
 
   return (
     <div className="group rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:border-gray-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        {/* Provider Icon */}
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-          <ProviderIcon provider={repo.provider} className="h-6 w-6" />
-        </div>
+      {/* Desktop: horizontal layout, Mobile: stacked */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-8">
+        {/* Left section: Provider + Name + URL */}
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {/* Provider Icon */}
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+            <ProviderIcon provider={repo.provider} className="h-5 w-5" />
+          </div>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1">
-          {/* Name */}
-          {isEditing ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSave();
-                  if (e.key === "Escape") handleCancel();
+          {/* Name and URL */}
+          <div className="min-w-0 flex-1">
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSave();
+                    if (e.key === "Escape") handleCancel();
+                  }}
+                  autoFocus
+                  className="w-full rounded-lg border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-primary-700 dark:bg-primary-950 dark:text-gray-100"
+                />
+                <button
+                  onClick={handleSave}
+                  className="rounded-lg p-1.5 text-success-600 hover:bg-success-50 dark:text-success-400 dark:hover:bg-success-500/20"
+                  title="Save"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  title="Cancel"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setEditName(repo.name);
+                  setIsEditing(true);
                 }}
-                autoFocus
-                className="w-full rounded-lg border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-primary-700 dark:bg-primary-950 dark:text-gray-100"
-              />
-              <button
-                onClick={handleSave}
-                className="rounded-lg p-1.5 text-success-600 hover:bg-success-50 dark:text-success-400 dark:hover:bg-success-500/20"
-                title="Save"
+                className="group/name flex items-center gap-1.5 text-left"
+                title="Click to edit name"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">{repo.name}</h3>
+                <svg className="h-3.5 w-3.5 text-gray-300 opacity-0 transition-opacity group-hover/name:opacity-100 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
-              <button
-                onClick={handleCancel}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                title="Cancel"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                setEditName(repo.name);
-                setIsEditing(true);
-              }}
-              className="group/name flex items-center gap-1.5 text-left"
-              title="Click to edit name"
-            >
-              <h3 className="font-medium text-gray-900 dark:text-gray-100">{repo.name}</h3>
-              <svg className="h-3.5 w-3.5 text-gray-300 opacity-0 transition-opacity group-hover/name:opacity-100 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-            </button>
-          )}
-
-          {/* URL */}
-          <p className="mt-0.5 truncate text-sm text-gray-400 dark:text-gray-500">{repo.gitUrl}</p>
-
-          {/* Meta info */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {/* Provider badge */}
-            <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-              {repo.provider === "selfhosted-gitlab" ? "Self-hosted" : repo.provider.charAt(0).toUpperCase() + repo.provider.slice(1)}
-            </span>
-
-            {/* Branch */}
-            <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-              {repo.defaultBranch}
-            </span>
-
-            {/* Paper count */}
-            {repo.paperCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {repo.paperCount} paper{repo.paperCount !== 1 ? "s" : ""}
-              </span>
             )}
 
-            {/* Status badge */}
-            <SyncStatusBadge repo={repo} />
+            {/* URL and provider */}
+            <div className="mt-0.5 flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+              <span className="font-medium text-gray-500 dark:text-gray-400">{formatProviderName(repo.provider)}</span>
+              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <span className="truncate">{repo.gitUrl}</span>
+            </div>
+          </div>
+        </div>
 
-            {/* Errors */}
-            {repo.papersWithErrors > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700 dark:bg-danger-500/20 dark:text-danger-400">
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                {repo.papersWithErrors} error{repo.papersWithErrors !== 1 ? "s" : ""}
+        {/* Center section: Stats (desktop only) */}
+        <div className="hidden shrink-0 items-center gap-6 lg:flex">
+          {/* Papers stat */}
+          <div className="flex w-14 flex-col items-center justify-center">
+            <span className="text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+              {repo.paperCount}
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {repo.paperCount === 1 ? "paper" : "papers"}
+            </span>
+          </div>
+
+          {/* Status */}
+          <div className="flex w-[115px] flex-col items-center justify-center">
+            <SyncStatusBadge repo={repo} />
+            {repo.lastCommitTime && (
+              <span className="mt-0.5 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                {formatDateTime(repo.lastCommitTime)}
               </span>
             )}
           </div>
+        </div>
 
-          {/* Last checked */}
-          {repo.lastSyncedAt && (
-            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-              Last checked {new Date(repo.lastSyncedAt).toLocaleString()}
-            </p>
+        {/* Mobile: Stats row */}
+        <div className="flex flex-wrap items-center gap-2 lg:hidden">
+          <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {repo.paperCount} paper{repo.paperCount !== 1 ? "s" : ""}
+          </span>
+          <SyncStatusBadge repo={repo} />
+          {repo.papersWithErrors > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700 dark:bg-danger-500/20 dark:text-danger-400">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {repo.papersWithErrors} error{repo.papersWithErrors !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        {/* Right section: Actions */}
+        <div className="flex shrink-0 items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-800 lg:border-l lg:border-t-0 lg:py-1 lg:pl-8 lg:pt-0">
+          {/* Add Papers button - prominent */}
           <button
             onClick={() => onConfigure(repo)}
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            title="Configure"
+            className="inline-flex h-9 items-center rounded-md border border-primary-200 bg-primary-50 px-4 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
+            Add Papers
           </button>
+
+          {/* Check button */}
           <button
             onClick={() => onSync(repo._id)}
             disabled={isSyncing}
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-50 dark:hover:bg-primary-500/20 dark:hover:text-primary-400"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
             title="Check for updates"
           >
             {isSyncing ? (
@@ -221,9 +253,11 @@ export function RepositoryCard({
               </svg>
             )}
           </button>
+
+          {/* Delete button */}
           <button
             onClick={() => onDelete(repo._id)}
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/20 dark:hover:text-danger-400"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-500/20 dark:hover:text-danger-400"
             title="Delete repository"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -232,6 +266,18 @@ export function RepositoryCard({
           </button>
         </div>
       </div>
+
+      {/* Desktop: Error indicator */}
+      {repo.papersWithErrors > 0 && (
+        <div className="mt-4 hidden rounded-lg bg-danger-50 px-3 py-2 lg:block dark:bg-danger-500/10">
+          <span className="inline-flex items-center gap-1.5 text-sm text-danger-700 dark:text-danger-400">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {repo.papersWithErrors} {repo.papersWithErrors === 1 ? "paper has" : "papers have"} compilation errors
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,7 +285,7 @@ export function RepositoryCard({
 function SyncStatusBadge({ repo }: { repo: Repository }) {
   if (repo.syncStatus === "syncing") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/20 dark:text-warning-400">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/20 dark:text-warning-400">
         <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -250,7 +296,7 @@ function SyncStatusBadge({ repo }: { repo: Repository }) {
   }
   if (repo.paperSyncStatus === "in_sync") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 dark:bg-success-500/20 dark:text-success-400">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700 dark:bg-success-500/20 dark:text-success-400">
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
@@ -260,21 +306,21 @@ function SyncStatusBadge({ repo }: { repo: Repository }) {
   }
   if (repo.paperSyncStatus === "needs_sync") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/20 dark:text-warning-400">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700 dark:bg-warning-500/20 dark:text-warning-400">
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        Needs update
+        PDFs outdated
       </span>
     );
   }
   if (repo.paperSyncStatus === "never_synced") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        Never checked
+        Not synced
       </span>
     );
   }

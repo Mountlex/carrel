@@ -1041,6 +1041,7 @@ export const buildPaper = action({
           filePath: trackedFile.filePath,
           branch: repository.defaultBranch,
           paperId: args.paperId,
+          compiler: trackedFile.compiler ?? "pdflatex",
         });
         storageId = result.storageId;
         fileSize = result.size;
@@ -1241,6 +1242,7 @@ export const buildPaperForMobile = internalAction({
           branch: repository.defaultBranch,
           paperId: paperId,
           userId, // Pass userId for mobile auth
+          compiler: trackedFile.compiler ?? "pdflatex",
         });
         storageId = result.storageId;
         fileSize = result.size;

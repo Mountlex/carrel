@@ -8,6 +8,7 @@ export interface Repository {
   provider: string;
   paperCount: number;
   lastSyncedAt?: number;
+  lastCommitTime?: number;
   syncStatus: "idle" | "syncing" | "error";
   paperSyncStatus?: "in_sync" | "needs_sync" | "never_synced";
   papersWithErrors: number;
@@ -34,6 +35,7 @@ export interface SelectedFile {
   path: string;
   title: string;
   pdfSourceType: "compile" | "committed";
+  compiler?: "pdflatex" | "xelatex" | "lualatex";
 }
 
 export interface SelfHostedGitLabInstance {
