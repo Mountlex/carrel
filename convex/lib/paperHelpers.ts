@@ -15,7 +15,7 @@ type TrackedFile = Doc<"trackedFiles">;
  */
 export function determineIfUpToDate(
   paper: Paper,
-  repository: Repository
+  repository: Repository | null
 ): boolean | null {
   // No repository means it's an uploaded PDF - no sync concept
   if (!paper.repositoryId || !repository) {
@@ -64,7 +64,7 @@ interface OwnershipCheckResult {
 export function checkPaperOwnership(
   paper: Paper,
   authenticatedUserId: Id<"users">,
-  repository: Repository
+  repository: Repository | null
 ): OwnershipCheckResult {
   let hasValidOwnership = false;
 
@@ -109,7 +109,7 @@ export function generateSlug(title: string): string {
  */
 export interface PaperAuthResult {
   paper: Paper;
-  repository: Repository;
+  repository: Repository | null;
   hasAccess: boolean;
 }
 
@@ -165,6 +165,13 @@ export interface FetchUserPapersResult {
   repositories: Repository[];
 }
 
+export interface FetchUserPapersBaseResult {
+  papers: Paper[];
+  repositories: Repository[];
+  trackedFileMap: Map<Id<"trackedFiles">, TrackedFile>;
+  repositoryMap: Map<Id<"repositories">, Repository>;
+}
+
 /**
  * Fetches all papers for a user (via repositories + direct uploads) and enriches them
  * with storage URLs and lookup data. Used by both list() and listForMobile().
@@ -177,13 +184,40 @@ export async function fetchUserPapers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">
 ): Promise<FetchUserPapersResult> {
-  // Get user's repositories
+  const base = await fetchUserPapersBase(ctx, userId);
+  const thumbnailIds = base.papers.filter((p) => p.thumbnailFileId).map((p) => p.thumbnailFileId!);
+  const pdfIds = base.papers.filter((p) => p.pdfFileId).map((p) => p.pdfFileId!);
+
+  const [thumbnailUrls, pdfUrls] = await Promise.all([
+    Promise.all(thumbnailIds.map((id) => ctx.storage.getUrl(id))),
+    Promise.all(pdfIds.map((id) => ctx.storage.getUrl(id))),
+  ]);
+
+  const thumbnailUrlMap = new Map(thumbnailIds.map((id, i) => [id, thumbnailUrls[i]]));
+  const pdfUrlMap = new Map(pdfIds.map((id, i) => [id, pdfUrls[i]]));
+
+  const enrichedPapers: EnrichedPaperData[] = base.papers.map((paper) => {
+    const repository = paper.repositoryId ? base.repositoryMap.get(paper.repositoryId) ?? null : null;
+    const trackedFile = paper.trackedFileId ? base.trackedFileMap.get(paper.trackedFileId) ?? null : null;
+    const thumbnailUrl = paper.thumbnailFileId ? thumbnailUrlMap.get(paper.thumbnailFileId) ?? null : null;
+    const pdfUrl = paper.pdfFileId ? pdfUrlMap.get(paper.pdfFileId) ?? null : null;
+    const isUpToDate = determineIfUpToDate(paper, repository);
+
+    return { paper, repository, trackedFile, thumbnailUrl, pdfUrl, isUpToDate };
+  });
+
+  return { papers: enrichedPapers, repositories: base.repositories };
+}
+
+export async function fetchUserPapersBase(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">
+): Promise<FetchUserPapersBaseResult> {
   const repositories = await ctx.db
     .query("repositories")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
-  // Get papers for all repositories in parallel + direct uploads
   const [repoPapersArrays, directUploads] = await Promise.all([
     Promise.all(
       repositories.map((repo) =>
@@ -201,7 +235,6 @@ export async function fetchUserPapers(
 
   const papers = [...repoPapersArrays.flat(), ...directUploads];
 
-  // Pre-fetch all trackedFiles in a batch
   const trackedFileIds = [
     ...new Set(papers.filter((p) => p.trackedFileId).map((p) => p.trackedFileId!)),
   ];
@@ -214,33 +247,14 @@ export async function fetchUserPapers(
       .map((tf) => [tf._id, tf])
   );
 
-  // Create repository lookup map
   const repositoryMap = new Map(repositories.map((r) => [r._id, r]));
 
-  // Batch fetch all storage URLs upfront
-  const thumbnailIds = papers.filter((p) => p.thumbnailFileId).map((p) => p.thumbnailFileId!);
-  const pdfIds = papers.filter((p) => p.pdfFileId).map((p) => p.pdfFileId!);
-
-  const [thumbnailUrls, pdfUrls] = await Promise.all([
-    Promise.all(thumbnailIds.map((id) => ctx.storage.getUrl(id))),
-    Promise.all(pdfIds.map((id) => ctx.storage.getUrl(id))),
-  ]);
-
-  const thumbnailUrlMap = new Map(thumbnailIds.map((id, i) => [id, thumbnailUrls[i]]));
-  const pdfUrlMap = new Map(pdfIds.map((id, i) => [id, pdfUrls[i]]));
-
-  // Enrich papers with lookup data
-  const enrichedPapers: EnrichedPaperData[] = papers.map((paper) => {
-    const repository = paper.repositoryId ? repositoryMap.get(paper.repositoryId) ?? null : null;
-    const trackedFile = paper.trackedFileId ? trackedFileMap.get(paper.trackedFileId) ?? null : null;
-    const thumbnailUrl = paper.thumbnailFileId ? thumbnailUrlMap.get(paper.thumbnailFileId) ?? null : null;
-    const pdfUrl = paper.pdfFileId ? pdfUrlMap.get(paper.pdfFileId) ?? null : null;
-    const isUpToDate = determineIfUpToDate(paper, repository);
-
-    return { paper, repository, trackedFile, thumbnailUrl, pdfUrl, isUpToDate };
-  });
-
-  return { papers: enrichedPapers, repositories };
+  return {
+    papers,
+    repositories,
+    trackedFileMap,
+    repositoryMap,
+  };
 }
 
 /**

@@ -3,8 +3,8 @@ import { paginationOptsValidator } from "convex/server";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { auth } from "./auth";
 import { validateFilePath, validatePaperFieldsOrThrow, validateTitleOrThrow } from "./lib/validation";
-import { Id } from "./_generated/dataModel";
-import { determineIfUpToDate, generateSlug, fetchPaperWithAuth, fetchUserPapers, sortPapersByTime } from "./lib/paperHelpers";
+import type { Id } from "./_generated/dataModel";
+import { determineIfUpToDate, generateSlug, fetchPaperWithAuth, fetchUserPapers, fetchUserPapersBase, sortPapersByTime } from "./lib/paperHelpers";
 import { deletePaperAndAssociatedData } from "./lib/cascadeDelete";
 
 // List all papers for a user (via repositories + direct uploads)
@@ -49,6 +49,105 @@ export const list = query({
     }));
 
     return sortPapersByTime(enrichedPapers);
+  },
+});
+
+// List all papers for a user with pagination (gallery)
+export const listPaginated = query({
+  args: { userId: v.id("users"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const authenticatedUserId = await auth.getUserId(ctx);
+    if (!authenticatedUserId || authenticatedUserId !== args.userId) {
+      return { page: [], isDone: true, continueCursor: null };
+    }
+
+    const base = await fetchUserPapersBase(ctx, args.userId);
+    const sortedPapers = sortPapersByTime(base.papers);
+
+    const parsedCursor = args.paginationOpts.cursor
+      ? Number.parseInt(args.paginationOpts.cursor, 10)
+      : 0;
+    const startIndex = Number.isNaN(parsedCursor) ? 0 : parsedCursor;
+    const endIndex = Math.min(startIndex + args.paginationOpts.numItems, sortedPapers.length);
+    const pagePapers = sortedPapers.slice(startIndex, endIndex);
+
+    const thumbnailIds = pagePapers.filter((p) => p.thumbnailFileId).map((p) => p.thumbnailFileId!);
+    const pdfIds = pagePapers.filter((p) => p.pdfFileId).map((p) => p.pdfFileId!);
+
+    const [thumbnailUrls, pdfUrls] = await Promise.all([
+      Promise.all(thumbnailIds.map((id) => ctx.storage.getUrl(id))),
+      Promise.all(pdfIds.map((id) => ctx.storage.getUrl(id))),
+    ]);
+
+    const thumbnailUrlMap = new Map(thumbnailIds.map((id, i) => [id, thumbnailUrls[i]]));
+    const pdfUrlMap = new Map(pdfIds.map((id, i) => [id, pdfUrls[i]]));
+
+    const enrichedPapers = pagePapers.map((paper) => {
+      const repository = paper.repositoryId ? base.repositoryMap.get(paper.repositoryId) ?? null : null;
+      const trackedFile = paper.trackedFileId ? base.trackedFileMap.get(paper.trackedFileId) ?? null : null;
+      const thumbnailUrl = paper.thumbnailFileId ? thumbnailUrlMap.get(paper.thumbnailFileId) ?? null : null;
+      const pdfUrl = paper.pdfFileId ? pdfUrlMap.get(paper.pdfFileId) ?? null : null;
+      const isUpToDate = determineIfUpToDate(paper, repository);
+
+      return {
+        _id: paper._id,
+        _creationTime: paper._creationTime,
+        title: paper.title,
+        authors: paper.authors,
+        thumbnailUrl,
+        pdfUrl,
+        isUpToDate,
+        pdfSourceType: trackedFile?.pdfSourceType ?? null,
+        buildStatus: paper.buildStatus,
+        compilationProgress: paper.compilationProgress,
+        lastSyncError: paper.lastSyncError,
+        isPublic: paper.isPublic,
+        lastAffectedCommitTime: paper.lastAffectedCommitTime,
+        updatedAt: paper.updatedAt,
+        repository: repository
+          ? {
+              _id: repository._id,
+              name: repository.name,
+              gitUrl: repository.gitUrl,
+              provider: repository.provider,
+              lastSyncedAt: repository.lastSyncedAt,
+              lastCommitTime: repository.lastCommitTime,
+              syncStatus: repository.syncStatus,
+            }
+          : null,
+      };
+    });
+
+    return {
+      page: enrichedPapers,
+      isDone: endIndex >= sortedPapers.length,
+      continueCursor: endIndex < sortedPapers.length ? String(endIndex) : null,
+    };
+  },
+});
+
+// List minimal paper metadata for bulk operations
+export const listMetadata = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const authenticatedUserId = await auth.getUserId(ctx);
+    if (!authenticatedUserId || authenticatedUserId !== args.userId) {
+      return [];
+    }
+
+    const base = await fetchUserPapersBase(ctx, args.userId);
+    return base.papers.map((paper) => {
+      const repository = paper.repositoryId ? base.repositoryMap.get(paper.repositoryId) ?? null : null;
+      const isUpToDate = determineIfUpToDate(paper, repository);
+
+      return {
+        _id: paper._id,
+        title: paper.title,
+        repository,
+        isUpToDate,
+        buildStatus: paper.buildStatus,
+      };
+    });
   },
 });
 
@@ -472,6 +571,7 @@ export const addTrackedFile = mutation({
     // Create paper
     const paperId = await ctx.db.insert("papers", {
       repositoryId: args.repositoryId,
+      userId: repository.userId,
       trackedFileId,
       title: args.title,
       isPublic: false,

@@ -18,10 +18,15 @@ export const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
     const toggleFullscreen = useCallback(async () => {
       if (!containerRef.current) return;
 
-      if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
-      } else {
-        await document.exitFullscreen();
+      try {
+        if (!document.fullscreenElement) {
+          if (!document.fullscreenEnabled) return;
+          await containerRef.current.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (error) {
+        console.warn("Fullscreen toggle failed:", error);
       }
     }, []);
 
@@ -49,7 +54,7 @@ export const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
           const target = e.target as HTMLElement;
           // Don't trigger if typing in an input
           if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-          toggleFullscreen();
+          void toggleFullscreen();
         }
       };
 

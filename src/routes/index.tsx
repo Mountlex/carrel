@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useQuery, useMutation, useAction, usePaginatedQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useUser } from "../hooks/useUser";
 import { useDebounce } from "../hooks/useDebounce";
@@ -13,13 +13,35 @@ import { DropZone } from "../components/DropZone";
 import { PaperCard } from "../components/PaperCard";
 import { FullscreenPdfOverlay } from "../components/FullscreenPdfOverlay";
 
+interface PaperMetadata {
+  _id: Id<"papers">;
+  title: string;
+  repository: { _id: Id<"repositories"> } | null;
+  isUpToDate: boolean | null;
+  buildStatus?: string;
+}
+
 export const Route = createFileRoute("/")({
   component: GalleryPage,
 });
 
 function GalleryPage() {
   const { user, isLoading: isUserLoading, isAuthenticated } = useUser();
-  const papers = useQuery(api.papers.list, isAuthenticated && user ? { userId: user._id } : "skip");
+  const pageSize = 24;
+  const {
+    results: paginatedPapers,
+    status: papersStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.papers.listPaginated,
+    isAuthenticated && user ? { userId: user._id } : "skip",
+    { initialNumItems: pageSize }
+  );
+  const papers = paginatedPapers ?? [];
+  const paperMetadata = useQuery(
+    api.papers.listMetadata,
+    isAuthenticated && user ? { userId: user._id } : "skip"
+  ) as PaperMetadata[] | undefined;
   const repositories = useQuery(api.repositories.list, isAuthenticated && user ? { userId: user._id } : "skip");
   const updatePaper = useMutation(api.papers.update);
   const deletePaper = useMutation(api.papers.deletePaper);
@@ -42,6 +64,7 @@ function GalleryPage() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [sortBy, setSortBy] = useState<"recent" | "least-recent" | "a-z" | "repository">("recent");
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
 
   // Toast state using hook
   const { toast, showError, showToast, clearToast } = useToast();
@@ -53,6 +76,18 @@ function GalleryPage() {
 
   // Track if we've already synced on page load
   const hasSyncedOnLoad = useRef(false);
+  const syncTimeoutRef = useRef<number | null>(null);
+
+  const isPapersLoading = papersStatus === "LoadingFirstPage";
+  const canLoadMorePapers = papersStatus === "CanLoadMore";
+  const isLoadingMorePapers = papersStatus === "LoadingMore";
+
+  const clearDeferredSync = useCallback(() => {
+    if (syncTimeoutRef.current !== null) {
+      window.clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = null;
+    }
+  }, []);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -74,38 +109,38 @@ function GalleryPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Quick check all repositories on page load (just check for new commits, no compilation)
+  // Deferred check for repository updates on page load
   useEffect(() => {
-    // Check synchronously before any async work to prevent StrictMode race condition
     if (hasSyncedOnLoad.current) return;
 
-    const shouldSync =
-      repositories &&
-      repositories.length > 0 &&
-      !isSyncing;
-
+    const shouldSync = repositories && repositories.length > 0 && !isSyncing;
     if (!shouldSync) return;
 
-    // Set flag IMMEDIATELY, synchronously, before async work
     hasSyncedOnLoad.current = true;
+    clearDeferredSync();
 
-    // Now start async work using the batch operation
-    const runSync = async () => {
-      setIsSyncing(true);
+    syncTimeoutRef.current = window.setTimeout(() => {
+      const runSync = async () => {
+        setIsSyncing(true);
 
-      try {
-        const result = await refreshAllRepositories({});
-        if (result.failed > 0) {
-          showToast("Some repositories failed to check", "info");
+        try {
+          const result = await refreshAllRepositories({});
+          if (result.failed > 0) {
+            showToast("Some repositories failed to check", "info");
+          }
+        } catch (err) {
+          console.error("Auto-sync failed:", err);
         }
-      } catch (err) {
-        console.error("Auto-sync failed:", err);
-      }
 
-      setIsSyncing(false);
+        setIsSyncing(false);
+      };
+
+      runSync();
+    }, 5000);
+
+    return () => {
+      clearDeferredSync();
     };
-
-    runSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositories]);
 
@@ -173,6 +208,14 @@ function GalleryPage() {
     if (!debouncedSearchQuery.trim()) return "";
     return `${filteredPapers.length} paper${filteredPapers.length === 1 ? "" : "s"} found`;
   }, [debouncedSearchQuery, filteredPapers.length]);
+
+  const shouldLoadAll = debouncedSearchQuery.trim().length > 0 || sortBy !== "recent";
+
+  useEffect(() => {
+    if (shouldLoadAll && canLoadMorePapers) {
+      loadMore(pageSize);
+    }
+  }, [shouldLoadAll, canLoadMorePapers, loadMore, pageSize]);
 
   // Handle file drop
   const handleFileDrop = useCallback(
@@ -276,6 +319,9 @@ function GalleryPage() {
   const handleCheckAll = async () => {
     if (!repositories || isSyncing) return;
 
+    clearDeferredSync();
+    hasSyncedOnLoad.current = true;
+
     setIsSyncing(true);
 
     try {
@@ -302,10 +348,10 @@ function GalleryPage() {
 
   // Refresh all papers that are not up to date
   const handleRefreshAll = async () => {
-    if (!papers || isRefreshing) return;
+    if (!paperMetadata || isRefreshing) return;
 
     // Filter papers that are not up to date and have a repository
-    const papersToRefresh = papers.filter(
+    const papersToRefresh = paperMetadata.filter(
       (paper) => paper.repository && paper.isUpToDate === false && paper.buildStatus !== "building"
     );
 
@@ -403,6 +449,17 @@ function GalleryPage() {
                 </svg>
               )}
             </button>
+            {/* Mobile actions toggle */}
+            <button
+              onClick={() => setShowMobileActions(!showMobileActions)}
+              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-gray-50/50 p-2 text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
+              aria-label={showMobileActions ? "Close actions" : "Open actions"}
+              aria-expanded={showMobileActions}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h.01M12 12h.01M20 12h.01" />
+              </svg>
+            </button>
             {/* Search - desktop only */}
             <div className="relative hidden md:block">
               <input
@@ -440,7 +497,7 @@ function GalleryPage() {
             <button
               onClick={handleCheckAll}
               disabled={isSyncing || isRefreshing || !repositories || repositories.length === 0}
-              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:min-w-[125px] md:px-4 md:py-2"
+              className="hidden items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex md:min-w-[125px] md:px-4 md:py-2"
               title="Check all repositories for new commits"
               aria-label={isSyncing ? "Checking repositories" : "Check all repositories"}
             >
@@ -464,8 +521,8 @@ function GalleryPage() {
             {/* Refresh All */}
             <button
               onClick={handleRefreshAll}
-              disabled={isRefreshing || isSyncing || !papers || papers.length === 0}
-              className="relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:min-w-[135px] md:px-4 md:py-2"
+              disabled={isRefreshing || isSyncing || !paperMetadata || paperMetadata.length === 0}
+              className="relative hidden items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex md:min-w-[135px] md:px-4 md:py-2"
               title="Refresh PDFs for all papers that are not up to date"
               aria-label={isRefreshing ? "Refreshing papers" : "Refresh all outdated papers"}
             >
@@ -500,7 +557,7 @@ function GalleryPage() {
             <button
               onClick={handleUploadClick}
               disabled={isUploading}
-              className="inline-flex items-center justify-center rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              className="hidden items-center justify-center rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex"
               aria-label={isUploading ? "Uploading PDF" : "Upload PDF"}
               title="Upload PDF"
             >
@@ -545,13 +602,52 @@ function GalleryPage() {
             </div>
           </div>
         )}
+
+        {/* Mobile actions */}
+        {showMobileActions && (
+          <div className="mt-3 space-y-3 md:hidden">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            >
+              <option value="recent">Recent</option>
+              <option value="least-recent">Least recent</option>
+              <option value="a-z">A-Z</option>
+              <option value="repository">By repository</option>
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleCheckAll}
+                disabled={isSyncing || isRefreshing || !repositories || repositories.length === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              >
+                {isSyncing ? "Checking" : "Check Repos"}
+              </button>
+              <button
+                onClick={handleRefreshAll}
+                disabled={isRefreshing || isSyncing || !paperMetadata || paperMetadata.length === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              >
+                {isRefreshing ? "Refreshing" : "Refresh Papers"}
+              </button>
+              <button
+                onClick={handleUploadClick}
+                disabled={isUploading}
+                className="col-span-2 inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              >
+                {isUploading ? "Uploading" : "Upload PDF"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
 
       <LiveRegion message={searchResultsMessage} />
 
       <DropZone onDrop={handleFileDrop} onReject={handleFileReject} className="min-h-[200px]">
-      {papers === undefined ? (
+      {isPapersLoading ? (
         <PaperCardSkeletonGrid count={8} />
       ) : papers.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
@@ -649,6 +745,18 @@ function GalleryPage() {
         </div>
       )}
       </DropZone>
+
+      {!shouldLoadAll && canLoadMorePapers && (
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={() => loadMore(pageSize)}
+            disabled={isLoadingMorePapers}
+            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-normal text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            {isLoadingMorePapers ? "Loading..." : "Load more"}
+          </button>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

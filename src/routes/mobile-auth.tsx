@@ -9,13 +9,27 @@ import { api } from "../../convex/_generated/api";
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
 
+const DEVICE_ID_KEY = "carrel_mobile_device_id";
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const generated = (crypto.randomUUID?.() ?? `webview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+    localStorage.setItem(DEVICE_ID_KEY, generated);
+    return generated;
+  } catch {
+    return `webview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 // Get device info from user agent
 function getDeviceInfo() {
   const ua = navigator.userAgent;
   const isAndroid = /android/i.test(ua);
   const isIOS = /iphone|ipad|ipod/i.test(ua);
   return {
-    deviceId: `webview-${Date.now()}`,
+    deviceId: getOrCreateDeviceId(),
     deviceName: isAndroid ? "Android Device" : isIOS ? "iOS Device" : "Mobile Device",
     platform: (isAndroid ? "android" : isIOS ? "ios" : "unknown") as "android" | "ios" | "unknown",
   };

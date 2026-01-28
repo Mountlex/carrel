@@ -25,8 +25,22 @@ export function usePdfUpload(userId: Id<"users"> | undefined, options: UsePdfUpl
         return { success: false, error: "User not authenticated" };
       }
 
-      if (!file.name.toLowerCase().endsWith(".pdf") || file.type !== "application/pdf") {
+      const hasPdfExtension = file.name.toLowerCase().endsWith(".pdf");
+      const hasPdfMime = file.type === "application/pdf";
+      if (!hasPdfExtension && !hasPdfMime) {
         return { success: false, error: "Please select a valid PDF file" };
+      }
+
+      if (!hasPdfMime) {
+        try {
+          const header = await file.slice(0, 4).arrayBuffer();
+          const signature = new TextDecoder().decode(new Uint8Array(header));
+          if (signature !== "%PDF") {
+            return { success: false, error: "Please select a valid PDF file" };
+          }
+        } catch {
+          return { success: false, error: "Please select a valid PDF file" };
+        }
       }
 
       setIsUploading(true);

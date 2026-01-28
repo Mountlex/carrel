@@ -67,6 +67,8 @@ export function PaperCard({
           <img
             src={paper.thumbnailUrl}
             alt={paper.title}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover dark:invert dark:hue-rotate-180"
           />
         ) : (

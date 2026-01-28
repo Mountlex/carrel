@@ -329,7 +329,7 @@ function RootComponent() {
             </div>
           )}
         </main>
-        <TanStackRouterDevtools position="bottom-right" />
+        {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
       </div>
     </RootDocument>
   );

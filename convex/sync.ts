@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { action, mutation, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { sleep, type DependencyHash } from "./lib/http";
 import { isFileNotFoundError } from "./lib/providers/types";
@@ -415,11 +415,6 @@ export const refreshRepository = action({
     const attemptId = lockResult.attemptId;
 
     try {
-      // Clear stale sync errors from previous attempts at the start
-      await ctx.runMutation(internal.sync.clearPaperSyncErrors, {
-        repositoryId: args.repositoryId,
-      });
-
       // Fetch latest commit (pass knownSha to skip expensive date fetch if unchanged)
       const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
@@ -1659,7 +1654,7 @@ export const refreshAllRepositories = action({
     }
 
     // Filter repos that aren't already syncing and haven't been synced recently
-    const reposToCheck = repositories.filter((repo) => {
+    const reposToCheck = repositories.filter((repo: Doc<"repositories">) => {
       if (repo.syncStatus === "syncing") return false;
       if (args.force) return true;
       if (repo.lastSyncedAt && Date.now() - repo.lastSyncedAt < MIN_SYNC_INTERVAL) {
@@ -1671,7 +1666,7 @@ export const refreshAllRepositories = action({
 
     // Process all repos in parallel using the internal action
     const results = await Promise.allSettled(
-      reposToCheck.map((repo) =>
+      reposToCheck.map((repo: Doc<"repositories">) =>
         ctx.runAction(internal.sync.refreshRepositoryInternal, {
           repositoryId: repo._id,
           userId,
