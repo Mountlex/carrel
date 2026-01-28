@@ -37,7 +37,7 @@ function GalleryPage() {
     isAuthenticated && user ? { userId: user._id } : "skip",
     { initialNumItems: pageSize }
   );
-  const papers = paginatedPapers ?? [];
+  const papers = useMemo(() => paginatedPapers ?? [], [paginatedPapers]);
   const paperMetadata = useQuery(
     api.papers.listMetadata,
     isAuthenticated && user ? { userId: user._id } : "skip"
