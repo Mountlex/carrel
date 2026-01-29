@@ -67,14 +67,14 @@ async function checkDependenciesChanged(
  *
  * When the commit is unchanged (Overleaf optimization), use the repository's
  * cached lastCommitTime to ensure consistency between repo and paper timestamps.
- * Falls back to Date.now() only if no cached time is available.
+ * Returns undefined if no cached time is available.
  */
 function getCommitTime(
   latestCommit: { unchanged?: boolean; date?: string },
   repositoryLastCommitTime: number | undefined
-): number {
+): number | undefined {
   if (latestCommit.unchanged) {
-    return repositoryLastCommitTime ?? Date.now();
+    return repositoryLastCommitTime;
   }
   return new Date(latestCommit.date!).getTime();
 }
@@ -355,10 +355,13 @@ export const updateRepositoryAfterSync = internalMutation({
 
     const patchData: Record<string, unknown> = {
       lastCommitHash: args.lastCommitHash,
-      lastCommitTime: args.lastCommitTime,
       lastSyncedAt: args.lastSyncedAt,
       syncStatus: args.syncStatus,
     };
+
+    if (args.lastCommitTime !== undefined) {
+      patchData.lastCommitTime = args.lastCommitTime;
+    }
 
     if (args.lastCommitAuthor && args.lastCommitAuthor !== null) {
       patchData.lastCommitAuthor = args.lastCommitAuthor;
@@ -416,11 +419,18 @@ export const refreshRepository = action({
 
     try {
       // Fetch latest commit (pass knownSha to skip expensive date fetch if unchanged)
-      const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+      let latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
         knownSha: repository.lastCommitHash,
       });
+
+      if (latestCommit.unchanged && !repository.lastCommitTime) {
+        latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+          gitUrl: repository.gitUrl,
+          branch: repository.defaultBranch,
+        });
+      }
 
       // Convert commit date to Unix timestamp
       const commitTime = getCommitTime(latestCommit, repository.lastCommitTime);
@@ -964,11 +974,18 @@ export const buildPaper = action({
     try {
       // Fetch latest commit to check if we need to update
       // Don't pass knownSha when force=true so we always get full commit info including author
-      const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+      let latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
         knownSha: args.force ? undefined : repository.lastCommitHash,
       });
+
+      if (!args.force && latestCommit.unchanged && !repository.lastCommitTime) {
+        latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+          gitUrl: repository.gitUrl,
+          branch: repository.defaultBranch,
+        });
+      }
 
       // Validate attempt before expensive operations
       const isStillValid = await ctx.runQuery(internal.sync.validateBuildAttempt, {
@@ -1234,12 +1251,20 @@ export const buildPaperForMobile = internalAction({
 
     try {
       // Fetch latest commit - pass userId for mobile auth
-      const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+      let latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
         knownSha: repository.lastCommitHash,
         userId,
       });
+
+      if (!args.force && latestCommit.unchanged && !repository.lastCommitTime) {
+        latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+          gitUrl: repository.gitUrl,
+          branch: repository.defaultBranch,
+          userId,
+        });
+      }
 
       // Check if PDF is already cached for this commit (skip if force=true)
       if (!args.force && paper.cachedCommitHash === latestCommit.sha && paper.pdfFileId) {
@@ -1388,11 +1413,18 @@ export const refreshRepositoryInternal = internalAction({
       });
 
       // Fetch latest commit (pass knownSha to skip expensive date fetch if unchanged)
-      const latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+      let latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
         gitUrl: repository.gitUrl,
         branch: repository.defaultBranch,
         knownSha: repository.lastCommitHash,
       });
+
+      if (latestCommit.unchanged && !repository.lastCommitTime) {
+        latestCommit = await ctx.runAction(internal.git.fetchLatestCommitInternal, {
+          gitUrl: repository.gitUrl,
+          branch: repository.defaultBranch,
+        });
+      }
 
       // Convert commit date to Unix timestamp
       const commitTime = getCommitTime(latestCommit, repository.lastCommitTime);
