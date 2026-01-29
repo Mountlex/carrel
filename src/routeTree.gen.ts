@@ -14,6 +14,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MobileAuthRouteImport } from './routes/mobile-auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShareSlugRouteImport } from './routes/share.$slug'
+import { Route as ReconnectGitlabRouteImport } from './routes/reconnect.gitlab'
 import { Route as PapersIdRouteImport } from './routes/papers.$id'
 
 const RepositoriesRoute = RepositoriesRouteImport.update({
@@ -41,6 +42,11 @@ const ShareSlugRoute = ShareSlugRouteImport.update({
   path: '/share/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReconnectGitlabRoute = ReconnectGitlabRouteImport.update({
+  id: '/reconnect/gitlab',
+  path: '/reconnect/gitlab',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PapersIdRoute = PapersIdRouteImport.update({
   id: '/papers/$id',
   path: '/papers/$id',
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/repositories': typeof RepositoriesRoute
   '/papers/$id': typeof PapersIdRoute
+  '/reconnect/gitlab': typeof ReconnectGitlabRoute
   '/share/$slug': typeof ShareSlugRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/repositories': typeof RepositoriesRoute
   '/papers/$id': typeof PapersIdRoute
+  '/reconnect/gitlab': typeof ReconnectGitlabRoute
   '/share/$slug': typeof ShareSlugRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/repositories': typeof RepositoriesRoute
   '/papers/$id': typeof PapersIdRoute
+  '/reconnect/gitlab': typeof ReconnectGitlabRoute
   '/share/$slug': typeof ShareSlugRoute
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/repositories'
     | '/papers/$id'
+    | '/reconnect/gitlab'
     | '/share/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/repositories'
     | '/papers/$id'
+    | '/reconnect/gitlab'
     | '/share/$slug'
   id:
     | '__root__'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/repositories'
     | '/papers/$id'
+    | '/reconnect/gitlab'
     | '/share/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   RepositoriesRoute: typeof RepositoriesRoute
   PapersIdRoute: typeof PapersIdRoute
+  ReconnectGitlabRoute: typeof ReconnectGitlabRoute
   ShareSlugRoute: typeof ShareSlugRoute
 }
 
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShareSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reconnect/gitlab': {
+      id: '/reconnect/gitlab'
+      path: '/reconnect/gitlab'
+      fullPath: '/reconnect/gitlab'
+      preLoaderRoute: typeof ReconnectGitlabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/papers/$id': {
       id: '/papers/$id'
       path: '/papers/$id'
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   RepositoriesRoute: RepositoriesRoute,
   PapersIdRoute: PapersIdRoute,
+  ReconnectGitlabRoute: ReconnectGitlabRoute,
   ShareSlugRoute: ShareSlugRoute,
 }
 export const routeTree = rootRouteImport

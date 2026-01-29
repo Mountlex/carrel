@@ -4,7 +4,7 @@ import type { Id } from "../_generated/dataModel";
 type RateLimitAction = "otp_send" | "otp_verify" | "password_reset" | "signup";
 
 // User-based rate limit actions for compute-intensive operations
-type UserRateLimitAction = "refresh_repository" | "build_paper" | "refresh_all_repositories";
+export type UserRateLimitAction = "refresh_repository" | "build_paper" | "refresh_all_repositories";
 
 interface RateLimitConfig {
   windowMs: number;
@@ -140,6 +140,10 @@ const USER_LIMITS: Record<UserRateLimitAction, RateLimitConfig> = {
   build_paper: { windowMs: 60000, max: 20, lockoutMs: 60000 },             // 20/min, 1 min lockout
   refresh_all_repositories: { windowMs: 300000, max: 5, lockoutMs: 300000 }, // 5/5min, 5 min lockout
 };
+
+export function getUserRateLimitConfig(action: UserRateLimitAction): RateLimitConfig {
+  return USER_LIMITS[action];
+}
 
 export async function checkUserRateLimit(
   ctx: MutationCtx,

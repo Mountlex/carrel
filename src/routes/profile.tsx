@@ -380,7 +380,14 @@ function ProfilePage() {
               </button>
             ) : (
               <button
-                onClick={linkWithGitLab}
+                onClick={async () => {
+                  const returnTo = typeof window !== "undefined" ? window.location.href : undefined;
+                  const started = await linkWithGitLab(returnTo);
+                  if (started) {
+                    await signOut();
+                    navigate({ to: "/reconnect/gitlab" });
+                  }
+                }}
                 className="rounded-md bg-[#FC6D26] px-4 py-2 text-sm font-normal text-white hover:bg-[#E24329]"
               >
                 Connect

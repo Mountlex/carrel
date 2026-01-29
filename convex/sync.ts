@@ -6,7 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { sleep, type DependencyHash } from "./lib/http";
 import { isFileNotFoundError } from "./lib/providers/types";
-import { checkUserRateLimit } from "./lib/rateLimit";
+import { getUserRateLimitConfig, type UserRateLimitAction } from "./lib/rateLimit";
 
 // Helper function to check if any dependency files have changed
 // Uses batch fetch to optimize Overleaf (single clone instead of one per file)
@@ -197,8 +197,7 @@ export const releaseSyncLock = internalMutation({
   },
 });
 
-// Internal mutation for rate limit checking (actions can't query DB directly)
-export const checkAndRecordRateLimit = internalMutation({
+export const getUserRateLimitLock = internalQuery({
   args: {
     userId: v.id("users"),
     action: v.union(
@@ -208,7 +207,139 @@ export const checkAndRecordRateLimit = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    return await checkUserRateLimit(ctx, args.userId, args.action);
+    return await ctx.db
+      .query("userRateLimitLocks")
+      .withIndex("by_user_action", (q) =>
+        q.eq("userId", args.userId).eq("action", args.action)
+      )
+      .first();
+  },
+});
+
+export const countUserRateLimitAttempts = internalQuery({
+  args: {
+    userId: v.id("users"),
+    action: v.union(
+      v.literal("refresh_repository"),
+      v.literal("build_paper"),
+      v.literal("refresh_all_repositories")
+    ),
+    windowStart: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const attempts = await ctx.db
+      .query("userRateLimitAttempts")
+      .withIndex("by_user_action_time", (q) =>
+        q.eq("userId", args.userId).eq("action", args.action).gte("attemptedAt", args.windowStart)
+      )
+      .collect();
+    return attempts.length;
+  },
+});
+
+export const insertUserRateLimitAttempt = internalMutation({
+  args: {
+    userId: v.id("users"),
+    action: v.union(
+      v.literal("refresh_repository"),
+      v.literal("build_paper"),
+      v.literal("refresh_all_repositories")
+    ),
+    attemptedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("userRateLimitAttempts", {
+      userId: args.userId,
+      action: args.action,
+      attemptedAt: args.attemptedAt,
+    });
+  },
+});
+
+export const upsertUserRateLimitLock = internalMutation({
+  args: {
+    lockId: v.optional(v.id("userRateLimitLocks")),
+    userId: v.id("users"),
+    action: v.union(
+      v.literal("refresh_repository"),
+      v.literal("build_paper"),
+      v.literal("refresh_all_repositories")
+    ),
+    lockedUntil: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (args.lockId) {
+      await ctx.db.patch(args.lockId, { lockedUntil: args.lockedUntil });
+      return;
+    }
+    await ctx.db.insert("userRateLimitLocks", {
+      userId: args.userId,
+      action: args.action,
+      lockedUntil: args.lockedUntil,
+    });
+  },
+});
+
+export const deleteUserRateLimitLock = internalMutation({
+  args: {
+    id: v.id("userRateLimitLocks"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  },
+});
+
+// Internal action for rate limit checking (avoid OCC on attempts table)
+export const checkAndRecordRateLimit = internalAction({
+  args: {
+    userId: v.id("users"),
+    action: v.union(
+      v.literal("refresh_repository"),
+      v.literal("build_paper"),
+      v.literal("refresh_all_repositories")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const config = getUserRateLimitConfig(args.action as UserRateLimitAction);
+    const now = Date.now();
+    const lock = await ctx.runQuery(internal.sync.getUserRateLimitLock, {
+      userId: args.userId,
+      action: args.action,
+    });
+
+    if (lock?.lockedUntil && now < lock.lockedUntil) {
+      return { allowed: false, retryAfter: lock.lockedUntil - now };
+    }
+
+    if (lock?.lockedUntil && now >= lock.lockedUntil) {
+      await ctx.runMutation(internal.sync.deleteUserRateLimitLock, { id: lock._id });
+    }
+
+    const windowStart = now - config.windowMs;
+    const attemptCount = await ctx.runQuery(internal.sync.countUserRateLimitAttempts, {
+      userId: args.userId,
+      action: args.action,
+      windowStart,
+    });
+
+    if (attemptCount >= config.max) {
+      const lockedUntil = now + config.lockoutMs;
+      await ctx.runMutation(internal.sync.upsertUserRateLimitLock, {
+        lockId: lock?._id,
+        userId: args.userId,
+        action: args.action,
+        lockedUntil,
+      });
+      return { allowed: false, retryAfter: config.lockoutMs };
+    }
+
+    await ctx.runMutation(internal.sync.insertUserRateLimitAttempt, {
+      userId: args.userId,
+      action: args.action,
+      attemptedAt: now,
+    });
+
+    return { allowed: true, remaining: config.max - attemptCount - 1 };
   },
 });
 
@@ -382,9 +513,9 @@ export const refreshRepository = action({
       throw new Error("Not authenticated");
     }
 
-    // Check rate limit for refresh operations (OCC errors are allowed through - conflict means active tracking)
+    // Check rate limit for refresh operations
     try {
-      const rateLimitResult = await ctx.runMutation(internal.sync.checkAndRecordRateLimit, {
+      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
         userId,
         action: "refresh_repository",
       });
@@ -392,10 +523,7 @@ export const refreshRepository = action({
         throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
       }
     } catch (error) {
-      // Allow through on OCC conflicts - rate limit is being tracked by concurrent requests
-      if (!(error instanceof Error && error.message.includes("changed while this mutation"))) {
-        throw error;
-      }
+      throw error;
     }
 
     const repository = await ctx.runQuery(internal.git.getRepository, {
@@ -916,9 +1044,9 @@ export const buildPaper = action({
       throw new Error("Not authenticated");
     }
 
-    // Check rate limit for build operations (OCC errors are allowed through - conflict means active tracking)
+    // Check rate limit for build operations
     try {
-      const rateLimitResult = await ctx.runMutation(internal.sync.checkAndRecordRateLimit, {
+      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
         userId,
         action: "build_paper",
       });
@@ -926,10 +1054,7 @@ export const buildPaper = action({
         throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
       }
     } catch (error) {
-      // Allow through on OCC conflicts - rate limit is being tracked by concurrent requests
-      if (!(error instanceof Error && error.message.includes("changed while this mutation"))) {
-        throw error;
-      }
+      throw error;
     }
 
     // Get paper and related data
@@ -1199,9 +1324,9 @@ export const buildPaperForMobile = internalAction({
     const paperId = args.paperId as Id<"papers">;
     const userId = args.userId as Id<"users">;
 
-    // Check rate limit for build operations (OCC errors are allowed through - conflict means active tracking)
+    // Check rate limit for build operations
     try {
-      const rateLimitResult = await ctx.runMutation(internal.sync.checkAndRecordRateLimit, {
+      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
         userId,
         action: "build_paper",
       });
@@ -1209,9 +1334,7 @@ export const buildPaperForMobile = internalAction({
         throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
       }
     } catch (error) {
-      if (!(error instanceof Error && error.message.includes("changed while this mutation"))) {
-        throw error;
-      }
+      throw error;
     }
 
     // Get paper and verify ownership
@@ -1678,9 +1801,9 @@ export const refreshAllRepositories = action({
       throw new Error("Not authenticated");
     }
 
-    // Single rate limit check for the batch operation (OCC errors are allowed through)
+    // Single rate limit check for the batch operation
     try {
-      const rateLimitResult = await ctx.runMutation(internal.sync.checkAndRecordRateLimit, {
+      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
         userId,
         action: "refresh_all_repositories",
       });
@@ -1688,9 +1811,7 @@ export const refreshAllRepositories = action({
         throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
       }
     } catch (error) {
-      if (!(error instanceof Error && error.message.includes("changed while this mutation"))) {
-        throw error;
-      }
+      throw error;
     }
 
     // Fetch all repositories at once

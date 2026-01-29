@@ -5,7 +5,14 @@ import { useState, useEffect, useRef } from "react";
 import "../index.css";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useUser, checkPendingLink, clearPendingLink, isLinkInProgress } from "../hooks/useUser";
+import {
+  useUser,
+  checkPendingLink,
+  clearPendingLink,
+  isLinkInProgress,
+  getLinkReturnTo,
+  clearLinkReturnTo,
+} from "../hooks/useUser";
 import { useTheme } from "../hooks/useTheme";
 import { EmailPasswordForm } from "../components/auth/EmailPasswordForm";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -39,11 +46,15 @@ function RootComponent() {
   const routerState = useRouterState();
   const isGalleryRoute = routerState.location.pathname === "/";
   const isRepositoriesRoute = routerState.location.pathname === "/repositories";
+  const isReconnectGitLabRoute = routerState.location.pathname === "/reconnect/gitlab";
+  const isMobileAuthRoute = routerState.location.pathname === "/mobile-auth";
   const linkProviderToAccount = useMutation(api.users.linkProviderToAccount);
   const [isLinking, setIsLinking] = useState(() => isLinkInProgress());
   const [linkError, setLinkError] = useState<string | null>(null);
   const [showRecovery, setShowRecovery] = useState(false);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const hasPendingLink = isLinkInProgress() || Boolean(checkPendingLink());
+  const shouldShowLinking = isLinking && !isReconnectGitLabRoute && !isMobileAuthRoute;
 
   // Detect link completion after OAuth redirect
   useEffect(() => {
@@ -69,9 +80,11 @@ function RootComponent() {
         clearPendingLink();
 
         if (result.linked) {
-          // Small delay to ensure session is committed, then reload
+          // Small delay to ensure session is committed, then redirect
           await new Promise((resolve) => setTimeout(resolve, 500));
-          window.location.reload();
+          const returnTo = getLinkReturnTo();
+          clearLinkReturnTo();
+          window.location.assign(returnTo || window.location.href);
         } else {
           // Same user or other non-error case
           setIsLinking(false);
@@ -81,6 +94,7 @@ function RootComponent() {
         const errorMessage = error instanceof Error ? error.message : String(error);
         setLinkError(errorMessage);
         clearPendingLink();
+        clearLinkReturnTo();
         setIsLinking(false);
         // Show recovery UI for critical errors
         if (errorMessage.includes("expired") || errorMessage.includes("Invalid")) {
@@ -103,6 +117,7 @@ function RootComponent() {
       setIsLinking(false);
       setLinkError("Account linking timed out. Please try again.");
       clearPendingLink();
+      clearLinkReturnTo();
     }, 30000);
 
     return () => clearTimeout(timeout);
@@ -274,7 +289,7 @@ function RootComponent() {
               </div>
             </div>
           )}
-          {isLinking ? (
+          {shouldShowLinking ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-gray-700 dark:border-t-gray-100" />
               <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">Linking accounts...</p>
@@ -290,12 +305,28 @@ function RootComponent() {
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-gray-700 dark:border-t-gray-100" />
               </div>
             )
-          ) : isAuthenticated ? (
+          ) : isAuthenticated || isReconnectGitLabRoute || isMobileAuthRoute ? (
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>
           ) : (
             <div className="flex flex-col items-center justify-center py-20">
+              {hasPendingLink && (
+                <div className="mb-6 w-full max-w-sm rounded-lg border border-amber-200 bg-amber-50 p-4 text-center dark:border-amber-800 dark:bg-amber-950">
+                  <p className="text-sm font-normal text-amber-900 dark:text-amber-100">
+                    Reconnect in progress
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-200">
+                    Continue with GitLab to finish reconnecting your account.
+                  </p>
+                  <Link
+                    to="/reconnect/gitlab"
+                    className="mt-3 inline-flex items-center justify-center rounded-md bg-[#FC6D26] px-4 py-2 text-sm font-normal text-white hover:bg-[#E24329]"
+                  >
+                    Continue with GitLab
+                  </Link>
+                </div>
+              )}
               <h1 className="mb-4 text-3xl font-normal text-gray-900 dark:text-gray-100">
                 Welcome to Carrel
               </h1>

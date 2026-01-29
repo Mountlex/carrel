@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
+import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useUser } from "../hooks/useUser";
@@ -12,6 +13,7 @@ import { OverleafSetupModal } from "../components/repositories/OverleafSetupModa
 import { SelfHostedGitLabSetupModal } from "../components/repositories/SelfHostedGitLabSetupModal";
 import type { GitRepo, Repository, SelectedFile } from "../components/repositories/types";
 import { useToast } from "../hooks/useToast";
+import { getGitLabAuthKind } from "../lib/gitlabAuth";
 
 export const Route = createFileRoute("/repositories")({
   component: RepositoriesPage,
@@ -30,7 +32,7 @@ function ConfigureRepositoryModalWrapper({
   listRepositoryFiles: (args: { gitUrl: string; path: string; branch: string }) => Promise<{ name: string; path: string; type: "file" | "dir" }[]>;
 }) {
   const trackedFiles = useQuery(api.papers.listTrackedFiles, { repositoryId: repo._id });
-  const trackedFilePaths = trackedFiles?.map((f) => f.filePath) ?? [];
+  const trackedFilePaths = trackedFiles?.map((f: { filePath: string }) => f.filePath) ?? [];
 
   return (
     <ConfigureRepositoryModal
@@ -44,11 +46,12 @@ function ConfigureRepositoryModalWrapper({
 }
 
 function RepositoriesPage() {
-  const { user, isLoading: isUserLoading, isAuthenticated } = useUser();
+  const { user, isLoading: isUserLoading, isAuthenticated, linkWithGitLab, signOut } = useUser();
+  const navigate = useNavigate();
   const repositories = useQuery(
     api.repositories.list,
     isAuthenticated && user ? { userId: user._id } : "skip"
-  );
+  ) as Repository[] | undefined;
   const addRepository = useMutation(api.repositories.add);
   const removeRepository = useMutation(api.repositories.remove);
   const updateRepository = useMutation(api.repositories.update);
@@ -67,7 +70,9 @@ function RepositoriesPage() {
   const clearOverleafCredentials = useMutation(api.users.clearOverleafCredentials);
 
   // Self-hosted GitLab instance management
-  const selfHostedGitLabInstances = useQuery(api.users.getSelfHostedGitLabInstances);
+  const selfHostedGitLabInstances = useQuery(api.users.getSelfHostedGitLabInstances) as
+    | Array<{ _id: Id<"selfHostedGitLabInstances">; name: string; url: string }>
+    | undefined;
   const addSelfHostedGitLabInstance = useAction(api.git.addSelfHostedGitLabInstanceWithTest);
   const deleteSelfHostedGitLabInstance = useMutation(api.users.deleteSelfHostedGitLabInstance);
 
@@ -96,12 +101,55 @@ function RepositoriesPage() {
     title: string;
     message: string;
     variant: "danger" | "warning" | "default";
+    confirmLabel?: string;
+    cancelLabel?: string;
     onConfirm: () => void | Promise<void>;
+    onCancel?: () => void;
   }>({ isOpen: false, title: "", message: "", variant: "default", onConfirm: () => {} });
   const { toast, showError, showToast, clearToast } = useToast();
 
+  const gitlabReconnectShownRef = useRef(false);
+
   const hasGitHubToken = Boolean(user?.hasGitHubToken);
   const hasGitLabToken = Boolean(user?.hasGitLabToken);
+
+  const handleGitLabAuthError = (error: unknown) => {
+    const { kind } = getGitLabAuthKind(error);
+    if (!kind || gitlabReconnectShownRef.current) return false;
+
+    gitlabReconnectShownRef.current = true;
+    const isSelfHosted = kind === "selfhosted";
+    setConfirmDialog({
+      isOpen: true,
+      title: isSelfHosted ? "Update GitLab token" : "Reconnect GitLab",
+      message: isSelfHosted
+        ? "Your GitLab token appears to be invalid. Update it in Settings to keep syncing repositories."
+        : "Your GitLab session expired. Reconnect to continue syncing repositories.",
+      variant: "warning",
+      confirmLabel: isSelfHosted ? "Open Settings" : "Reconnect",
+      cancelLabel: "Not now",
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+        if (isSelfHosted) {
+          navigate({ to: "/profile" });
+        } else {
+          const returnTo = typeof window !== "undefined" ? window.location.href : undefined;
+          const started = await linkWithGitLab(returnTo);
+          if (started) {
+            await signOut();
+            navigate({ to: "/reconnect/gitlab" });
+          }
+        }
+      },
+      onCancel: () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+      },
+    });
+
+    return true;
+  };
 
   // Quick check all repositories on page load
   useEffect(() => {
@@ -111,8 +159,8 @@ function RepositoriesPage() {
       hasQuickSyncedRef.current = true;
       let hasErrors = false;
       const checkPromises = repositories
-        .filter((repo) => repo.syncStatus !== "syncing")
-        .map((repo) =>
+        .filter((repo: Repository) => repo.syncStatus !== "syncing")
+        .map((repo: Repository) =>
           refreshRepository({ repositoryId: repo._id }).catch((err) => {
             console.error(`Quick check failed for ${repo.name}:`, err);
             hasErrors = true;
@@ -158,6 +206,13 @@ function RepositoriesPage() {
         .then(setGitlabRepos)
         .catch((err) => {
           console.error("Failed to load GitLab repos:", err);
+          const { kind } = getGitLabAuthKind(err);
+          if (kind) {
+            handleGitLabAuthError(err);
+            setGitlabLoadError("Reconnect GitLab to load repositories.");
+            setGitlabRepos([]);
+            return;
+          }
           const errorMessage = err instanceof Error ? err.message : String(err);
           setGitlabLoadError(errorMessage);
           setGitlabRepos([]);
@@ -170,49 +225,73 @@ function RepositoriesPage() {
   // Handlers
   const handleAddFromUrl = async (gitUrl: string) => {
     if (!user) return;
-    const repoInfo = await fetchRepoInfo({ gitUrl });
-    await addRepository({
-      userId: user._id,
-      gitUrl,
-      name: repoInfo.name,
-      defaultBranch: repoInfo.defaultBranch,
-    });
-    setIsAddModalOpen(false);
+    try {
+      const repoInfo = await fetchRepoInfo({ gitUrl });
+      await addRepository({
+        userId: user._id,
+        gitUrl,
+        name: repoInfo.name,
+        defaultBranch: repoInfo.defaultBranch,
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      if (!handleGitLabAuthError(error)) {
+        showError(error, "Failed to add repository");
+      }
+    }
   };
 
   const handleAddFromList = async (repo: GitRepo) => {
     if (!user) return;
-    await addRepository({
-      userId: user._id,
-      gitUrl: repo.url,
-      name: repo.name,
-      defaultBranch: repo.defaultBranch,
-    });
-    setIsAddModalOpen(false);
+    try {
+      await addRepository({
+        userId: user._id,
+        gitUrl: repo.url,
+        name: repo.name,
+        defaultBranch: repo.defaultBranch,
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      if (!handleGitLabAuthError(error)) {
+        showError(error, "Failed to add repository");
+      }
+    }
   };
 
   const handleAddOverleafRepo = async (gitUrl: string) => {
     if (!user) return;
-    const repoInfo = await fetchRepoInfo({ gitUrl });
-    await addRepository({
-      userId: user._id,
-      gitUrl,
-      name: repoInfo.name,
-      defaultBranch: repoInfo.defaultBranch,
-    });
-    setIsAddModalOpen(false);
+    try {
+      const repoInfo = await fetchRepoInfo({ gitUrl });
+      await addRepository({
+        userId: user._id,
+        gitUrl,
+        name: repoInfo.name,
+        defaultBranch: repoInfo.defaultBranch,
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      if (!handleGitLabAuthError(error)) {
+        showError(error, "Failed to add repository");
+      }
+    }
   };
 
   const handleAddSelfHostedRepo = async (gitUrl: string) => {
     if (!user) return;
-    const repoInfo = await fetchRepoInfo({ gitUrl });
-    await addRepository({
-      userId: user._id,
-      gitUrl,
-      name: repoInfo.name,
-      defaultBranch: repoInfo.defaultBranch,
-    });
-    setIsAddModalOpen(false);
+    try {
+      const repoInfo = await fetchRepoInfo({ gitUrl });
+      await addRepository({
+        userId: user._id,
+        gitUrl,
+        name: repoInfo.name,
+        defaultBranch: repoInfo.defaultBranch,
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      if (!handleGitLabAuthError(error)) {
+        showError(error, "Failed to add repository");
+      }
+    }
   };
 
   const handleCheck = async (repoId: Id<"repositories">) => {
@@ -221,7 +300,9 @@ function RepositoriesPage() {
       await refreshRepository({ repositoryId: repoId });
     } catch (error) {
       console.error("Failed to check repository:", error);
-      showError(error, "Failed to check repository");
+      if (!handleGitLabAuthError(error)) {
+        showError(error, "Failed to check repository");
+      }
     } finally {
       setSyncingRepoId(null);
     }
@@ -322,6 +403,7 @@ function RepositoriesPage() {
     for (const paperId of paperIds) {
       buildPaper({ paperId: paperId as Id<"papers"> }).catch((error) => {
         console.error("Failed to build paper:", error);
+        handleGitLabAuthError(error);
       });
     }
   };
@@ -338,6 +420,10 @@ function RepositoriesPage() {
       }
     } catch (err) {
       console.error("Check all failed:", err);
+      if (handleGitLabAuthError(err)) {
+        setIsCheckingAll(false);
+        return;
+      }
       const message = err instanceof Error ? err.message : "";
       if (message.includes("Rate limit exceeded")) {
         const seconds = message.match(/(\d+) seconds/)?.[1];
@@ -352,7 +438,7 @@ function RepositoriesPage() {
 
   // Transform repositories to match the expected type
   const transformedRepos: Repository[] = useMemo(() => {
-    return (repositories ?? []).map(repo => ({
+    return (repositories ?? []).map((repo: Repository) => ({
       _id: repo._id,
       name: repo.name,
       gitUrl: repo.gitUrl,
@@ -368,7 +454,7 @@ function RepositoriesPage() {
   }, [repositories]);
 
   const selfHostedInstances = useMemo(() => {
-    return selfHostedGitLabInstances?.map(instance => ({
+    return selfHostedGitLabInstances?.map((instance: { _id: Id<"selfHostedGitLabInstances">; name: string; url: string }) => ({
       _id: instance._id,
       name: instance.name,
       url: instance.url,
@@ -525,10 +611,10 @@ function RepositoriesPage() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         variant={confirmDialog.variant}
-        confirmLabel="Confirm"
-        cancelLabel="Cancel"
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
         onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onCancel={confirmDialog.onCancel ?? (() => setConfirmDialog((prev) => ({ ...prev, isOpen: false })))}
       />
 
       {/* Toast Notification */}

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useAction, usePaginatedQuery } from "convex/react";
+import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
 import { useUser } from "../hooks/useUser";
 import { useDebounce } from "../hooks/useDebounce";
@@ -8,6 +9,7 @@ import { usePdfUpload } from "../hooks/usePdfUpload";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
+import { getGitLabAuthKind } from "../lib/gitlabAuth";
 import { PaperCardSkeletonGrid, LiveRegion } from "../components/ui";
 import { DropZone } from "../components/DropZone";
 import { PaperCard } from "../components/PaperCard";
@@ -26,7 +28,8 @@ export const Route = createFileRoute("/")({
 });
 
 function GalleryPage() {
-  const { user, isLoading: isUserLoading, isAuthenticated } = useUser();
+  const { user, isLoading: isUserLoading, isAuthenticated, linkWithGitLab, signOut } = useUser();
+  const navigate = useNavigate();
   const pageSize = 24;
   const {
     results: paginatedPapers,
@@ -69,6 +72,16 @@ function GalleryPage() {
   // Toast state using hook
   const { toast, showError, showToast, clearToast } = useToast();
 
+  const [gitlabAuthDialog, setGitlabAuthDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void | Promise<void>;
+    onCancel?: () => void;
+  }>({ isOpen: false, title: "", message: "", onConfirm: () => {} });
+
   // PDF upload hook
   const { isUploading, uploadFile } = usePdfUpload(user?._id, {
     onError: showError,
@@ -77,6 +90,7 @@ function GalleryPage() {
   // Track if we've already synced on page load
   const hasSyncedOnLoad = useRef(false);
   const syncTimeoutRef = useRef<number | null>(null);
+  const gitlabReconnectShownRef = useRef(false);
 
   const isPapersLoading = papersStatus === "LoadingFirstPage";
   const canLoadMorePapers = papersStatus === "CanLoadMore";
@@ -88,6 +102,43 @@ function GalleryPage() {
       syncTimeoutRef.current = null;
     }
   }, []);
+
+  const handleGitLabAuthError = (error: unknown) => {
+    const { kind } = getGitLabAuthKind(error);
+    if (!kind || gitlabReconnectShownRef.current) return false;
+
+    gitlabReconnectShownRef.current = true;
+    const isSelfHosted = kind === "selfhosted";
+    setGitlabAuthDialog({
+      isOpen: true,
+      title: isSelfHosted ? "Update GitLab token" : "Reconnect GitLab",
+      message: isSelfHosted
+        ? "Your GitLab token appears to be invalid. Update it in Settings to keep syncing repositories."
+        : "Your GitLab session expired. Reconnect to continue syncing repositories.",
+      confirmLabel: isSelfHosted ? "Open Settings" : "Reconnect",
+      cancelLabel: "Not now",
+      onConfirm: async () => {
+        setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+        if (isSelfHosted) {
+          navigate({ to: "/profile" });
+        } else {
+          const returnTo = typeof window !== "undefined" ? window.location.href : undefined;
+          const started = await linkWithGitLab(returnTo);
+          if (started) {
+            await signOut();
+            navigate({ to: "/reconnect/gitlab" });
+          }
+        }
+      },
+      onCancel: () => {
+        setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+      },
+    });
+
+    return true;
+  };
 
   // Focus input when editing starts
   useEffect(() => {
@@ -334,6 +385,10 @@ function GalleryPage() {
       }
     } catch (err) {
       console.error("Check all failed:", err);
+      if (handleGitLabAuthError(err)) {
+        setIsSyncing(false);
+        return;
+      }
       const message = err instanceof Error ? err.message : "";
       if (message.includes("Rate limit exceeded")) {
         const seconds = message.match(/(\d+) seconds/)?.[1];
@@ -374,6 +429,7 @@ function GalleryPage() {
         await buildPaper({ paperId: paper._id });
       } catch (err) {
         console.error(`Refresh failed for ${paper.title}:`, err);
+        handleGitLabAuthError(err);
         failedCount++;
       }
       // Use functional update to avoid race conditions
@@ -779,6 +835,17 @@ function GalleryPage() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={gitlabAuthDialog.isOpen}
+        title={gitlabAuthDialog.title}
+        message={gitlabAuthDialog.message}
+        variant="warning"
+        confirmLabel={gitlabAuthDialog.confirmLabel}
+        cancelLabel={gitlabAuthDialog.cancelLabel}
+        onConfirm={gitlabAuthDialog.onConfirm}
+        onCancel={gitlabAuthDialog.onCancel ?? (() => setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false })))}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

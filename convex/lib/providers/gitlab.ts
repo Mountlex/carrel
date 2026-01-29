@@ -9,7 +9,7 @@ import type {
   RepositoryInfo,
   FileEntry,
 } from "./types";
-import { FileNotFoundError } from "./types";
+import { FileNotFoundError, GitLabApiError } from "./types";
 import {
   buildGitLabHeaders,
   parseGitLabCommit,
@@ -22,13 +22,17 @@ import { fetchWithTimeout, withTimeout, BATCH_OPERATION_TIMEOUT } from "../http"
 export class GitLabProvider implements GitProvider {
   readonly providerName: string;
   readonly baseUrl: string;
+  private token: string;
+  private instanceName?: string;
 
   constructor(
-    private token: string,
+    token: string,
     baseUrl: string = "https://gitlab.com",
-    private instanceName?: string
+    instanceName?: string
   ) {
+    this.token = token;
     this.baseUrl = baseUrl;
+    this.instanceName = instanceName;
     this.providerName = instanceName ? `gitlab:${instanceName}` : "gitlab";
   }
 
@@ -48,13 +52,20 @@ export class GitLabProvider implements GitProvider {
     );
 
     if (!response.ok) {
-      throw new Error(
-        interpretGitLabError(response.status, owner, repo, this.instanceName, !!this.token)
+      throw new GitLabApiError(
+        response.status,
+        interpretGitLabError(response.status, owner, repo, this.instanceName, !!this.token),
+        this.providerName,
+        this.instanceName
       );
     }
 
     const data = await safeJsonParse(response, "GitLab repository info");
-    return parseGitLabRepoInfo(data);
+    const info = parseGitLabRepoInfo(data);
+    return {
+      ...info,
+      description: info.description ?? undefined,
+    };
   }
 
   async fetchLatestCommit(
@@ -89,11 +100,19 @@ export class GitLabProvider implements GitProvider {
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403 || response.status === 404) {
-        throw new Error(
-          interpretGitLabError(response.status, owner, repo, this.instanceName, !!this.token)
+        throw new GitLabApiError(
+          response.status,
+          interpretGitLabError(response.status, owner, repo, this.instanceName, !!this.token),
+          this.providerName,
+          this.instanceName
         );
       }
-      throw new Error("Failed to access repository. Please try again later.");
+      throw new GitLabApiError(
+        response.status,
+        "Failed to access repository. Please try again later.",
+        this.providerName,
+        this.instanceName
+      );
     }
 
     const data = await safeJsonParse(response, "GitLab commit info");

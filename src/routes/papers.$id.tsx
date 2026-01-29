@@ -5,10 +5,12 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Toast, ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
+import { useUser } from "../hooks/useUser";
 import { StatusBadge, BuildProgress, CompilationLog, PaperDetailSkeleton } from "../components/ui";
 import { PdfViewer, type PdfViewerRef } from "../components/PdfViewer";
 import { formatDateTime } from "../lib/formatters";
 import { PaperActionBar } from "../components/papers/PaperActionBar";
+import { getGitLabAuthKind } from "../lib/gitlabAuth";
 
 interface SelfHostedGitLabInstance {
   _id: Id<"selfHostedGitLabInstances">;
@@ -36,10 +38,20 @@ export const Route = createFileRoute("/papers/$id")({
 function PaperDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const { linkWithGitLab, signOut } = useUser();
   const [isLocallyBuilding, setIsLocallyBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [gitlabAuthDialog, setGitlabAuthDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void | Promise<void>;
+    onCancel?: () => void;
+  }>({ isOpen: false, title: "", message: "", onConfirm: () => {} });
 
   const paper = useQuery(api.papers.get, { id: id as Id<"papers"> });
   const selfHostedInstances = useQuery(api.users.getSelfHostedGitLabInstances, {}) as SelfHostedGitLabInstance[] | undefined;
@@ -54,6 +66,7 @@ function PaperDetailPage() {
   const isBuilding = isLocallyBuilding || paper?.buildStatus === "building";
   const { toast, showError, showSuccess, clearToast } = useToast();
   const pdfViewerRef = useRef<PdfViewerRef>(null);
+  const gitlabReconnectShownRef = useRef(false);
 
   const trackedFile = paper?.trackedFile ?? null;
   const compilerLabelMap: Record<string, string> = {
@@ -90,6 +103,43 @@ function PaperDetailPage() {
     return error.includes("Source file not found") || error.includes("File not found in repository");
   };
 
+  const handleGitLabAuthError = (error: unknown) => {
+    const { kind } = getGitLabAuthKind(error);
+    if (!kind || gitlabReconnectShownRef.current) return false;
+
+    gitlabReconnectShownRef.current = true;
+    const isSelfHosted = kind === "selfhosted";
+    setGitlabAuthDialog({
+      isOpen: true,
+      title: isSelfHosted ? "Update GitLab token" : "Reconnect GitLab",
+      message: isSelfHosted
+        ? "Your GitLab token appears to be invalid. Update it in Settings to keep syncing repositories."
+        : "Your GitLab session expired. Reconnect to continue syncing repositories.",
+      confirmLabel: isSelfHosted ? "Open Settings" : "Reconnect",
+      cancelLabel: "Not now",
+      onConfirm: async () => {
+        setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+        if (isSelfHosted) {
+          navigate({ to: "/profile" });
+        } else {
+          const returnTo = typeof window !== "undefined" ? window.location.href : undefined;
+          const started = await linkWithGitLab(returnTo);
+          if (started) {
+            await signOut();
+            navigate({ to: "/reconnect/gitlab" });
+          }
+        }
+      },
+      onCancel: () => {
+        setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false }));
+        gitlabReconnectShownRef.current = false;
+      },
+    });
+
+    return true;
+  };
+
   const handleBuild = async (force = false) => {
     if (!paper) return;
     setIsLocallyBuilding(true);
@@ -101,6 +151,9 @@ function PaperDetailPage() {
       }
     } catch (error) {
       console.error("Failed to build paper:", error);
+      if (handleGitLabAuthError(error)) {
+        return;
+      }
       const isCompile = paper.trackedFile?.pdfSourceType === "compile";
       setBuildError(error instanceof Error ? error.message : (isCompile ? "Failed to compile" : "Failed to fetch"));
     } finally {
@@ -714,6 +767,17 @@ function PaperDetailPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={gitlabAuthDialog.isOpen}
+        title={gitlabAuthDialog.title}
+        message={gitlabAuthDialog.message}
+        variant="warning"
+        confirmLabel={gitlabAuthDialog.confirmLabel}
+        cancelLabel={gitlabAuthDialog.cancelLabel}
+        onConfirm={gitlabAuthDialog.onConfirm}
+        onCancel={gitlabAuthDialog.onCancel ?? (() => setGitlabAuthDialog((prev) => ({ ...prev, isOpen: false })))}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

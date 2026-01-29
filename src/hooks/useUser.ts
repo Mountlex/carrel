@@ -5,6 +5,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 
 const LINK_ACCOUNT_KEY = "carrel_link_account_intent";
 const LINK_IN_PROGRESS_KEY = "carrel_link_in_progress";
+const LINK_RETURN_TO_KEY = "carrel_link_return_to";
 // Link intent expires after 10 minutes (must match server-side expiry)
 const LINK_INTENT_TTL_MS = 10 * 60 * 1000;
 
@@ -22,6 +23,25 @@ function storeLinkIntent(intentToken: string, provider: "github" | "gitlab") {
     const intent: LinkIntent = { intentToken, provider, timestamp: Date.now() };
     localStorage.setItem(LINK_ACCOUNT_KEY, JSON.stringify(intent));
   }
+}
+
+function storeLinkReturnTo(returnTo?: string) {
+  if (typeof window === "undefined") return;
+  if (returnTo) {
+    localStorage.setItem(LINK_RETURN_TO_KEY, returnTo);
+  } else {
+    localStorage.removeItem(LINK_RETURN_TO_KEY);
+  }
+}
+
+export function getLinkReturnTo(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LINK_RETURN_TO_KEY);
+}
+
+export function clearLinkReturnTo() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LINK_RETURN_TO_KEY);
 }
 
 // Check for pending link intent after OAuth redirect
@@ -54,6 +74,7 @@ export function clearPendingLink() {
   if (typeof window !== "undefined") {
     localStorage.removeItem(LINK_ACCOUNT_KEY);
     localStorage.removeItem(LINK_IN_PROGRESS_KEY);
+    localStorage.removeItem(LINK_RETURN_TO_KEY);
   }
 }
 
@@ -115,38 +136,37 @@ export function useUser() {
     }
   };
 
-  const linkWithGitLab = async () => {
+  const linkWithGitLab = async (returnTo?: string) => {
     if (user?._id) {
       try {
         // Create server-side intent token (secure - cannot be tampered)
         const { intentToken } = await createLinkIntent({ provider: "gitlab" });
         storeLinkIntent(intentToken, "gitlab");
         setLinkInProgress(true);
-        const redirectTo = typeof window !== "undefined" ? window.location.href : undefined;
-        // Sign out first to avoid session conflicts
-        await signOut();
-        // Small delay to ensure sign out completes
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        signIn("gitlab", redirectTo ? { redirectTo } : undefined);
+        storeLinkReturnTo(returnTo);
+        return true;
       } catch (error) {
         console.error("Failed to create link intent:", error);
         setLinkInProgress(false);
+        storeLinkReturnTo(undefined);
+        return false;
       }
     }
+    return false;
   };
 
   return {
     user,
     isLoading: isAuthLoading || (isAuthenticated && user === undefined),
     isAuthenticated,
-    signInWithGitHub: () =>
-      signIn("github", {
-        redirectTo: typeof window !== "undefined" ? window.location.href : undefined,
-      }),
-    signInWithGitLab: () =>
-      signIn("gitlab", {
-        redirectTo: typeof window !== "undefined" ? window.location.href : undefined,
-      }),
+    signInWithGitHub: () => {
+      const redirectTo = typeof window !== "undefined" ? window.location.href : undefined;
+      signIn("github", redirectTo ? { redirectTo } : undefined);
+    },
+    signInWithGitLab: () => {
+      const redirectTo = typeof window !== "undefined" ? window.location.href : undefined;
+      signIn("gitlab", redirectTo ? { redirectTo } : undefined);
+    },
     // Link functions for connecting additional providers to existing account
     linkWithGitHub,
     linkWithGitLab,

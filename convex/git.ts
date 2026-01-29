@@ -10,7 +10,10 @@ import { decryptTokenIfNeeded, encryptTokenIfNeeded } from "./lib/crypto";
 import {
   getProvider,
   type TokenGetters,
+  type CommitInfo,
+  GitLabProvider,
 } from "./lib/providers";
+import { isGitLabApiError } from "./lib/providers/types";
 
 // Token refresh buffer: refresh 5 minutes before expiry to avoid race conditions
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -79,6 +82,18 @@ export async function getGitLabTokenByUserId(ctx: ActionCtx, userId: Id<"users">
 
   // Decrypt the token
   return decryptTokenIfNeeded(user.gitlabAccessToken);
+}
+
+async function forceRefreshGitLabTokenByUserId(
+  ctx: ActionCtx,
+  userId: Id<"users">
+): Promise<string | null> {
+  const user = await ctx.runQuery(internal.git.getUser, { userId });
+  if (!user?.gitlabRefreshToken) return null;
+  const decryptedRefreshToken = await decryptTokenIfNeeded(user.gitlabRefreshToken);
+  if (!decryptedRefreshToken) return null;
+  const refreshed = await refreshGitLabToken(ctx, userId, decryptedRefreshToken);
+  return refreshed?.accessToken ?? null;
 }
 
 // Helper to get Overleaf credentials for authenticated user
@@ -422,6 +437,8 @@ export const fetchLatestCommitInternal = internalAction({
       ? await getAllSelfHostedGitLabInstancesByUserId(ctx, args.userId)
       : await getAllSelfHostedGitLabInstances(ctx);
 
+    const authUserId = args.userId ?? await auth.getUserId(ctx);
+
     const { provider, owner, repo } = await getProvider(
       ctx,
       args.gitUrl,
@@ -430,23 +447,54 @@ export const fetchLatestCommitInternal = internalAction({
       args.userId
     );
 
-    const commit = await provider.fetchLatestCommit(owner, repo, args.branch, args.knownSha);
+    const formatCommit = (commit: CommitInfo) => {
+      if (commit.unchanged) {
+        return {
+          sha: commit.sha,
+          message: commit.message,
+          unchanged: true as const,
+        };
+      }
 
-    if (commit.unchanged) {
       return {
         sha: commit.sha,
         message: commit.message,
-        unchanged: true as const,
+        date: commit.date || new Date().toISOString(),
+        authorName: commit.authorName,
+        authorEmail: commit.authorEmail,
       };
-    }
-
-    return {
-      sha: commit.sha,
-      message: commit.message,
-      date: commit.date || new Date().toISOString(),
-      authorName: commit.authorName,
-      authorEmail: commit.authorEmail,
     };
+
+    try {
+      const commit = await provider.fetchLatestCommit(owner, repo, args.branch, args.knownSha);
+      return formatCommit(commit);
+    } catch (error) {
+      const isCloudGitLab = provider.providerName === "gitlab" && provider.baseUrl === "https://gitlab.com";
+      const canRetry =
+        isCloudGitLab &&
+        authUserId &&
+        isGitLabApiError(error) &&
+        (error.status === 401 || error.status === 403);
+
+      if (!canRetry) {
+        throw error;
+      }
+
+      const refreshedToken = await forceRefreshGitLabTokenByUserId(ctx, authUserId);
+      if (!refreshedToken) {
+        throw error;
+      }
+
+      console.log("GitLab auth failed, retrying with refreshed token");
+      const refreshedProvider = new GitLabProvider(refreshedToken, "https://gitlab.com");
+      const retryCommit = await refreshedProvider.fetchLatestCommit(
+        owner,
+        repo,
+        args.branch,
+        args.knownSha
+      );
+      return formatCommit(retryCommit);
+    }
   },
 });
 

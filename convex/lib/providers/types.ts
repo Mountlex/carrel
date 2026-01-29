@@ -19,6 +19,35 @@ export class FileNotFoundError extends Error {
 }
 
 /**
+ * Error thrown when a GitLab API request fails.
+ */
+export class GitLabApiError extends Error {
+  constructor(
+    status: number,
+    message: string,
+    providerName: string,
+    instanceName?: string
+  ) {
+    super(message);
+    this.name = "GitLabApiError";
+    this.status = status;
+    this.providerName = providerName;
+    this.instanceName = instanceName;
+  }
+
+  readonly status: number;
+  readonly providerName: string;
+  readonly instanceName?: string;
+}
+
+/**
+ * Check if an error is a GitLabApiError.
+ */
+export function isGitLabApiError(error: unknown): error is GitLabApiError {
+  return error instanceof Error && error.name === "GitLabApiError";
+}
+
+/**
  * Check if an error is a FileNotFoundError.
  */
 export function isFileNotFoundError(error: unknown): error is FileNotFoundError {
