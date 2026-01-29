@@ -1182,6 +1182,21 @@ export const buildPaperForMobile = internalAction({
     const paperId = args.paperId as Id<"papers">;
     const userId = args.userId as Id<"users">;
 
+    // Check rate limit for build operations (OCC errors are allowed through - conflict means active tracking)
+    try {
+      const rateLimitResult = await ctx.runMutation(internal.sync.checkAndRecordRateLimit, {
+        userId,
+        action: "build_paper",
+      });
+      if (!rateLimitResult.allowed) {
+        throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
+      }
+    } catch (error) {
+      if (!(error instanceof Error && error.message.includes("changed while this mutation"))) {
+        throw error;
+      }
+    }
+
     // Get paper and verify ownership
     const paper = await ctx.runQuery(internal.git.getPaper, { id: paperId });
     if (!paper) throw new Error("Paper not found");

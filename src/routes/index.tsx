@@ -319,6 +319,7 @@ function GalleryPage() {
   const handleCheckAll = async () => {
     if (!repositories || isSyncing) return;
 
+    setShowMobileActions(false);
     clearDeferredSync();
     hasSyncedOnLoad.current = true;
 
@@ -349,6 +350,8 @@ function GalleryPage() {
   // Refresh all papers that are not up to date
   const handleRefreshAll = async () => {
     if (!paperMetadata || isRefreshing) return;
+
+    setShowMobileActions(false);
 
     // Filter papers that are not up to date and have a repository
     const papersToRefresh = paperMetadata.filter(
@@ -390,6 +393,7 @@ function GalleryPage() {
   };
 
   const handleUploadClick = () => {
+    setShowMobileActions(false);
     fileInputRef.current?.click();
   };
 
@@ -606,9 +610,21 @@ function GalleryPage() {
         {/* Mobile actions */}
         {showMobileActions && (
           <div className="mt-3 space-y-3 md:hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-normal uppercase tracking-wide text-gray-400">Actions</span>
+              <button
+                onClick={() => setShowMobileActions(false)}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+              >
+                Close
+              </button>
+            </div>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) => {
+                setSortBy(e.target.value as typeof sortBy);
+                setShowMobileActions(false);
+              }}
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="recent">Recent</option>
@@ -742,6 +758,12 @@ function GalleryPage() {
               onFullscreen={handleFullscreen}
             />
           ))}
+        </div>
+      )}
+
+      {shouldLoadAll && (isLoadingMorePapers || canLoadMorePapers) && (
+        <div className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
+          {isLoadingMorePapers ? "Loading more results..." : "Fetching more results..."}
         </div>
       )}
       </DropZone>

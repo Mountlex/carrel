@@ -1,4 +1,4 @@
-import { createRootRouteWithContext, Link, Outlet, Scripts, HeadContent } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, Outlet, Scripts, HeadContent, useRouterState } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { QueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
@@ -10,6 +10,7 @@ import { useTheme } from "../hooks/useTheme";
 import { EmailPasswordForm } from "../components/auth/EmailPasswordForm";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { GitHubIcon, GitLabIcon, UserIcon, SignOutIcon, SunIcon, MoonIcon, SystemIcon } from "../components/icons";
+import { PaperCardSkeletonGrid } from "../components/ui";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -35,6 +36,9 @@ function RootComponent() {
     signOut,
   } = useUser();
   const { theme, cycleTheme } = useTheme();
+  const routerState = useRouterState();
+  const isGalleryRoute = routerState.location.pathname === "/";
+  const isRepositoriesRoute = routerState.location.pathname === "/repositories";
   const linkProviderToAccount = useMutation(api.users.linkProviderToAccount);
   const [isLinking, setIsLinking] = useState(() => isLinkInProgress());
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -277,9 +281,15 @@ function RootComponent() {
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-500">This should only take a few seconds. If a popup opened, please complete sign-in there.</p>
             </div>
           ) : isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-gray-700 dark:border-t-gray-100" />
-            </div>
+            isGalleryRoute ? (
+              <GalleryLoading />
+            ) : isRepositoriesRoute ? (
+              <RepositoriesLoading />
+            ) : (
+              <div className="flex items-center justify-center py-20">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-gray-700 dark:border-t-gray-100" />
+              </div>
+            )
           ) : isAuthenticated ? (
             <ErrorBoundary>
               <Outlet />
@@ -332,6 +342,72 @@ function RootComponent() {
         {import.meta.env.DEV && <TanStackRouterDevtools position="bottom-right" />}
       </div>
     </RootDocument>
+  );
+}
+
+function GalleryLoading() {
+  return (
+    <div>
+      <div className="mb-6 md:mb-8">
+        <div className="flex items-center justify-between">
+          <div className="h-7 w-40 rounded-md bg-gray-200 dark:bg-gray-800" />
+          <div className="flex items-center gap-2">
+            <div className="hidden h-9 w-56 rounded-md bg-gray-200 dark:bg-gray-800 md:block" />
+            <div className="hidden h-9 w-28 rounded-md bg-gray-200 dark:bg-gray-800 md:block" />
+            <div className="hidden h-9 w-28 rounded-md bg-gray-200 dark:bg-gray-800 md:block" />
+            <div className="hidden h-9 w-32 rounded-md bg-gray-200 dark:bg-gray-800 md:block" />
+          </div>
+        </div>
+      </div>
+      <PaperCardSkeletonGrid count={8} />
+    </div>
+  );
+}
+
+function RepositoriesLoading() {
+  return (
+    <div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 md:mb-8">
+        <div className="h-7 w-36 rounded-md bg-gray-200 dark:bg-gray-800" />
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-28 rounded-md bg-gray-200 dark:bg-gray-800" />
+          <div className="h-9 w-36 rounded-md bg-gray-200 dark:bg-gray-800" />
+        </div>
+      </div>
+      <div className="space-y-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={`repo-skeleton-${index}`}
+            className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-8">
+              <div className="flex min-w-0 flex-1 items-center gap-4">
+                <div className="h-11 w-11 rounded-lg bg-gray-200 dark:bg-gray-800" />
+                <div className="min-w-0 flex-1">
+                  <div className="h-5 w-40 rounded-md bg-gray-200 dark:bg-gray-800" />
+                  <div className="mt-2 h-4 w-64 rounded-md bg-gray-100 dark:bg-gray-850" />
+                </div>
+              </div>
+              <div className="hidden shrink-0 items-center gap-6 lg:flex">
+                <div className="flex w-14 flex-col items-center">
+                  <div className="h-6 w-10 rounded-md bg-gray-200 dark:bg-gray-800" />
+                  <div className="mt-2 h-3 w-12 rounded-md bg-gray-100 dark:bg-gray-850" />
+                </div>
+                <div className="flex w-[115px] flex-col items-center">
+                  <div className="h-5 w-20 rounded-md bg-gray-200 dark:bg-gray-800" />
+                  <div className="mt-2 h-3 w-24 rounded-md bg-gray-100 dark:bg-gray-850" />
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-800 lg:border-l lg:border-t-0 lg:py-1 lg:pl-8 lg:pt-0">
+                <div className="h-9 w-28 rounded-md bg-gray-200 dark:bg-gray-800" />
+                <div className="h-9 w-9 rounded-md bg-gray-200 dark:bg-gray-800" />
+                <div className="h-9 w-9 rounded-md bg-gray-200 dark:bg-gray-800" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
