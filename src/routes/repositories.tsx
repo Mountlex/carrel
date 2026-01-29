@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../convex/_generated/api";
@@ -113,7 +113,7 @@ function RepositoriesPage() {
   const hasGitHubToken = Boolean(user?.hasGitHubToken);
   const hasGitLabToken = Boolean(user?.hasGitLabToken);
 
-  const handleGitLabAuthError = (error: unknown) => {
+  const handleGitLabAuthError = useCallback((error: unknown) => {
     const { kind } = getGitLabAuthKind(error);
     if (!kind || gitlabReconnectShownRef.current) return false;
 
@@ -149,7 +149,7 @@ function RepositoriesPage() {
     });
 
     return true;
-  };
+  }, [navigate, linkWithGitLab, signOut, setConfirmDialog]);
 
   // Quick check all repositories on page load
   useEffect(() => {
@@ -220,7 +220,7 @@ function RepositoriesPage() {
         .finally(() => setIsLoadingGitLabRepos(false));
     }
      
-  }, [isAddModalOpen, hasGitLabToken, gitlabRepos, isLoadingGitLabRepos, gitlabLoadError, listUserGitLabRepos]);
+  }, [isAddModalOpen, hasGitLabToken, gitlabRepos, isLoadingGitLabRepos, gitlabLoadError, listUserGitLabRepos, handleGitLabAuthError]);
 
   // Handlers
   const handleAddFromUrl = async (gitUrl: string) => {

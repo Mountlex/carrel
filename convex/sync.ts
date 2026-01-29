@@ -514,16 +514,12 @@ export const refreshRepository = action({
     }
 
     // Check rate limit for refresh operations
-    try {
-      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
-        userId,
-        action: "refresh_repository",
-      });
-      if (!rateLimitResult.allowed) {
-        throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
-      }
-    } catch (error) {
-      throw error;
+    const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
+      userId,
+      action: "refresh_repository",
+    });
+    if (!rateLimitResult.allowed) {
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
     }
 
     const repository = await ctx.runQuery(internal.git.getRepository, {
@@ -1045,16 +1041,12 @@ export const buildPaper = action({
     }
 
     // Check rate limit for build operations
-    try {
-      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
-        userId,
-        action: "build_paper",
-      });
-      if (!rateLimitResult.allowed) {
-        throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
-      }
-    } catch (error) {
-      throw error;
+    const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
+      userId,
+      action: "build_paper",
+    });
+    if (!rateLimitResult.allowed) {
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
     }
 
     // Get paper and related data
@@ -1325,16 +1317,12 @@ export const buildPaperForMobile = internalAction({
     const userId = args.userId as Id<"users">;
 
     // Check rate limit for build operations
-    try {
-      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
-        userId,
-        action: "build_paper",
-      });
-      if (!rateLimitResult.allowed) {
-        throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
-      }
-    } catch (error) {
-      throw error;
+    const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
+      userId,
+      action: "build_paper",
+    });
+    if (!rateLimitResult.allowed) {
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
     }
 
     // Get paper and verify ownership
@@ -1802,16 +1790,12 @@ export const refreshAllRepositories = action({
     }
 
     // Single rate limit check for the batch operation
-    try {
-      const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
-        userId,
-        action: "refresh_all_repositories",
-      });
-      if (!rateLimitResult.allowed) {
-        throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
-      }
-    } catch (error) {
-      throw error;
+    const rateLimitResult = await ctx.runAction(internal.sync.checkAndRecordRateLimit, {
+      userId,
+      action: "refresh_all_repositories",
+    });
+    if (!rateLimitResult.allowed) {
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(rateLimitResult.retryAfter! / 1000)} seconds.`);
     }
 
     // Fetch all repositories at once
