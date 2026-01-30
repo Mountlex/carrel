@@ -79,6 +79,22 @@ function getCommitTime(
   return new Date(latestCommit.date!).getTime();
 }
 
+/**
+ * Get the commit author name.
+ *
+ * When the commit is unchanged (Overleaf optimization) or author is not available
+ * (e.g., Overleaf git fetch failed), use the repository's cached lastCommitAuthor.
+ */
+function getCommitAuthor(
+  latestCommit: { unchanged?: boolean; authorName?: string },
+  repositoryLastCommitAuthor: string | undefined
+): string | undefined {
+  if (latestCommit.unchanged || !latestCommit.authorName) {
+    return repositoryLastCommitAuthor;
+  }
+  return latestCommit.authorName;
+}
+
 // Check if repository is currently syncing (used for optimistic locking)
 export const getRepositorySyncStatus = internalQuery({
   args: { id: v.id("repositories") },
@@ -571,7 +587,7 @@ export const refreshRepository = action({
           id: args.repositoryId,
           lastCommitHash: latestCommit.sha,
           lastCommitTime: commitTime,
-          lastCommitAuthor: latestCommit.authorName,
+          lastCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
           lastSyncedAt: Date.now(),
           syncStatus: "idle",
           attemptId,
@@ -707,7 +723,7 @@ export const refreshRepository = action({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
-              lastAffectedCommitAuthor: latestCommit.authorName,
+              lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
             });
             continue;
           }
@@ -743,7 +759,7 @@ export const refreshRepository = action({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
-              lastAffectedCommitAuthor: latestCommit.authorName,
+              lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
             });
             continue;
           }
@@ -765,7 +781,7 @@ export const refreshRepository = action({
         id: args.repositoryId,
         lastCommitHash: latestCommit.sha,
         lastCommitTime: commitTime,
-        lastCommitAuthor: latestCommit.authorName,
+        lastCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
         lastSyncedAt: Date.now(),
         syncStatus: "idle",
         attemptId,
@@ -1228,10 +1244,10 @@ export const buildPaper = action({
         lastAffectedCommitHash: latestCommit.sha,
         lastAffectedCommitTime: commitTime,
         lastAffectedCommitMessage: latestCommit.message,
-        lastAffectedCommitAuthor: latestCommit.authorName,
+        lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
         builtFromCommitHash: latestCommit.sha,
         builtFromCommitTime: commitTime,
-        builtFromCommitAuthor: latestCommit.authorName,
+        builtFromCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
       });
 
       if (!updateResult.success) {
@@ -1432,10 +1448,10 @@ export const buildPaperForMobile = internalAction({
         lastAffectedCommitHash: latestCommit.sha,
         lastAffectedCommitTime: commitTime,
         lastAffectedCommitMessage: latestCommit.message,
-        lastAffectedCommitAuthor: latestCommit.authorName,
+        lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
         builtFromCommitHash: latestCommit.sha,
         builtFromCommitTime: commitTime,
-        builtFromCommitAuthor: latestCommit.authorName,
+        builtFromCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
       });
 
       // Generate thumbnail
@@ -1552,7 +1568,7 @@ export const refreshRepositoryInternal = internalAction({
           id: args.repositoryId,
           lastCommitHash: latestCommit.sha,
           lastCommitTime: commitTime,
-          lastCommitAuthor: latestCommit.authorName,
+          lastCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
           lastSyncedAt: Date.now(),
           syncStatus: "idle",
           attemptId,
@@ -1688,7 +1704,7 @@ export const refreshRepositoryInternal = internalAction({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
-              lastAffectedCommitAuthor: latestCommit.authorName,
+              lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
             });
             continue;
           }
@@ -1723,7 +1739,7 @@ export const refreshRepositoryInternal = internalAction({
               lastAffectedCommitHash: latestCommit.sha,
               lastAffectedCommitTime: commitTime,
               lastAffectedCommitMessage: latestCommit.message,
-              lastAffectedCommitAuthor: latestCommit.authorName,
+              lastAffectedCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
             });
             continue;
           }
@@ -1752,7 +1768,7 @@ export const refreshRepositoryInternal = internalAction({
         id: args.repositoryId,
         lastCommitHash: latestCommit.sha,
         lastCommitTime: commitTime,
-        lastCommitAuthor: latestCommit.authorName,
+        lastCommitAuthor: getCommitAuthor(latestCommit, repository.lastCommitAuthor),
         lastSyncedAt: Date.now(),
         syncStatus: "idle",
         attemptId,
