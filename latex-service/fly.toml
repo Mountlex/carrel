@@ -19,11 +19,11 @@ primary_region = 'fra'
   # Concurrency limits for load balancing between machines
   # soft_limit: Fly starts routing to other machines when this is reached
   # hard_limit: Fly won't send more than this to a single machine
-  # With 4 concurrent compiles + 20 queued, we set soft=8 to balance early
+  # Queue holds 2 running + 20 queued = 22 max requests per machine
   [http_service.concurrency]
     type = "requests"
-    hard_limit = 25
-    soft_limit = 8
+    hard_limit = 22
+    soft_limit = 10
 
 [[vm]]
   memory = '2gb'
