@@ -529,11 +529,13 @@ app.post("/git/refs", rateLimit, async (req, res) => {
       }
     }
 
+    const dateIsFallback = !commitDate;
     const responseData = {
       sha,
       defaultBranch,
       message: commitMessage,
       date: commitDate || new Date().toISOString(),
+      dateIsFallback,
       authorName,
       authorEmail,
     };

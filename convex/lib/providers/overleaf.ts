@@ -96,10 +96,13 @@ export class OverleafProvider implements GitProvider {
       };
     }
 
+    // Check if the service returned a fallback date, or if we need to use our own fallback
+    const dateIsFallback = data.dateIsFallback || !data.date;
     return {
       sha: data.sha,
       message: data.message || "Overleaf commit",
       date: data.date || new Date().toISOString(),
+      dateIsFallback,
       authorName: data.authorName,
       authorEmail: data.authorEmail,
     };

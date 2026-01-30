@@ -579,7 +579,7 @@ export const refreshRepository = action({
         if (!result.success) {
           console.log(`Sync attempt ${attemptId} was superseded`);
         }
-        return { updated: false, commitHash: latestCommit.sha };
+        return { updated: false, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // Validate attempt before expensive operations
@@ -589,7 +589,7 @@ export const refreshRepository = action({
       });
       if (!isStillValid) {
         console.log(`Sync attempt ${attemptId} was superseded before processing papers`);
-        return { updated: false, commitHash: latestCommit.sha, superseded: true };
+        return { updated: false, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // New commit detected - fetch changed files to efficiently check which papers are affected
@@ -773,10 +773,10 @@ export const refreshRepository = action({
 
       if (!result.success) {
         console.log(`Sync attempt ${attemptId} was superseded at final update`);
-        return { updated: true, commitHash: latestCommit.sha, superseded: true };
+        return { updated: true, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
-      return { updated: true, commitHash: latestCommit.sha };
+      return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
       // Release lock on failure (paper errors are tracked per paper, not on repository)
       await ctx.runMutation(internal.sync.releaseSyncLock, {
@@ -1111,7 +1111,7 @@ export const buildPaper = action({
       });
       if (!isStillValid) {
         console.log(`Build attempt ${attemptId} was superseded before paper build`);
-        return { updated: false, commitHash: latestCommit.sha, superseded: true };
+        return { updated: false, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // Check if PDF is already cached for this commit (skip if force=true)
@@ -1126,7 +1126,7 @@ export const buildPaper = action({
           status: "idle",
           attemptId,
         });
-        return { updated: false, commitHash: latestCommit.sha };
+        return { updated: false, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // Check if any dependency files actually changed (for compile source type)
@@ -1158,7 +1158,7 @@ export const buildPaper = action({
             status: "idle",
             attemptId,
           });
-          return { updated: false, commitHash: latestCommit.sha, reason: "dependencies_unchanged" };
+          return { updated: false, commitHash: latestCommit.sha, reason: "dependencies_unchanged", dateIsFallback: latestCommit.dateIsFallback };
         }
       }
 
@@ -1169,7 +1169,7 @@ export const buildPaper = action({
       });
       if (!isStillValidBeforeCompile) {
         console.log(`Build attempt ${attemptId} was superseded before compile/fetch`);
-        return { updated: false, commitHash: latestCommit.sha, superseded: true };
+        return { updated: false, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       let storageId: string;
@@ -1236,7 +1236,7 @@ export const buildPaper = action({
 
       if (!updateResult.success) {
         console.log(`Build attempt ${attemptId} was superseded at paper PDF update`);
-        return { updated: true, commitHash: latestCommit.sha, superseded: true };
+        return { updated: true, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // Generate thumbnail (non-blocking, errors are logged but don't fail build)
@@ -1249,7 +1249,7 @@ export const buildPaper = action({
         console.error("Thumbnail generation failed:", error);
       }
 
-      return { updated: true, commitHash: latestCommit.sha };
+      return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
       // Check if file was not found (deleted from repository)
       if (isFileNotFoundError(error)) {
@@ -1388,7 +1388,7 @@ export const buildPaperForMobile = internalAction({
           status: "idle",
           attemptId,
         });
-        return { updated: false, commitHash: latestCommit.sha };
+        return { updated: false, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       let storageId: string;
@@ -1448,7 +1448,7 @@ export const buildPaperForMobile = internalAction({
         console.error("Thumbnail generation failed:", error);
       }
 
-      return { updated: true, commitHash: latestCommit.sha };
+      return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
       // Check if file was not found (deleted from repository)
       if (isFileNotFoundError(error)) {
@@ -1560,7 +1560,7 @@ export const refreshRepositoryInternal = internalAction({
         if (!result.success) {
           console.log(`Sync attempt ${attemptId} was superseded`);
         }
-        return { updated: false, commitHash: latestCommit.sha };
+        return { updated: false, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // Validate attempt before expensive operations
@@ -1570,7 +1570,7 @@ export const refreshRepositoryInternal = internalAction({
       });
       if (!isStillValid) {
         console.log(`Sync attempt ${attemptId} was superseded before processing papers`);
-        return { updated: false, commitHash: latestCommit.sha, superseded: true };
+        return { updated: false, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
       // New commit detected - fetch changed files to efficiently check which papers are affected
@@ -1760,10 +1760,10 @@ export const refreshRepositoryInternal = internalAction({
 
       if (!result.success) {
         console.log(`Sync attempt ${attemptId} was superseded at final update`);
-        return { updated: true, commitHash: latestCommit.sha, superseded: true };
+        return { updated: true, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
-      return { updated: true, commitHash: latestCommit.sha };
+      return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
       // Release lock on failure
       await ctx.runMutation(internal.sync.releaseSyncLock, {
@@ -1830,6 +1830,7 @@ export const refreshAllRepositories = action({
     let updated = 0;
     let failed = 0;
     let skipped = 0;
+    let datesFallback = 0;
 
     for (const result of results) {
       if (result.status === "rejected") {
@@ -1837,8 +1838,13 @@ export const refreshAllRepositories = action({
         console.error("Repository refresh failed:", result.reason);
       } else if (result.value.skipped) {
         skipped++;
-      } else if (result.value.updated) {
-        updated++;
+      } else {
+        if (result.value.updated) {
+          updated++;
+        }
+        if (result.value.dateIsFallback) {
+          datesFallback++;
+        }
       }
     }
 
@@ -1848,6 +1854,7 @@ export const refreshAllRepositories = action({
       updated,
       failed,
       skipped: skipped + skippedDueToInterval,
+      datesFallback,
     };
   },
 });

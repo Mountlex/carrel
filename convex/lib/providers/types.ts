@@ -67,6 +67,8 @@ export interface CommitInfo {
   authorEmail?: string;
   /** If true, the SHA matches the known SHA (Overleaf optimization). */
   unchanged?: boolean;
+  /** If true, the date is a fallback (current time) because the actual commit date couldn't be fetched. */
+  dateIsFallback?: boolean;
 }
 
 /**

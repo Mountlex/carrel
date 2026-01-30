@@ -297,7 +297,10 @@ function RepositoriesPage() {
   const handleCheck = async (repoId: Id<"repositories">) => {
     setSyncingRepoId(repoId);
     try {
-      await refreshRepository({ repositoryId: repoId });
+      const result = await refreshRepository({ repositoryId: repoId });
+      if (result?.dateIsFallback) {
+        showToast("Commit time could not be fetched from Overleaf", "info");
+      }
     } catch (error) {
       console.error("Failed to check repository:", error);
       if (!handleGitLabAuthError(error)) {
@@ -415,6 +418,8 @@ function RepositoriesPage() {
       const result = await refreshAllRepositories({});
       if (result.failed > 0) {
         showToast(`${result.failed} ${result.failed === 1 ? "repository" : "repositories"} failed to check`, "error");
+      } else if (result.datesFallback && result.datesFallback > 0) {
+        showToast(`Commit times for ${result.datesFallback} Overleaf ${result.datesFallback === 1 ? "repository" : "repositories"} could not be fetched`, "info");
       } else if (result.checked === 0 && result.skipped > 0) {
         showToast("All repositories were recently checked", "info");
       }

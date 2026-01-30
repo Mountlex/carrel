@@ -456,10 +456,13 @@ export const fetchLatestCommitInternal = internalAction({
         };
       }
 
+      // Check if the date is a fallback from the provider, or if we need to use our own fallback
+      const dateIsFallback = commit.dateIsFallback || !commit.date;
       return {
         sha: commit.sha,
         message: commit.message,
         date: commit.date || new Date().toISOString(),
+        dateIsFallback,
         authorName: commit.authorName,
         authorEmail: commit.authorEmail,
       };
