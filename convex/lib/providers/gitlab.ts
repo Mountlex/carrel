@@ -155,31 +155,49 @@ export class GitLabProvider implements GitProvider {
     path?: string
   ): Promise<FileEntry[]> {
     const pid = this.projectId(owner, repo);
-    const params = new URLSearchParams({
-      ref: branch,
-      per_page: "100",
-    });
-    if (path) {
-      params.set("path", path);
+    const allFiles: FileEntry[] = [];
+    const perPage = 100;
+    let page = 1;
+
+    // Paginate through all results
+    while (true) {
+      const params = new URLSearchParams({
+        ref: branch,
+        per_page: String(perPage),
+        page: String(page),
+      });
+      if (path) {
+        params.set("path", path);
+      }
+
+      const response = await fetchWithTimeout(
+        `${this.baseUrl}/api/v4/projects/${pid}/repository/tree?${params}`,
+        { headers: this.headers() }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GitLab API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      const files = data.map((file: { name: string; path: string; type: string }) => ({
+        name: file.name,
+        path: file.path,
+        type: file.type === "tree" ? "dir" : "file",
+        size: undefined, // GitLab tree endpoint doesn't return size
+      }));
+
+      allFiles.push(...files);
+
+      // If we got fewer items than requested, we've reached the end
+      if (data.length < perPage) {
+        break;
+      }
+      page++;
     }
 
-    const response = await fetchWithTimeout(
-      `${this.baseUrl}/api/v4/projects/${pid}/repository/tree?${params}`,
-      { headers: this.headers() }
-    );
-
-    if (!response.ok) {
-      throw new Error(`GitLab API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    return data.map((file: { name: string; path: string; type: string }) => ({
-      name: file.name,
-      path: file.path,
-      type: file.type === "tree" ? "dir" : "file",
-      size: undefined, // GitLab tree endpoint doesn't return size
-    }));
+    return allFiles;
   }
 
   async fetchChangedFiles(

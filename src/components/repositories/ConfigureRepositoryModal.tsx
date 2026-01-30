@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { RepoFile, SelectedFile } from "./types";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -37,6 +37,11 @@ export function ConfigureRepositoryModal({
     [trackedFilePaths]
   );
 
+  // Cache for folder contents - persists for modal lifetime
+  const folderCache = useRef<Map<string, RepoFile[]>>(new Map());
+  // Track in-flight requests to prevent duplicates
+  const inFlightRequests = useRef<Set<string>>(new Set());
+
   const [currentPath, setCurrentPath] = useState("");
   const [repoFiles, setRepoFiles] = useState<RepoFile[] | null>(null);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
@@ -44,6 +49,20 @@ export function ConfigureRepositoryModal({
   const [isAddingFiles, setIsAddingFiles] = useState(false);
 
   const loadFiles = useCallback(async (path: string) => {
+    // Check cache first
+    const cached = folderCache.current.get(path);
+    if (cached) {
+      setRepoFiles(cached);
+      setCurrentPath(path);
+      return;
+    }
+
+    // Prevent duplicate requests for the same path
+    if (inFlightRequests.current.has(path)) {
+      return;
+    }
+
+    inFlightRequests.current.add(path);
     setIsLoadingFiles(true);
     try {
       const files = await listRepositoryFiles({
@@ -51,18 +70,24 @@ export function ConfigureRepositoryModal({
         path,
         branch: repo.defaultBranch,
       });
+      // Cache the results
+      folderCache.current.set(path, files);
       setRepoFiles(files);
       setCurrentPath(path);
     } catch (error) {
       console.error("Failed to load files:", error);
     } finally {
+      inFlightRequests.current.delete(path);
       setIsLoadingFiles(false);
     }
   }, [listRepositoryFiles, repo.gitUrl, repo.defaultBranch]);
 
+  // Clear cache when repo changes
   useEffect(() => {
+    folderCache.current.clear();
+    inFlightRequests.current.clear();
     loadFiles("");
-  }, [loadFiles]);
+  }, [repo._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigateToFolder = (path: string) => {
     loadFiles(path);
