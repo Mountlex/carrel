@@ -45,27 +45,7 @@ struct PaperCard: View {
     @ViewBuilder
     private var thumbnailView: some View {
         if let thumbnailUrl = paper.thumbnailUrl, let url = URL(string: thumbnailUrl) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(.quaternary)
-                        .overlay {
-                            ProgressView()
-                        }
-
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-
-                case .failure:
-                    placeholderView
-
-                @unknown default:
-                    placeholderView
-                }
-            }
+            CachedThumbnail(url: url)
         } else {
             placeholderView
         }
@@ -85,13 +65,59 @@ struct PaperCard: View {
         switch paper.status {
         case .synced:
             return .green
-        case .pending, .building:
+        case .pending:
             return .yellow
+        case .building:
+            return .blue
         case .error:
             return .red
-        case .unknown:
+        case .uploaded, .unknown:
             return .gray
         }
+    }
+}
+
+struct CachedThumbnail: View {
+    let url: URL
+    @State private var image: UIImage?
+    @State private var isLoading = true
+    @State private var loadFailed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else if isLoading {
+                Rectangle()
+                    .fill(.quaternary)
+                    .overlay {
+                        ProgressView()
+                    }
+            } else {
+                Rectangle()
+                    .fill(.quaternary)
+                    .overlay {
+                        Image(systemName: "doc.text")
+                            .font(.largeTitle)
+                            .foregroundStyle(.tertiary)
+                    }
+            }
+        }
+        .task {
+            await loadThumbnail()
+        }
+    }
+
+    private func loadThumbnail() async {
+        do {
+            let thumbnail = try await ThumbnailCache.shared.fetchThumbnail(from: url)
+            image = thumbnail
+        } catch {
+            loadFailed = true
+        }
+        isLoading = false
     }
 }
 

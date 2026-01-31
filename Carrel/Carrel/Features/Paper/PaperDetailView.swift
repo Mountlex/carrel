@@ -119,9 +119,15 @@ struct PaperDetailView: View {
 
                 Spacer()
 
-                if viewModel.isBuilding || viewModel.paper.compilationProgress != nil {
-                    ProgressView()
-                        .scaleEffect(0.8)
+                if viewModel.isBuilding || viewModel.paper.buildStatus == "building" {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text(viewModel.paper.compilationProgress ?? "Building...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 } else {
                     StatusBadge(status: viewModel.paper.status)
                 }
@@ -164,10 +170,10 @@ struct PDFViewerContainer: UIViewRepresentable {
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
 
-        // Load PDF asynchronously
+        // Load PDF asynchronously (with caching)
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let data = try await PDFCache.shared.fetchPDF(from: url)
                 if let document = PDFDocument(data: data) {
                     await MainActor.run {
                         pdfView.document = document

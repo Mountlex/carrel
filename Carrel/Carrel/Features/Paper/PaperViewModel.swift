@@ -14,7 +14,6 @@ final class PaperViewModel {
     private var client: ConvexClient {
         ConvexClient(baseURL: AuthManager.baseURL, authManager: authManager)
     }
-    private var pollingTask: Task<Void, Never>?
 
     init(paper: Paper, authManager: AuthManager) {
         self.paper = paper
@@ -35,37 +34,47 @@ final class PaperViewModel {
     func build(force: Bool = false) async {
         isBuilding = true
 
-        // Start polling for progress updates
-        pollingTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-                if Task.isCancelled { break }
-                do {
-                    let updatedPaper = try await client.paper(id: paper.id)
-                    await MainActor.run {
-                        paper = updatedPaper
-                    }
-                    // Stop polling if build completed (no longer building and no progress)
-                    if updatedPaper.compilationProgress == nil && updatedPaper.status != .building {
-                        break
-                    }
-                } catch {
-                    // Ignore polling errors
-                }
-            }
-        }
-
+        // Trigger the build (fire and forget - returns immediately)
         do {
             try await client.buildPaper(id: paper.id, force: force)
         } catch {
             self.error = error.localizedDescription
+            isBuilding = false
+            return
         }
 
-        // Stop polling and do final refresh
-        pollingTask?.cancel()
-        pollingTask = nil
-        await refresh()
+        // Poll for progress updates until build completes
+        var attempts = 0
+        let maxAttempts = 120 // 2 minutes max (120 * 1 second)
+
+        while attempts < maxAttempts {
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            attempts += 1
+
+            do {
+                let updatedPaper = try await client.paper(id: paper.id)
+                paper = updatedPaper
+
+                // Stop polling if build completed
+                if updatedPaper.buildStatus != "building" && updatedPaper.compilationProgress == nil {
+                    break
+                }
+            } catch {
+                // Ignore polling errors, keep trying
+            }
+        }
+
         isBuilding = false
+
+        // Trigger haptic based on final status
+        switch paper.status {
+        case .synced:
+            HapticManager.buildSuccess()
+        case .error:
+            HapticManager.buildError()
+        default:
+            break
+        }
     }
 
     func updateMetadata(title: String?, authors: String?) async {

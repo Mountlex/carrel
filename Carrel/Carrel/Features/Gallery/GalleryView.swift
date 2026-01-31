@@ -4,6 +4,7 @@ struct GalleryView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var viewModel: GalleryViewModel?
     @State private var selectedPaper: Paper?
+    @State private var refreshRotation: Double = 0
 
     private let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)
@@ -18,7 +19,6 @@ struct GalleryView: View {
             }
         }
         .navigationTitle("Papers")
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if viewModel?.isLoading == true && viewModel?.isRefreshing == false {
@@ -93,6 +93,12 @@ struct GalleryView: View {
             .refreshable {
                 await viewModel.refresh()
             }
+            .overlay(alignment: .top) {
+                if viewModel.isRefreshing {
+                    RefreshIndicator(rotation: $refreshRotation)
+                        .padding(.top, 60)
+                }
+            }
         }
     }
 
@@ -102,6 +108,26 @@ struct GalleryView: View {
         } description: {
             Text("Add repositories on the web to see your papers here.")
         }
+    }
+}
+
+struct RefreshIndicator: View {
+    @Binding var rotation: Double
+
+    var body: some View {
+        Image(systemName: "arrow.clockwise")
+            .font(.title2)
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+            .onDisappear {
+                rotation = 0
+            }
+            .padding(12)
+            .glassEffect(.regular, in: Circle())
     }
 }
 

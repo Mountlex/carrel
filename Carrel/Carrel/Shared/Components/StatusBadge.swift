@@ -32,12 +32,12 @@ struct StatusBadge: View {
         case .synced:
             return .green
         case .pending:
-            return .orange
+            return .yellow
         case .building:
             return .blue
         case .error:
             return .red
-        case .unknown:
+        case .uploaded, .unknown:
             return .gray
         }
     }
@@ -52,6 +52,8 @@ struct StatusBadge: View {
             return "Building"
         case .error:
             return "Error"
+        case .uploaded:
+            return "Uploaded"
         case .unknown:
             return "Unknown"
         }
@@ -64,6 +66,7 @@ struct StatusBadge: View {
         StatusBadge(status: .pending)
         StatusBadge(status: .building)
         StatusBadge(status: .error)
+        StatusBadge(status: .uploaded)
         StatusBadge(status: .unknown)
     }
     .padding()

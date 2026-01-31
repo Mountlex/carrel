@@ -20,13 +20,13 @@ struct Paper: Codable, Identifiable, Equatable {
     let createdAt: Date
     let updatedAt: Date
 
-    // Derive status from isUpToDate and buildStatus (matches Android logic)
+    // Derive status from isUpToDate, buildStatus, and lastSyncError (matches web app)
     var status: PaperStatus {
         if buildStatus == "building" { return .building }
-        if buildStatus == "error" { return .error }
-        if buildStatus == "pending" { return .pending }
+        if let error = lastSyncError, !error.isEmpty { return .error }
         if isUpToDate == true { return .synced }
         if isUpToDate == false { return .pending }
+        if isUpToDate == nil { return .uploaded }
         return .unknown
     }
 
@@ -105,6 +105,7 @@ enum PaperStatus: String, Codable {
     case pending
     case building
     case error
+    case uploaded
     case unknown
 
     init(from decoder: Decoder) throws {

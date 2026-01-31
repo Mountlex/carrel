@@ -4,6 +4,8 @@ struct SettingsView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var viewModel: SettingsViewModel?
     @State private var showingLogoutConfirmation = false
+    @State private var pdfCacheSize: Int64 = 0
+    @State private var thumbnailCacheSize: Int64 = 0
 
     var body: some View {
         Group {
@@ -19,6 +21,8 @@ struct SettingsView: View {
                 viewModel = SettingsViewModel(authManager: authManager)
             }
             await viewModel?.loadUser()
+            pdfCacheSize = await PDFCache.shared.cacheSize()
+            thumbnailCacheSize = await ThumbnailCache.shared.cacheSize()
         }
     }
 
@@ -77,6 +81,22 @@ struct SettingsView: View {
                     Text("Failed to load user")
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // Storage section
+            Section("Storage") {
+                LabeledContent("PDF Cache", value: formatBytes(pdfCacheSize))
+                LabeledContent("Thumbnail Cache", value: formatBytes(thumbnailCacheSize))
+
+                Button("Clear All Caches") {
+                    Task {
+                        await PDFCache.shared.clearCache()
+                        await ThumbnailCache.shared.clearCache()
+                        pdfCacheSize = 0
+                        thumbnailCacheSize = 0
+                    }
+                }
+                .disabled(pdfCacheSize == 0 && thumbnailCacheSize == 0)
             }
 
             // About section
@@ -183,6 +203,13 @@ extension Bundle {
     var buildNumber: String {
         infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
+}
+
+private func formatBytes(_ bytes: Int64) -> String {
+    if bytes == 0 { return "0 MB" }
+    let mb = Double(bytes) / (1024 * 1024)
+    if mb < 0.1 { return "<0.1 MB" }
+    return String(format: "%.1f MB", mb)
 }
 
 #Preview {

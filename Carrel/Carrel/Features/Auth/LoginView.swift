@@ -8,33 +8,26 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.15, blue: 0.25)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            // Background
+            Color(uiColor: .systemBackground)
+                .ignoresSafeArea()
 
             VStack(spacing: 40) {
                 Spacer()
 
-                // Logo and title with glass backing
+                // Logo and title
                 VStack(spacing: 16) {
                     Image(systemName: "doc.text.fill")
                         .font(.system(size: 64))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
 
                     Text("Carrel")
                         .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
 
                     Text("Your paper gallery")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -55,13 +48,13 @@ struct LoginView: View {
                         // Divider
                         HStack {
                             Rectangle()
-                                .fill(.white.opacity(0.3))
+                                .fill(.secondary.opacity(0.3))
                                 .frame(height: 1)
                             Text("or")
                                 .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(.secondary)
                             Rectangle()
-                                .fill(.white.opacity(0.3))
+                                .fill(.secondary.opacity(0.3))
                                 .frame(height: 1)
                         }
 
@@ -80,7 +73,7 @@ struct LoginView: View {
                             .padding(.vertical, 16)
                         }
                         .buttonStyle(.liquidGlass)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                     }
                 }
                 .padding(.horizontal, 32)
@@ -127,7 +120,7 @@ struct SignInButton: View {
             .padding(.vertical, 16)
         }
         .buttonStyle(.liquidGlass)
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
     }
 }
 
