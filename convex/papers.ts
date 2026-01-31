@@ -171,7 +171,10 @@ export const listForMobile = internalQuery({
       lastSyncError: paper.lastSyncError,
       pdfSourceType: trackedFile?.pdfSourceType ?? null,
       lastAffectedCommitTime: paper.lastAffectedCommitTime,
+      lastAffectedCommitAuthor: paper.lastAffectedCommitAuthor,
       updatedAt: paper.updatedAt,
+      isPublic: paper.isPublic,
+      createdAt: paper._creationTime,
     }));
 
     return sortPapersByTime(enrichedPapers);
@@ -216,6 +219,11 @@ export const getForMobile = internalQuery({
       buildStatus: paper.buildStatus,
       compilationProgress: paper.compilationProgress,
       lastSyncError: paper.lastSyncError,
+      lastAffectedCommitTime: paper.lastAffectedCommitTime,
+      lastAffectedCommitAuthor: paper.lastAffectedCommitAuthor,
+      isPublic: paper.isPublic,
+      createdAt: paper._creationTime,
+      updatedAt: paper.updatedAt,
       trackedFile: trackedFile
         ? { pdfSourceType: trackedFile.pdfSourceType, compiler }
         : null,
