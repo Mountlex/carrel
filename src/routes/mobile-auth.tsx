@@ -90,8 +90,8 @@ function MobileAuthPage() {
     }, 500);
   };
 
-  // Show redirecting state
-  if (isRedirecting || (isAuthenticated && !error)) {
+  // Show redirecting state - only when token is ready
+  if (isRedirecting || (isAuthenticated && authToken && !error)) {
     return (
       <MobileAuthLayout>
         <div className="flex flex-col items-center">

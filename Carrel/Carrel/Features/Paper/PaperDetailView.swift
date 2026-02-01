@@ -1,5 +1,6 @@
 import SwiftUI
 import PDFKit
+import Combine
 
 struct PaperDetailView: View {
     @State private var viewModel: PaperViewModel
@@ -7,6 +8,7 @@ struct PaperDetailView: View {
     @State private var showingEditSheet = false
     @State private var shareFileURL: URL?
     @State private var isPreparingShare = false
+    @State private var subscriptionTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
 
     init(paper: Paper) {
@@ -124,6 +126,30 @@ struct PaperDetailView: View {
             }
         } message: {
             Text(viewModel.error ?? "Unknown error")
+        }
+        .task {
+            await startSubscription()
+        }
+        .onDisappear {
+            subscriptionTask?.cancel()
+            subscriptionTask = nil
+        }
+    }
+
+    private func startSubscription() async {
+        let paperId = viewModel.paper.id
+        subscriptionTask = Task {
+            do {
+                let publisher = ConvexService.shared.subscribeToPaper(id: paperId)
+                for try await updatedPaper in publisher.values {
+                    guard !Task.isCancelled else { break }
+                    viewModel.onPaperUpdate(updatedPaper)
+                }
+            } catch {
+                if !Task.isCancelled {
+                    print("PaperDetailView: Subscription error: \(error)")
+                }
+            }
         }
     }
 
