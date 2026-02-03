@@ -60,6 +60,54 @@ struct GlassButton<Label: View>: View {
     }
 }
 
+enum GlassTheme {
+    static let rowCornerRadius: CGFloat = 12
+    static let rowPadding: CGFloat = 12
+    static let bannerCornerRadius: CGFloat = 12
+
+    static var rowShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous)
+    }
+
+    static var bannerShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: bannerCornerRadius, style: .continuous)
+    }
+}
+
+struct GlassBackdrop: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(.systemBackground),
+                Color(.systemGray6)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+}
+
+struct GlassRow<Content: View>: View {
+    let isInteractive: Bool
+    let content: Content
+
+    init(isInteractive: Bool = false, @ViewBuilder content: () -> Content) {
+        self.isInteractive = isInteractive
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(GlassTheme.rowPadding)
+            .glassEffect(
+                isInteractive ? .regular.interactive() : .regular,
+                in: GlassTheme.rowShape
+            )
+    }
+}
+
 #Preview {
     VStack(spacing: 20) {
         GlassCard {

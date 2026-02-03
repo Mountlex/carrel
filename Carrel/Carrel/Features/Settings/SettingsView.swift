@@ -8,11 +8,14 @@ struct SettingsView: View {
     @State private var thumbnailCacheSize: Int64 = 0
 
     var body: some View {
-        Group {
-            if let viewModel = viewModel {
-                settingsContent(viewModel: viewModel)
-            } else {
-                ProgressView()
+        ZStack {
+            GlassBackdrop()
+            Group {
+                if let viewModel = viewModel {
+                    settingsContent(viewModel: viewModel)
+                } else {
+                    ProgressView()
+                }
             }
         }
         .navigationTitle("Settings")
@@ -32,75 +35,91 @@ struct SettingsView: View {
             // Account section
             Section("Account") {
                 if let user = viewModel.user {
-                    HStack(spacing: 16) {
-                        // Avatar
-                        if let imageUrl = user.image, let url = URL(string: imageUrl) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                default:
-                                    avatarPlaceholder
+                    glassRow {
+                        HStack(spacing: 16) {
+                            // Avatar
+                            if let imageUrl = user.image, let url = URL(string: imageUrl) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    default:
+                                        avatarPlaceholder
+                                    }
                                 }
-                            }
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                        } else {
-                            avatarPlaceholder
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let name = user.name {
-                                Text(name)
-                                    .font(.headline)
+                                .frame(width: 56, height: 56)
+                                .clipShape(Circle())
+                            } else {
+                                avatarPlaceholder
                             }
 
-                            if let email = user.email {
-                                Text(email)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let name = user.name {
+                                    Text(name)
+                                        .font(.headline)
+                                }
 
-                            // Show connected providers
-                            HStack(spacing: 4) {
-                                if user.hasGitHubToken == true {
-                                    ProviderBadge(provider: "github")
+                                if let email = user.email {
+                                    Text(email)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
                                 }
-                                if user.hasGitLabToken == true {
-                                    ProviderBadge(provider: "gitlab")
-                                }
-                                if user.hasOverleafCredentials == true {
-                                    ProviderBadge(provider: "overleaf")
+
+                                // Show connected providers
+                                HStack(spacing: 4) {
+                                    if user.hasGitHubToken == true {
+                                        ProviderBadge(provider: "github")
+                                    }
+                                    if user.hasGitLabToken == true {
+                                        ProviderBadge(provider: "gitlab")
+                                    }
+                                    if user.hasOverleafCredentials == true {
+                                        ProviderBadge(provider: "overleaf")
+                                    }
                                 }
                             }
                         }
                     }
-                    .padding(.vertical, 8)
                 } else if viewModel.isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
+                    glassRow {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
                     }
                 } else {
-                    Text("Failed to load user")
-                        .foregroundStyle(.secondary)
+                    glassRow {
+                        Text("Failed to load user")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
             // Storage section
             Section("Storage") {
-                LabeledContent("PDF Cache", value: formatBytes(pdfCacheSize))
-                LabeledContent("Thumbnail Cache", value: formatBytes(thumbnailCacheSize))
+                glassRow {
+                    LabeledContent("PDF Cache", value: formatBytes(pdfCacheSize))
+                }
 
-                Button("Clear All Caches") {
+                glassRow {
+                    LabeledContent("Thumbnail Cache", value: formatBytes(thumbnailCacheSize))
+                }
+
+                glassButtonRow {
                     Task {
                         await PDFCache.shared.clearCache()
                         await ThumbnailCache.shared.clearCache()
                         pdfCacheSize = 0
                         thumbnailCacheSize = 0
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Clear All Caches")
+                        Spacer()
                     }
                 }
                 .disabled(pdfCacheSize == 0 && thumbnailCacheSize == 0)
@@ -109,36 +128,49 @@ struct SettingsView: View {
 
             // About section
             Section("About") {
-                LabeledContent("Version", value: Bundle.main.appVersionString)
-                LabeledContent("Build", value: Bundle.main.buildNumber)
+                glassRow {
+                    LabeledContent("Version", value: Bundle.main.appVersionString)
+                }
+
+                glassRow {
+                    LabeledContent("Build", value: Bundle.main.buildNumber)
+                }
 
                 if let websiteURL = URL(string: "https://carrelapp.com") {
                     Link(destination: websiteURL) {
-                        HStack {
-                            Text("Website")
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                        GlassRow(isInteractive: true) {
+                            HStack {
+                                Text("Website")
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
 
             // Sign out
             Section {
-                Button(role: .destructive) {
+                glassButtonRow(role: .destructive) {
                     showingLogoutConfirmation = true
                 } label: {
                     HStack {
                         Spacer()
                         Text("Sign Out")
+                            .foregroundStyle(.red)
                         Spacer()
                     }
                 }
                 .accessibilityHint("Sign out of your account")
             }
         }
+        .scrollContentBackground(.hidden)
+        .listStyle(.plain)
         .alert(
             "Sign Out",
             isPresented: $showingLogoutConfirmation
@@ -159,6 +191,31 @@ struct SettingsView: View {
         } message: {
             Text(viewModel.error ?? "Unknown error")
         }
+    }
+
+    private func glassRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        GlassRow {
+            content()
+        }
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private func glassButtonRow<Content: View>(
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Content
+    ) -> some View {
+        Button(role: role, action: action) {
+            GlassRow(isInteractive: true) {
+                label()
+            }
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private var avatarPlaceholder: some View {

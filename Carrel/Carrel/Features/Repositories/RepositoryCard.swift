@@ -127,9 +127,9 @@ struct RepositoryCard: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(statusColor.opacity(0.15))
+        .glassEffect(
+            .regular.tint(statusColor.opacity(0.25)),
+            in: Capsule()
         )
         .foregroundStyle(statusColor)
     }

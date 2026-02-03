@@ -126,14 +126,15 @@ struct AddPaperFromRepoView: View {
                             await viewModel.navigateUp()
                         }
                     } label: {
-                        FileRow(
-                            icon: "arrow.left",
-                            iconColor: .secondary,
-                            name: "..",
-                            isTracked: false
-                        )
-                    }
-                    .buttonStyle(.plain)
+                            FileRow(
+                                icon: "arrow.left",
+                                iconColor: .secondary,
+                                name: "..",
+                                isTracked: false,
+                                isInteractive: true
+                            )
+                        }
+                        .buttonStyle(.plain)
                 }
 
                 ForEach(viewModel.files) { file in
@@ -147,7 +148,8 @@ struct AddPaperFromRepoView: View {
                                 icon: "folder.fill",
                                 iconColor: .blue,
                                 name: file.name,
-                                isTracked: false
+                                isTracked: false,
+                                isInteractive: true
                             )
                         }
                         .buttonStyle(.plain)
@@ -159,7 +161,8 @@ struct AddPaperFromRepoView: View {
                                 icon: file.isTexFile ? "doc.text.fill" : "doc.fill",
                                 iconColor: .secondary,
                                 name: file.name,
-                                isTracked: true
+                                isTracked: true,
+                                isInteractive: false
                             )
                         } else {
                             Button {
@@ -169,7 +172,8 @@ struct AddPaperFromRepoView: View {
                                     icon: file.isTexFile ? "doc.text.fill" : "doc.fill",
                                     iconColor: file.isTexFile ? .green : .red,
                                     name: file.name,
-                                    isTracked: false
+                                    isTracked: false,
+                                    isInteractive: true
                                 )
                             }
                             .buttonStyle(.plain)
@@ -197,33 +201,30 @@ private struct FileRow: View {
     let iconColor: Color
     let name: String
     let isTracked: Bool
+    let isInteractive: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(iconColor)
-                .frame(width: 24)
+        GlassRow(isInteractive: isInteractive) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(iconColor)
+                    .frame(width: 24)
 
-            Text(name)
-                .font(.body)
-                .lineLimit(1)
-                .foregroundStyle(isTracked ? .secondary : .primary)
-
-            Spacer()
-
-            if isTracked {
-                Image(systemName: "checkmark.circle.fill")
+                Text(name)
                     .font(.body)
-                    .foregroundStyle(.green)
+                    .lineLimit(1)
+                    .foregroundStyle(isTracked ? .secondary : .primary)
+
+                Spacer()
+
+                if isTracked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.body)
+                        .foregroundStyle(.green)
+                }
             }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.systemGray6))
-        )
     }
 }
 

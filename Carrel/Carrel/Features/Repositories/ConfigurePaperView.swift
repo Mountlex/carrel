@@ -36,61 +36,65 @@ struct ConfigurePaperSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                // File info section
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: isTexFile ? "doc.text.fill" : "doc.fill")
-                            .font(.title2)
-                            .foregroundStyle(isTexFile ? .green : .red)
+            ZStack {
+                GlassBackdrop()
+                Form {
+                    // File info section
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: isTexFile ? "doc.text.fill" : "doc.fill")
+                                .font(.title2)
+                                .foregroundStyle(isTexFile ? .green : .red)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(filePath.split(separator: "/").last.map(String.init) ?? filePath)
-                                .font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(filePath.split(separator: "/").last.map(String.init) ?? filePath)
+                                    .font(.headline)
 
-                            Text(filePath)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                Text(filePath)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
-                }
 
-                // Configuration section
-                Section("Paper Details") {
-                    TextField("Title", text: $title)
+                    // Configuration section
+                    Section("Paper Details") {
+                        TextField("Title", text: $title)
 
-                    if isTexFile {
-                        Picker("Compiler", selection: $compiler) {
-                            ForEach(Compiler.allCases) { compiler in
-                                Text(compiler.displayName).tag(compiler)
+                        if isTexFile {
+                            Picker("Compiler", selection: $compiler) {
+                                ForEach(Compiler.allCases) { compiler in
+                                    Text(compiler.displayName).tag(compiler)
+                                }
                             }
                         }
                     }
-                }
 
-                // Add button section
-                Section {
-                    Button {
-                        Task {
-                            await addPaper()
-                        }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isAdding {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .padding(.trailing, 8)
+                    // Add button section
+                    Section {
+                        Button {
+                            Task {
+                                await addPaper()
                             }
-                            Text(isAdding ? "Adding..." : "Add Paper")
-                                .fontWeight(.semibold)
-                            Spacer()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isAdding {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .padding(.trailing, 8)
+                                }
+                                Text(isAdding ? "Adding..." : "Add Paper")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                            }
                         }
+                        .disabled(!canAddPaper)
                     }
-                    .disabled(!canAddPaper)
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Add Paper")
             .navigationBarTitleDisplayMode(.inline)

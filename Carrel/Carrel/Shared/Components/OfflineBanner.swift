@@ -13,8 +13,13 @@ struct OfflineBanner: View {
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(Color.orange)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .glassEffect(
+            .regular.tint(Color.orange.opacity(0.35)),
+            in: GlassTheme.bannerShape
+        )
+        .padding(.horizontal, 12)
     }
 }
 
