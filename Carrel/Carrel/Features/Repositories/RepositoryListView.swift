@@ -359,17 +359,6 @@ private enum RepoCacheSelection: String, CaseIterable, Identifiable {
         }
     }
 
-    var mode: LatexCacheMode? {
-        switch self {
-        case .inherit:
-            return nil
-        case .off:
-            return .off
-        case .aux:
-            return .aux
-        }
-    }
-
     static func from(mode: LatexCacheMode?) -> RepoCacheSelection {
         guard let mode else { return .inherit }
         return mode == .aux ? .aux : .off
@@ -391,17 +380,6 @@ private enum RepoBackgroundRefreshSelection: String, CaseIterable, Identifiable 
             return "Off"
         case .on:
             return "On"
-        }
-    }
-
-    var mode: Bool? {
-        switch self {
-        case .inherit:
-            return nil
-        case .off:
-            return false
-        case .on:
-            return true
         }
     }
 
