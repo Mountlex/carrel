@@ -7,6 +7,7 @@ import { auth } from "./auth";
 import { sleep, type DependencyHash } from "./lib/http";
 import { isFileNotFoundError } from "./lib/providers/types";
 import { getUserRateLimitConfig, type UserRateLimitAction } from "./lib/rateLimit";
+import { resolveBackgroundRefreshEnabled, resolveCacheMode } from "./lib/settings";
 
 // Minimum time between update notifications for the same out-of-sync paper
 const UPDATE_NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000;
@@ -847,6 +848,7 @@ export const updatePaperPdfWithBuildLock = internalMutation({
       path: v.string(),
       hash: v.string(),
     }))),
+    cachedDependencyPaths: v.optional(v.array(v.string())),
     cachedPdfBlobHash: v.optional(v.string()),
     attemptId: v.optional(v.string()),
     lastAffectedCommitHash: v.optional(v.string()),
@@ -893,6 +895,7 @@ export const updatePaperPdfWithBuildLock = internalMutation({
       cachedCommitHash: args.cachedCommitHash,
       fileSize: args.fileSize,
       cachedDependencies: args.cachedDependencies,
+      cachedDependencyPaths: args.cachedDependencyPaths,
       cachedPdfBlobHash: args.cachedPdfBlobHash,
       needsSync: false,
       needsSyncSetAt: undefined,
@@ -1192,6 +1195,18 @@ export const buildPaper = action({
       throw new Error("Invalid paper configuration");
     }
 
+    const userCacheMode = await ctx.runQuery(internal.users.getUserCacheModeInternal, {
+      userId: repository.userId,
+    });
+    const userCacheAllowed = await ctx.runQuery(internal.users.getUserCacheAllowedInternal, {
+      userId: repository.userId,
+    });
+    const cacheMode = resolveCacheMode({
+      repoCacheMode: repository.latexCacheMode,
+      userCacheMode: userCacheMode,
+      cacheAllowed: userCacheAllowed ?? true,
+    });
+
     // Try to acquire paper-level build lock (allows concurrent builds of different papers)
     const lockResult = await ctx.runMutation(internal.sync.tryAcquireBuildLock, {
       id: args.paperId,
@@ -1301,6 +1316,7 @@ export const buildPaper = action({
       let storageId: string;
       let fileSize: number;
       let dependencies: Array<{ path: string; hash: string }> | undefined;
+      let dependencyPaths: string[] | undefined;
       let pdfBlobHash: string | undefined;
 
       if (trackedFile.pdfSourceType === "compile") {
@@ -1311,10 +1327,15 @@ export const buildPaper = action({
           branch: repository.defaultBranch,
           paperId: args.paperId,
           compiler: trackedFile.compiler ?? "pdflatex",
+          cacheMode,
+          knownDependencies: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),
+          previousDependencyPaths: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),
+          previousDependencyHashes: paper.cachedDependencies,
         });
         storageId = result.storageId;
         fileSize = result.size;
         dependencies = result.dependencies;
+        dependencyPaths = result.dependencyPaths;
       } else {
         // Fetch committed PDF and store directly to Convex storage
         const result = await ctx.runAction(internal.git.fetchAndStoreFileInternal, {
@@ -1349,6 +1370,7 @@ export const buildPaper = action({
         cachedCommitHash: latestCommit.sha,
         fileSize,
         cachedDependencies: dependencies,
+        cachedDependencyPaths: dependencyPaths,
         cachedPdfBlobHash: pdfBlobHash,
         attemptId,
         lastAffectedCommitHash: latestCommit.sha,
@@ -1479,6 +1501,18 @@ export const buildPaperForMobile = internalAction({
     const trackedFile = await ctx.runQuery(internal.git.getTrackedFile, { id: paper.trackedFileId });
     if (!trackedFile) throw new Error("Tracked file not found");
 
+    const userCacheMode = await ctx.runQuery(internal.users.getUserCacheModeInternal, {
+      userId,
+    });
+    const userCacheAllowed = await ctx.runQuery(internal.users.getUserCacheAllowedInternal, {
+      userId,
+    });
+    const cacheMode = resolveCacheMode({
+      repoCacheMode: repository.latexCacheMode,
+      userCacheMode: userCacheMode,
+      cacheAllowed: userCacheAllowed ?? true,
+    });
+
     // Try to acquire build lock
     const lockResult = await ctx.runMutation(internal.sync.tryAcquireBuildLock, {
       id: paperId,
@@ -1541,10 +1575,15 @@ export const buildPaperForMobile = internalAction({
           paperId: paperId,
           userId, // Pass userId for mobile auth
           compiler: trackedFile.compiler ?? "pdflatex",
+          cacheMode,
+          knownDependencies: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),
+          previousDependencyPaths: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),
+          previousDependencyHashes: paper.cachedDependencies,
         });
         storageId = result.storageId;
         fileSize = result.size;
         dependencies = result.dependencies;
+        dependencyPaths = result.dependencyPaths;
       } else {
         // Fetch committed PDF and store directly to Convex storage
         const result = await ctx.runAction(internal.git.fetchAndStoreFileInternal, {
@@ -1566,6 +1605,7 @@ export const buildPaperForMobile = internalAction({
         cachedCommitHash: latestCommit.sha,
         fileSize,
         cachedDependencies: dependencies,
+        cachedDependencyPaths: dependencyPaths,
         attemptId,
         lastAffectedCommitHash: latestCommit.sha,
         lastAffectedCommitTime: commitTime,
@@ -1645,10 +1685,8 @@ export const getUserRepositories = internalQuery({
 export const listBackgroundRefreshRepositories = internalQuery({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db
-      .query("repositories")
-      .withIndex("by_background_refresh", (q) => q.eq("backgroundRefreshEnabled", true))
-      .collect();
+    const repositories = await ctx.db.query("repositories").collect();
+    return repositories.filter((repo) => repo.backgroundRefreshEnabled !== false);
   },
 });
 
@@ -2137,8 +2175,16 @@ export const backgroundRefreshForUser = internalAction({
       userId: args.userId,
     });
 
+    const backgroundRefreshDefault = await ctx.runQuery(
+      internal.users.getBackgroundRefreshDefaultInternal,
+      { userId: args.userId }
+    );
+
     const enabledRepos = repositories.filter((repo: Doc<"repositories">) =>
-      repo.backgroundRefreshEnabled === true
+      resolveBackgroundRefreshEnabled({
+        repoSetting: repo.backgroundRefreshEnabled,
+        userDefault: backgroundRefreshDefault,
+      })
     );
 
     if (enabledRepos.length === 0) {

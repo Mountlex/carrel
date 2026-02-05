@@ -338,20 +338,49 @@ function RepositoriesPage() {
     }
   };
 
-  const handleToggleBackgroundRefresh = async (
+  const handleUpdateBackgroundRefresh = async (
     repoId: Id<"repositories">,
-    enabled: boolean
+    mode: boolean | null
   ): Promise<boolean> => {
     try {
-      await updateRepository({ id: repoId, backgroundRefreshEnabled: enabled });
-      showToast(
-        enabled ? "Background refresh enabled" : "Background refresh disabled",
-        "info"
-      );
+      await updateRepository({
+        id: repoId,
+        backgroundRefreshEnabled: mode === null ? null : mode,
+      });
+      if (mode === null) {
+        showToast("Background refresh set to default", "info");
+      } else {
+        showToast(
+          mode ? "Background refresh enabled" : "Background refresh disabled",
+          "info"
+        );
+      }
       return true;
     } catch (error) {
       console.error("Failed to update background refresh:", error);
       showError(error, "Failed to update background refresh");
+      return false;
+    }
+  };
+
+  const handleUpdateCacheMode = async (
+    repoId: Id<"repositories">,
+    mode: "off" | "aux" | null
+  ): Promise<boolean> => {
+    try {
+      await updateRepository({ id: repoId, latexCacheMode: mode === null ? null : mode });
+      if (mode === null) {
+        showToast("Compilation cache set to default", "info");
+      } else {
+        showToast(
+          mode === "aux" ? "Compilation cache enabled" : "Compilation cache disabled",
+          "info"
+        );
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to update compilation cache:", error);
+      showError(error, "Failed to update compilation cache");
       return false;
     }
   };
@@ -473,7 +502,8 @@ function RepositoriesPage() {
       syncStatus: repo.syncStatus,
       paperSyncStatus: repo.paperSyncStatus,
       papersWithErrors: repo.papersWithErrors,
-      backgroundRefreshEnabled: repo.backgroundRefreshEnabled,
+      backgroundRefreshEnabled: repo.backgroundRefreshEnabled ?? null,
+      latexCacheMode: repo.latexCacheMode,
     }));
   }, [repositories]);
 
@@ -502,7 +532,7 @@ function RepositoriesPage() {
         <div className="flex max-w-xl flex-col gap-1">
           <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">Repositories</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Background refresh checks enabled repositories every 5 minutes. Toggle it per repo to keep statuses up to date.
+            Background refresh checks repositories every 5 minutes when allowed in Profile. Each repo can use the default or override.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -577,7 +607,8 @@ function RepositoriesPage() {
               onDelete={() => handleDelete(repo._id)}
               onConfigure={() => setConfigureRepo(repo)}
               onUpdateName={handleUpdateName}
-              onToggleBackgroundRefresh={handleToggleBackgroundRefresh}
+              onUpdateBackgroundRefresh={handleUpdateBackgroundRefresh}
+              onUpdateCacheMode={handleUpdateCacheMode}
             />
           ))}
         </div>

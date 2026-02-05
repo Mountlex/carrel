@@ -11,7 +11,8 @@ interface RepositoryCardProps {
   onDelete: (repoId: Id<"repositories">) => void;
   onConfigure: (repo: Repository) => void;
   onUpdateName: (repoId: Id<"repositories">, name: string) => Promise<void>;
-  onToggleBackgroundRefresh: (repoId: Id<"repositories">, enabled: boolean) => Promise<boolean>;
+  onUpdateBackgroundRefresh: (repoId: Id<"repositories">, mode: boolean | null) => Promise<boolean>;
+  onUpdateCacheMode: (repoId: Id<"repositories">, mode: "off" | "aux" | null) => Promise<boolean>;
 }
 
 // Use shorter label for selfhosted-gitlab in card context
@@ -76,21 +77,29 @@ export function RepositoryCard({
   onDelete,
   onConfigure,
   onUpdateName,
-  onToggleBackgroundRefresh,
+  onUpdateBackgroundRefresh,
+  onUpdateCacheMode,
 }: RepositoryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(repo.name);
-  const [isTogglingBackground, setIsTogglingBackground] = useState(false);
-  const [backgroundRefreshEnabled, setBackgroundRefreshEnabled] = useState(
-    Boolean(repo.backgroundRefreshEnabled)
+  const [isUpdatingBackground, setIsUpdatingBackground] = useState(false);
+  const [isUpdatingCache, setIsUpdatingCache] = useState(false);
+  const [backgroundRefreshMode, setBackgroundRefreshMode] = useState<boolean | null>(
+    repo.backgroundRefreshEnabled ?? null
+  );
+  const [cacheMode, setCacheMode] = useState<"off" | "aux" | null>(
+    repo.latexCacheMode ?? null
   );
   const lastCheckedLabel = repo.lastSyncedAt
     ? `Checked ${formatDateTime(repo.lastSyncedAt)}`
     : "Not checked yet";
+  const backgroundRefreshValue =
+    backgroundRefreshMode === null ? "inherit" : backgroundRefreshMode ? "on" : "off";
 
   useEffect(() => {
-    setBackgroundRefreshEnabled(Boolean(repo.backgroundRefreshEnabled));
-  }, [repo.backgroundRefreshEnabled]);
+    setBackgroundRefreshMode(repo.backgroundRefreshEnabled ?? null);
+    setCacheMode(repo.latexCacheMode ?? null);
+  }, [repo.backgroundRefreshEnabled, repo.latexCacheMode]);
 
   const handleSave = async () => {
     if (!editName.trim()) return;
@@ -103,18 +112,33 @@ export function RepositoryCard({
     setIsEditing(false);
   };
 
-  const handleBackgroundToggle = async () => {
-    if (isTogglingBackground) return;
-    const nextValue = !backgroundRefreshEnabled;
-    setBackgroundRefreshEnabled(nextValue);
-    setIsTogglingBackground(true);
+  const handleBackgroundRefreshChange = async (nextValue: boolean | null) => {
+    if (isUpdatingBackground) return;
+    const previous = backgroundRefreshMode;
+    setBackgroundRefreshMode(nextValue);
+    setIsUpdatingBackground(true);
     try {
-      const succeeded = await onToggleBackgroundRefresh(repo._id, nextValue);
+      const succeeded = await onUpdateBackgroundRefresh(repo._id, nextValue);
       if (!succeeded) {
-        setBackgroundRefreshEnabled(!nextValue);
+        setBackgroundRefreshMode(previous);
       }
     } finally {
-      setIsTogglingBackground(false);
+      setIsUpdatingBackground(false);
+    }
+  };
+
+  const handleCacheModeChange = async (nextValue: "off" | "aux" | null) => {
+    if (isUpdatingCache) return;
+    const previous = cacheMode;
+    setCacheMode(nextValue);
+    setIsUpdatingCache(true);
+    try {
+      const succeeded = await onUpdateCacheMode(repo._id, nextValue);
+      if (!succeeded) {
+        setCacheMode(previous);
+      }
+    } finally {
+      setIsUpdatingCache(false);
     }
   };
 
@@ -257,19 +281,38 @@ export function RepositoryCard({
         {/* Right section: Actions */}
         <div className="flex shrink-0 items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-800 lg:border-l lg:border-t-0 lg:py-1 lg:pl-8 lg:pt-0">
           <label className="hidden items-center gap-2 text-xs text-gray-500 dark:text-gray-400 lg:flex">
-            <span>Background refresh (every 5 min)</span>
-            <span className="relative inline-flex h-5 w-9 items-center">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={backgroundRefreshEnabled}
-                onChange={handleBackgroundToggle}
-                disabled={isTogglingBackground}
-                aria-label="Toggle background refresh"
-              />
-              <span className="absolute inset-0 rounded-full bg-gray-200 transition peer-checked:bg-primary-400 dark:bg-gray-700 dark:peer-checked:bg-primary-400" />
-              <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4 dark:bg-gray-100" />
-            </span>
+            <span>Background refresh</span>
+            <select
+              value={backgroundRefreshValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                const nextValue = value === "inherit" ? null : value === "on";
+                handleBackgroundRefreshChange(nextValue);
+              }}
+              disabled={isUpdatingBackground}
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            >
+              <option value="inherit">Default</option>
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+          </label>
+
+          <label className="hidden items-center gap-2 text-xs text-gray-500 dark:text-gray-400 lg:flex">
+            <span>Compilation cache</span>
+            <select
+              value={cacheMode ?? "inherit"}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleCacheModeChange(value === "inherit" ? null : (value as "off" | "aux"));
+              }}
+              disabled={isUpdatingCache}
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            >
+              <option value="inherit">Default</option>
+              <option value="off">Off</option>
+              <option value="aux">On (Aux)</option>
+            </select>
           </label>
 
           {/* Add Papers button - prominent */}
@@ -328,19 +371,38 @@ export function RepositoryCard({
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 lg:hidden">
-        <span className="text-xs text-gray-500 dark:text-gray-400">Background refresh (every 5 min)</span>
-        <label className="relative inline-flex h-6 w-11 items-center">
-          <input
-            type="checkbox"
-            className="peer sr-only"
-            checked={backgroundRefreshEnabled}
-            onChange={handleBackgroundToggle}
-            disabled={isTogglingBackground}
-            aria-label="Toggle background refresh"
-          />
-          <span className="absolute inset-0 rounded-full bg-gray-200 transition peer-checked:bg-primary-400 dark:bg-gray-700 dark:peer-checked:bg-primary-400" />
-          <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5 dark:bg-gray-100" />
-        </label>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Background refresh</span>
+        <select
+          value={backgroundRefreshValue}
+          onChange={(e) => {
+            const value = e.target.value;
+            const nextValue = value === "inherit" ? null : value === "on";
+            handleBackgroundRefreshChange(nextValue);
+          }}
+          disabled={isUpdatingBackground}
+          className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          <option value="inherit">Default</option>
+          <option value="off">Off</option>
+          <option value="on">On</option>
+        </select>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
+        <span className="text-xs text-gray-500 dark:text-gray-400">Compilation cache</span>
+        <select
+          value={cacheMode ?? "inherit"}
+          onChange={(e) => {
+            const value = e.target.value;
+            handleCacheModeChange(value === "inherit" ? null : (value as "off" | "aux"));
+          }}
+          disabled={isUpdatingCache}
+          className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-primary-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          <option value="inherit">Default</option>
+          <option value="off">Off</option>
+          <option value="aux">On (Aux)</option>
+        </select>
       </div>
     </div>
   );

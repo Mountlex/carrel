@@ -69,6 +69,7 @@ export const list = query({
 
       return {
         ...repo,
+        backgroundRefreshEnabled: repo.backgroundRefreshEnabled ?? null,
         paperSyncStatus,
         paperCount: papers.length,
         papersWithErrors,
@@ -192,7 +193,8 @@ export const add = mutation({
       selfHostedGitLabInstanceId: instanceId,
       defaultBranch: args.defaultBranch || "main",
       syncStatus: "idle",
-      backgroundRefreshEnabled: false,
+      backgroundRefreshEnabled: null,
+      latexCacheMode: null,
     });
 
     return repositoryId;
@@ -210,7 +212,14 @@ export const update = mutation({
     ),
     lastSyncedAt: v.optional(v.number()),
     lastCommitHash: v.optional(v.string()),
-    backgroundRefreshEnabled: v.optional(v.boolean()),
+    backgroundRefreshEnabled: v.optional(v.union(v.boolean(), v.null())),
+    latexCacheMode: v.optional(v.union(v.literal("off"), v.literal("aux"), v.null())),
+    backgroundRefreshMode: v.optional(
+      v.union(v.literal("default"), v.literal("on"), v.literal("off"))
+    ),
+    latexCacheModeSetting: v.optional(
+      v.union(v.literal("default"), v.literal("off"), v.literal("aux"))
+    ),
   },
   handler: async (ctx, args) => {
     // Authorization check: verify the caller owns this repository
@@ -228,11 +237,24 @@ export const update = mutation({
       validateRepositoryNameOrThrow(args.name);
     }
 
-    const { id, ...updates } = args;
+    const { id, backgroundRefreshMode, latexCacheModeSetting, ...updates } = args;
     // Filter out undefined values
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
+
+    if (backgroundRefreshMode !== undefined) {
+      filteredUpdates.backgroundRefreshEnabled =
+        backgroundRefreshMode === "default"
+          ? null
+          : backgroundRefreshMode === "on";
+    }
+
+    if (latexCacheModeSetting !== undefined) {
+      filteredUpdates.latexCacheMode =
+        latexCacheModeSetting === "default" ? null : latexCacheModeSetting;
+    }
+
     await ctx.db.patch(id, filteredUpdates);
   },
 });
@@ -440,7 +462,7 @@ export const listForMobile = internalQuery({
         papersWithErrors,
         lastSyncedAt: repo.lastSyncedAt,
         lastCommitHash: repo.lastCommitHash,
-        backgroundRefreshEnabled: repo.backgroundRefreshEnabled ?? false,
+        backgroundRefreshEnabled: repo.backgroundRefreshEnabled ?? null,
       };
     });
 

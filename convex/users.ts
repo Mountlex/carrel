@@ -44,6 +44,9 @@ export const viewer = query({
       image: user.image,
       email: user.email,
       emailVerificationTime: user.emailVerificationTime,
+      latexCacheMode: user.latexCacheMode ?? "aux",
+      latexCacheAllowed: user.latexCacheAllowed ?? true,
+      backgroundRefreshDefault: user.backgroundRefreshDefault ?? true,
       // Boolean flags for credential presence (no actual tokens)
       hasOverleafCredentials: !!(user.overleafEmail && user.overleafToken),
       hasGitHubToken: !!user.githubAccessToken,
@@ -98,6 +101,57 @@ export const updateProfile = mutation({
   },
 });
 
+// Update LaTeX compilation cache preference (global default)
+export const updateLatexCacheMode = mutation({
+  args: {
+    latexCacheMode: v.union(v.literal("off"), v.literal("aux")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await ctx.db.patch(userId, {
+      latexCacheMode: args.latexCacheMode,
+    });
+    return { success: true };
+  },
+});
+
+// Update whether compilation cache is allowed (master pause)
+export const updateLatexCacheAllowed = mutation({
+  args: {
+    latexCacheAllowed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await ctx.db.patch(userId, {
+      latexCacheAllowed: args.latexCacheAllowed,
+    });
+    return { success: true };
+  },
+});
+
+// Update background refresh default (global default for repo inherit)
+export const updateBackgroundRefreshDefault = mutation({
+  args: {
+    backgroundRefreshDefault: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await ctx.db.patch(userId, {
+      backgroundRefreshDefault: args.backgroundRefreshDefault,
+    });
+    return { success: true };
+  },
+});
+
+// Internal query to get a user's background refresh default
+export const getBackgroundRefreshDefaultInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    return user?.backgroundRefreshDefault ?? true;
+  },
+});
+
 // Internal mutation to store password change code
 export const storePasswordChangeCode = internalMutation({
   args: {
@@ -131,6 +185,24 @@ export const getUserEmailInternal = internalQuery({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     return user?.email;
+  },
+});
+
+// Internal query to get user's LaTeX cache preference
+export const getUserCacheModeInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    return user?.latexCacheMode ?? "aux";
+  },
+});
+
+// Internal query to get whether compilation cache is allowed
+export const getUserCacheAllowedInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    return user?.latexCacheAllowed ?? true;
   },
 });
 

@@ -11,7 +11,8 @@ struct Repository: Codable, Identifiable, Equatable, Hashable {
     let lastCommitHash: String?
     let lastCommitTime: Date?
     let lastCommitAuthor: String?
-    let backgroundRefreshEnabled: Bool
+    let backgroundRefreshEnabled: Bool?
+    let latexCacheMode: LatexCacheMode?
     // Enriched fields from backend query
     let paperSyncStatus: PaperSyncStatus
     let paperCount: Int
@@ -23,6 +24,41 @@ struct Repository: Codable, Identifiable, Equatable, Hashable {
         case lastSyncedAt, lastCommitHash, lastCommitTime, lastCommitAuthor
         case paperSyncStatus, paperCount, papersWithErrors
         case backgroundRefreshEnabled
+        case latexCacheMode
+    }
+
+    init(
+        id: String,
+        name: String,
+        gitUrl: String,
+        provider: RepositoryProvider,
+        defaultBranch: String,
+        syncStatus: RepositorySyncStatus,
+        lastSyncedAt: Date?,
+        lastCommitHash: String?,
+        lastCommitTime: Date?,
+        lastCommitAuthor: String?,
+        backgroundRefreshEnabled: Bool?,
+        latexCacheMode: LatexCacheMode?,
+        paperSyncStatus: PaperSyncStatus,
+        paperCount: Int,
+        papersWithErrors: Int
+    ) {
+        self.id = id
+        self.name = name
+        self.gitUrl = gitUrl
+        self.provider = provider
+        self.defaultBranch = defaultBranch
+        self.syncStatus = syncStatus
+        self.lastSyncedAt = lastSyncedAt
+        self.lastCommitHash = lastCommitHash
+        self.lastCommitTime = lastCommitTime
+        self.lastCommitAuthor = lastCommitAuthor
+        self.backgroundRefreshEnabled = backgroundRefreshEnabled
+        self.latexCacheMode = latexCacheMode
+        self.paperSyncStatus = paperSyncStatus
+        self.paperCount = paperCount
+        self.papersWithErrors = papersWithErrors
     }
 
     init(from decoder: Decoder) throws {
@@ -57,7 +93,51 @@ struct Repository: Codable, Identifiable, Equatable, Hashable {
         backgroundRefreshEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .backgroundRefreshEnabled
-        ) ?? false
+        )
+
+        latexCacheMode = try container.decodeIfPresent(LatexCacheMode.self, forKey: .latexCacheMode)
+    }
+}
+
+extension Repository {
+    func with(backgroundRefreshEnabled: Bool?) -> Repository {
+        Repository(
+            id: id,
+            name: name,
+            gitUrl: gitUrl,
+            provider: provider,
+            defaultBranch: defaultBranch,
+            syncStatus: syncStatus,
+            lastSyncedAt: lastSyncedAt,
+            lastCommitHash: lastCommitHash,
+            lastCommitTime: lastCommitTime,
+            lastCommitAuthor: lastCommitAuthor,
+            backgroundRefreshEnabled: backgroundRefreshEnabled,
+            latexCacheMode: latexCacheMode,
+            paperSyncStatus: paperSyncStatus,
+            paperCount: paperCount,
+            papersWithErrors: papersWithErrors
+        )
+    }
+
+    func with(latexCacheMode: LatexCacheMode?) -> Repository {
+        Repository(
+            id: id,
+            name: name,
+            gitUrl: gitUrl,
+            provider: provider,
+            defaultBranch: defaultBranch,
+            syncStatus: syncStatus,
+            lastSyncedAt: lastSyncedAt,
+            lastCommitHash: lastCommitHash,
+            lastCommitTime: lastCommitTime,
+            lastCommitAuthor: lastCommitAuthor,
+            backgroundRefreshEnabled: backgroundRefreshEnabled,
+            latexCacheMode: latexCacheMode,
+            paperSyncStatus: paperSyncStatus,
+            paperCount: paperCount,
+            papersWithErrors: papersWithErrors
+        )
     }
 }
 
@@ -107,6 +187,31 @@ enum PaperSyncStatus: String, Codable {
         case .inSync: return "Up to date"
         case .needsSync: return "Outdated"
         case .neverSynced: return "Not synced"
+        }
+    }
+}
+
+enum LatexCacheMode: String, Codable, CaseIterable, Identifiable {
+    case off
+    case aux
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .aux:
+            return "On"
+        }
+    }
+
+    var descriptionText: String {
+        switch self {
+        case .off:
+            return "No compilation cache."
+        case .aux:
+            return "Store LaTeX aux/out files to speed up rebuilds."
         }
     }
 }

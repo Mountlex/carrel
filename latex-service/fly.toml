@@ -8,6 +8,17 @@ primary_region = 'fra'
 
 [build]
 
+[env]
+  WORK_DIR = "/home/latexuser/work"
+  LATEX_CACHE_ALLOWED = "aux"
+  LATEX_CACHE_TTL_DAYS = "7"
+  LATEX_CACHE_MAX_GB = "2"
+  LATEX_PERSIST_WORKDIR = "on"
+
+[[mounts]]
+  source = "latex_cache"
+  destination = "/home/latexuser/work"
+
 [http_service]
   internal_port = 3001
   force_https = true

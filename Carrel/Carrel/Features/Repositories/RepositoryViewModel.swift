@@ -25,8 +25,15 @@ final class RepositoryViewModel: SubscribableViewModel {
     /// Current toast message to display
     var toastMessage: ToastMessage?
 
-    /// Global background refresh preference (from notification settings)
-    private(set) var isBackgroundRefreshEnabledGlobally = true
+    /// Whether background refresh is allowed (master pause)
+    private(set) var isBackgroundRefreshAllowed = true
+
+    /// Default background refresh setting for repo default
+    private(set) var backgroundRefreshDefault = true
+
+    /// Global compilation cache preference (from user settings)
+    private(set) var userCacheMode: LatexCacheMode = .aux
+    private(set) var isCompilationCacheAllowed = true
 
     deinit {
         Task { @MainActor [weak self] in
@@ -51,6 +58,9 @@ final class RepositoryViewModel: SubscribableViewModel {
         print("RepositoryViewModel: Got user ID: \(user.id)")
         #endif
         userId = user.id
+        userCacheMode = user.latexCacheMode ?? .aux
+        isCompilationCacheAllowed = user.latexCacheAllowed ?? true
+        backgroundRefreshDefault = user.backgroundRefreshDefault ?? true
     }
 
     func createSubscriptionPublisher() -> AnyPublisher<[Repository], Error> {
@@ -150,26 +160,61 @@ final class RepositoryViewModel: SubscribableViewModel {
     }
 
     /// Toggle background refresh for a repository
-    func setBackgroundRefresh(_ repository: Repository, enabled: Bool) async {
+    func setBackgroundRefresh(_ repository: Repository, enabled: Bool?) async -> Bool {
         do {
             try await ConvexService.shared.setBackgroundRefresh(
                 repositoryId: repository.id,
                 enabled: enabled
             )
-            let message = enabled ? "Background refresh enabled" : "Background refresh disabled"
-            toastMessage = ToastMessage(text: message, type: .success)
+            if let index = repositories.firstIndex(where: { $0.id == repository.id }) {
+                var updated = repositories
+                updated[index] = updated[index].with(backgroundRefreshEnabled: enabled)
+                repositories = updated
+            }
+            return true
         } catch {
-            toastMessage = ToastMessage(text: "Failed to update background refresh", type: .error)
+            return false
+        }
+    }
+
+    /// Update compilation cache mode for a repository (nil = default)
+    func setCompilationCacheMode(_ repository: Repository, mode: LatexCacheMode?) async -> Bool {
+        do {
+            try await ConvexService.shared.setRepositoryLatexCacheMode(
+                repositoryId: repository.id,
+                mode: mode
+            )
+            if let index = repositories.firstIndex(where: { $0.id == repository.id }) {
+                var updated = repositories
+                updated[index] = updated[index].with(latexCacheMode: mode)
+                repositories = updated
+            }
+            return true
+        } catch {
+            return false
         }
     }
 
     func loadNotificationPreferences() async {
         do {
             let preferences = try await ConvexService.shared.getNotificationPreferences()
-            isBackgroundRefreshEnabledGlobally = preferences.backgroundSync
+            isBackgroundRefreshAllowed = preferences.backgroundSync
         } catch {
             #if DEBUG
             print("RepositoryViewModel: Failed to load notification preferences: \(error)")
+            #endif
+        }
+    }
+
+    func loadUserCacheMode() async {
+        do {
+            let user = try await ConvexService.shared.getViewer()
+            userCacheMode = user?.latexCacheMode ?? .aux
+            isCompilationCacheAllowed = user?.latexCacheAllowed ?? true
+            backgroundRefreshDefault = user?.backgroundRefreshDefault ?? true
+        } catch {
+            #if DEBUG
+            print("RepositoryViewModel: Failed to load user cache mode: \(error)")
             #endif
         }
     }

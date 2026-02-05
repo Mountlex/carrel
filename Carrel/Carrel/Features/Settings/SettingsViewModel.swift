@@ -10,6 +10,12 @@ final class SettingsViewModel {
     var notificationPreferences: NotificationPreferences = .default
     private(set) var isNotificationsLoading = false
     private(set) var isNotificationsUpdating = false
+    var latexCacheMode: LatexCacheMode = .aux
+    private(set) var isLatexCacheUpdating = false
+    var latexCacheAllowed = true
+    private(set) var isLatexCacheAllowedUpdating = false
+    var backgroundRefreshDefault = true
+    private(set) var isBackgroundRefreshDefaultUpdating = false
 
     private let authManager: AuthManager
 
@@ -23,6 +29,9 @@ final class SettingsViewModel {
 
         do {
             user = try await ConvexService.shared.getViewer()
+            latexCacheMode = user?.latexCacheMode ?? .aux
+            latexCacheAllowed = user?.latexCacheAllowed ?? true
+            backgroundRefreshDefault = user?.backgroundRefreshDefault ?? true
         } catch {
             self.error = error.localizedDescription
         }
@@ -45,6 +54,39 @@ final class SettingsViewModel {
 
         do {
             try await ConvexService.shared.updateNotificationPreferences(notificationPreferences)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func updateLatexCacheMode() async {
+        isLatexCacheUpdating = true
+        defer { isLatexCacheUpdating = false }
+
+        do {
+            try await ConvexService.shared.updateLatexCacheMode(latexCacheMode)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func updateLatexCacheAllowed() async {
+        isLatexCacheAllowedUpdating = true
+        defer { isLatexCacheAllowedUpdating = false }
+
+        do {
+            try await ConvexService.shared.updateLatexCacheAllowed(latexCacheAllowed)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func updateBackgroundRefreshDefault() async {
+        isBackgroundRefreshDefaultUpdating = true
+        defer { isBackgroundRefreshDefaultUpdating = false }
+
+        do {
+            try await ConvexService.shared.updateBackgroundRefreshDefault(backgroundRefreshDefault)
         } catch {
             self.error = error.localizedDescription
         }

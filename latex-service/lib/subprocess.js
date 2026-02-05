@@ -138,6 +138,8 @@ async function runGit(args, options = {}) {
  * @param {string} options.cwd - Working directory
  * @param {number} [options.timeout=180000] - Timeout in milliseconds (default 3 min)
  * @param {boolean} [options.recorder=false] - Enable -recorder flag for deps detection
+ * @param {string} [options.auxdir] - Directory for aux files
+ * @param {string} [options.outdir] - Directory for output files
  * @param {Object} [options.logger] - Logger instance
  * @returns {Promise<{success: boolean, log: string, timedOut: boolean}>}
  */
@@ -146,6 +148,8 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
     cwd,
     timeout = 180000, // 3 minutes default
     recorder = false,
+    auxdir,
+    outdir,
     logger = console,
   } = options;
 
@@ -164,6 +168,14 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
 
   if (recorder) {
     args.push("-recorder");
+  }
+
+  if (auxdir) {
+    args.push(`-auxdir=${auxdir}`);
+  }
+
+  if (outdir) {
+    args.push(`-outdir=${outdir}`);
   }
 
   args.push(targetPath);
@@ -238,6 +250,8 @@ async function runPdftoppm(pdfPath, outputPrefix, options = {}) {
  * @param {string} options.cwd - Working directory
  * @param {number} [options.timeout=300000] - Timeout in milliseconds (default 5 min)
  * @param {boolean} [options.recorder=false] - Enable -recorder flag for deps detection
+ * @param {string} [options.auxdir] - Directory for aux files
+ * @param {string} [options.outdir] - Directory for output files
  * @param {Object} [options.logger] - Logger instance
  * @param {Function} [options.onProgress] - Callback for progress updates (message: string) => void
  * @returns {Promise<{success: boolean, log: string, timedOut: boolean}>}
@@ -247,6 +261,8 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     cwd,
     timeout = 300000, // 5 minutes default
     recorder = false,
+    auxdir,
+    outdir,
     logger = console,
     onProgress,
   } = options;
@@ -262,6 +278,14 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
 
   if (recorder) {
     args.push("-recorder");
+  }
+
+  if (auxdir) {
+    args.push(`-auxdir=${auxdir}`);
+  }
+
+  if (outdir) {
+    args.push(`-outdir=${outdir}`);
   }
 
   args.push(targetPath);

@@ -358,6 +358,30 @@ final class ConvexService: ObservableObject {
         )
     }
 
+    /// Update global LaTeX compilation cache preference
+    func updateLatexCacheMode(_ mode: LatexCacheMode) async throws {
+        let _: EmptyResult? = try await client.mutation(
+            "users:updateLatexCacheMode",
+            with: ["latexCacheMode": mode.rawValue]
+        )
+    }
+
+    /// Update whether compilation cache is allowed (master pause)
+    func updateLatexCacheAllowed(_ allowed: Bool) async throws {
+        let _: EmptyResult? = try await client.mutation(
+            "users:updateLatexCacheAllowed",
+            with: ["latexCacheAllowed": allowed]
+        )
+    }
+
+    /// Update background refresh default (used for repo inherit)
+    func updateBackgroundRefreshDefault(_ enabled: Bool) async throws {
+        let _: EmptyResult? = try await client.mutation(
+            "users:updateBackgroundRefreshDefault",
+            with: ["backgroundRefreshDefault": enabled]
+        )
+    }
+
     /// Register device token for push notifications
     func registerDeviceToken(
         _ token: String,
@@ -425,14 +449,21 @@ final class ConvexService: ObservableObject {
     }
 
     /// Update background refresh setting for a repository
-    func setBackgroundRefresh(repositoryId: String, enabled: Bool) async throws {
-        let _: EmptyResult? = try await client.mutation(
-            "repositories:update",
-            with: [
-                "id": repositoryId,
-                "backgroundRefreshEnabled": enabled,
-            ]
-        )
+    func setBackgroundRefresh(repositoryId: String, enabled: Bool?) async throws {
+        let args: [String: ConvexEncodable?] = [
+            "id": repositoryId,
+            "backgroundRefreshEnabled": enabled
+        ]
+        let _: EmptyResult? = try await client.mutation("repositories:update", with: args)
+    }
+
+    /// Update LaTeX cache mode for a repository (nil = default)
+    func setRepositoryLatexCacheMode(repositoryId: String, mode: LatexCacheMode?) async throws {
+        let args: [String: ConvexEncodable?] = [
+            "id": repositoryId,
+            "latexCacheMode": mode?.rawValue
+        ]
+        let _: EmptyResult? = try await client.mutation("repositories:update", with: args)
     }
 
     // MARK: - Repository Files

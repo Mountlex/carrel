@@ -12,7 +12,8 @@ export interface Repository {
   syncStatus: "idle" | "syncing" | "error";
   paperSyncStatus?: "in_sync" | "needs_sync" | "never_synced";
   papersWithErrors: number;
-  backgroundRefreshEnabled?: boolean;
+  backgroundRefreshEnabled?: boolean | null;
+  latexCacheMode?: "off" | "aux" | null;
 }
 
 export interface GitRepo {

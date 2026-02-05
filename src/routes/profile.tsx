@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { useMutation, useAction } from "convex/react";
+import { useEffect, useState } from "react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import { useUser } from "../hooks/useUser";
@@ -29,6 +29,11 @@ function ProfilePage() {
   } = useUser();
 
   const updateProfile = useMutation(api.users.updateProfile);
+  const updateLatexCacheMode = useMutation(api.users.updateLatexCacheMode);
+  const updateLatexCacheAllowed = useMutation(api.users.updateLatexCacheAllowed);
+  const updateBackgroundRefreshDefault = useMutation(api.users.updateBackgroundRefreshDefault);
+  const notificationPreferences = useQuery(api.notifications.getNotificationPreferences);
+  const updateNotificationPreferences = useMutation(api.notifications.updateNotificationPreferences);
   const requestPasswordChangeCode = useAction(api.passwordActions.requestPasswordChangeCode);
   const changePassword = useAction(api.passwordActions.changePassword);
   const saveOverleafCredentials = useMutation(api.users.saveOverleafCredentials);
@@ -42,6 +47,26 @@ function ProfilePage() {
   const [nameLoading, setNameLoading] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [nameSuccess, setNameSuccess] = useState(false);
+
+  // Compilation cache setting
+  const [cacheMode, setCacheMode] = useState<"off" | "aux">(user?.latexCacheMode ?? "aux");
+  const [cacheModeLoading, setCacheModeLoading] = useState(false);
+  const [cacheModeError, setCacheModeError] = useState<string | null>(null);
+  const [cacheAllowed, setCacheAllowed] = useState<boolean>(
+    user?.latexCacheAllowed ?? true
+  );
+  const [cacheAllowedLoading, setCacheAllowedLoading] = useState(false);
+  const [cacheAllowedError, setCacheAllowedError] = useState<string | null>(null);
+  const [backgroundSync, setBackgroundSync] = useState<boolean>(
+    notificationPreferences?.backgroundSync ?? true
+  );
+  const [backgroundSyncLoading, setBackgroundSyncLoading] = useState(false);
+  const [backgroundSyncError, setBackgroundSyncError] = useState<string | null>(null);
+  const [backgroundRefreshDefault, setBackgroundRefreshDefault] = useState<boolean>(
+    user?.backgroundRefreshDefault ?? true
+  );
+  const [backgroundRefreshDefaultLoading, setBackgroundRefreshDefaultLoading] = useState(false);
+  const [backgroundRefreshDefaultError, setBackgroundRefreshDefaultError] = useState<string | null>(null);
 
   // Password change state
   const [passwordMode, setPasswordMode] = useState<"idle" | "enterCode">("idle");
@@ -70,6 +95,24 @@ function ProfilePage() {
   const [showDisconnectGitHub, setShowDisconnectGitHub] = useState(false);
   const [showDisconnectGitLab, setShowDisconnectGitLab] = useState(false);
   const [showDisconnectOverleaf, setShowDisconnectOverleaf] = useState(false);
+
+  useEffect(() => {
+    setCacheMode(user?.latexCacheMode ?? "aux");
+  }, [user?.latexCacheMode]);
+
+  useEffect(() => {
+    setCacheAllowed(user?.latexCacheAllowed ?? true);
+  }, [user?.latexCacheAllowed]);
+
+  useEffect(() => {
+    setBackgroundRefreshDefault(user?.backgroundRefreshDefault ?? true);
+  }, [user?.backgroundRefreshDefault]);
+
+  useEffect(() => {
+    if (notificationPreferences) {
+      setBackgroundSync(notificationPreferences.backgroundSync);
+    }
+  }, [notificationPreferences]);
 
   const handleSaveName = async () => {
     setNameLoading(true);
@@ -167,6 +210,74 @@ function ProfilePage() {
     }
   };
 
+  const handleCacheModeChange = async (mode: "off" | "aux") => {
+    setCacheMode(mode);
+    setCacheModeLoading(true);
+    setCacheModeError(null);
+    try {
+      await updateLatexCacheMode({ latexCacheMode: mode });
+    } catch (error) {
+      console.error("Failed to update compilation cache:", error);
+      setCacheModeError("Failed to update compilation cache");
+      setCacheMode(user?.latexCacheMode ?? "aux");
+    } finally {
+      setCacheModeLoading(false);
+    }
+  };
+
+  const handleCacheAllowedChange = async (enabled: boolean) => {
+    setCacheAllowed(enabled);
+    setCacheAllowedLoading(true);
+    setCacheAllowedError(null);
+    try {
+      await updateLatexCacheAllowed({ latexCacheAllowed: enabled });
+    } catch (error) {
+      console.error("Failed to update compilation cache setting:", error);
+      setCacheAllowedError("Failed to update compilation cache setting");
+      setCacheAllowed(user?.latexCacheAllowed ?? true);
+    } finally {
+      setCacheAllowedLoading(false);
+    }
+  };
+
+  const handleBackgroundSyncChange = async (enabled: boolean) => {
+    if (!notificationPreferences) return;
+    setBackgroundSync(enabled);
+    setBackgroundSyncLoading(true);
+    setBackgroundSyncError(null);
+    try {
+      await updateNotificationPreferences({
+        enabled: notificationPreferences.enabled,
+        buildSuccess: notificationPreferences.buildSuccess,
+        buildFailure: notificationPreferences.buildFailure,
+        paperUpdated: notificationPreferences.paperUpdated,
+        backgroundSync: enabled,
+        updateCooldownMinutes: notificationPreferences.updateCooldownMinutes,
+      });
+    } catch (error) {
+      console.error("Failed to update background refresh:", error);
+      setBackgroundSyncError("Failed to update background refresh");
+      setBackgroundSync(notificationPreferences.backgroundSync);
+    } finally {
+      setBackgroundSyncLoading(false);
+    }
+  };
+
+  const handleBackgroundRefreshDefaultChange = async (enabled: boolean) => {
+    setBackgroundRefreshDefault(enabled);
+    setBackgroundRefreshDefaultLoading(true);
+    setBackgroundRefreshDefaultError(null);
+    try {
+      await updateBackgroundRefreshDefault({ backgroundRefreshDefault: enabled });
+    } catch (error) {
+      console.error("Failed to update background refresh default:", error);
+      setBackgroundRefreshDefaultError("Failed to update background refresh default");
+      setBackgroundRefreshDefault(user?.backgroundRefreshDefault ?? true);
+    } finally {
+      setBackgroundRefreshDefaultLoading(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-8 text-2xl font-normal text-gray-900 dark:text-gray-100">Profile</h1>
@@ -229,6 +340,86 @@ function ProfilePage() {
           <div className="flex items-center justify-between">
             <span className="text-gray-900 dark:text-gray-100">{user?.email}</span>
           </div>
+        </div>
+
+        {/* Compilation Cache */}
+        <div className="mb-6">
+          <label className="block text-sm font-normal text-gray-700 mb-2 dark:text-gray-300">Compilation cache</label>
+          <div className="flex flex-col gap-3">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={cacheAllowed}
+                onChange={(e) => handleCacheAllowedChange(e.target.checked)}
+                disabled={cacheAllowedLoading}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-gray-100"
+              />
+              <span>Allow compilation cache</span>
+            </label>
+            {cacheAllowedLoading && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">Saving...</span>
+            )}
+
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={cacheMode === "aux"}
+                onChange={(e) => handleCacheModeChange(e.target.checked ? "aux" : "off")}
+                disabled={cacheModeLoading}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-gray-100"
+              />
+              <span>Default for repositories</span>
+            </label>
+            {cacheModeLoading && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">Saving...</span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Allow compilation cache pauses or resumes all cache usage. The default applies to repositories set to use it.
+          </p>
+          {cacheAllowedError && <p className="mt-2 text-sm text-red-600">{cacheAllowedError}</p>}
+          {cacheModeError && <p className="mt-2 text-sm text-red-600">{cacheModeError}</p>}
+        </div>
+
+        {/* Background Refresh */}
+        <div className="mb-6">
+          <label className="block text-sm font-normal text-gray-700 mb-2 dark:text-gray-300">Background refresh</label>
+          <div className="flex flex-col gap-3">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={backgroundSync}
+                onChange={(e) => handleBackgroundSyncChange(e.target.checked)}
+                disabled={backgroundSyncLoading || !notificationPreferences}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-gray-100"
+              />
+              <span>Allow background refresh</span>
+            </label>
+            {backgroundSyncLoading && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">Saving...</span>
+            )}
+
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={backgroundRefreshDefault}
+                onChange={(e) => handleBackgroundRefreshDefaultChange(e.target.checked)}
+                disabled={backgroundRefreshDefaultLoading}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-gray-100"
+              />
+              <span>Default for repositories</span>
+            </label>
+            {backgroundRefreshDefaultLoading && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">Saving...</span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Allow Background Refresh pauses or resumes all background refresh tasks. The default applies to repositories set to use it.
+          </p>
+          {backgroundSyncError && <p className="mt-2 text-sm text-red-600">{backgroundSyncError}</p>}
+          {backgroundRefreshDefaultError && (
+            <p className="mt-2 text-sm text-red-600">{backgroundRefreshDefaultError}</p>
+          )}
         </div>
 
         {/* Password Field */}

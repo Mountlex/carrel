@@ -3,6 +3,7 @@
  */
 
 const fs = require("fs/promises");
+const path = require("path");
 const { spawnAsync } = require("./subprocess");
 
 /**
@@ -38,6 +39,64 @@ async function cloneRepository({ authenticatedUrl, workDir, branch, timeout = 60
 }
 
 /**
+ * Clone a git repository with partial clone + sparse checkout.
+ * Falls back to full clone if sparse paths are empty.
+ */
+async function cloneRepositorySparse({
+  authenticatedUrl,
+  workDir,
+  branch,
+  sparsePaths,
+  timeout = 60000,
+  logger,
+}) {
+  await fs.mkdir(workDir, { recursive: true });
+
+  if (!sparsePaths || sparsePaths.length === 0) {
+    return cloneRepository({ authenticatedUrl, workDir, branch, timeout, logger });
+  }
+
+  const cloneArgs = ["clone", "--depth", "1", "--filter=blob:none", "--sparse"];
+  if (branch) {
+    cloneArgs.push("--branch", branch);
+  }
+  cloneArgs.push(authenticatedUrl, workDir);
+
+  const cloneResult = await spawnAsync("git", cloneArgs, {
+    timeout,
+    logger,
+  });
+
+  if (!cloneResult.success) {
+    return { success: false, error: cloneResult.stderr || "Failed to clone repository" };
+  }
+
+  const initResult = await spawnAsync("git", ["-C", workDir, "sparse-checkout", "init", "--no-cone"], {
+    timeout,
+    logger,
+  });
+
+  if (!initResult.success) {
+    return { success: false, error: initResult.stderr || "Failed to init sparse checkout" };
+  }
+
+  const sparseFile = path.join(workDir, ".git", "info", "sparse-checkout");
+  await fs.mkdir(path.dirname(sparseFile), { recursive: true });
+  await fs.writeFile(sparseFile, sparsePaths.join("\n") + "\n");
+
+  const applyResult = await spawnAsync("git", ["-C", workDir, "sparse-checkout", "reapply"], {
+    timeout,
+    logger,
+  });
+
+  if (!applyResult.success) {
+    return { success: false, error: applyResult.stderr || "Failed to apply sparse checkout" };
+  }
+
+  return { success: true };
+}
+
+/**
  * Binary file extensions that should be skipped when reading repository content.
  */
 const BINARY_EXTENSIONS = new Set([
@@ -61,6 +120,7 @@ function isBinaryFile(filePath) {
 
 module.exports = {
   cloneRepository,
+  cloneRepositorySparse,
   BINARY_EXTENSIONS,
   isBinaryFile,
 };

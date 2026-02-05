@@ -1,5 +1,6 @@
 import type { MutationCtx } from "../_generated/server";
 import type { Id, Doc } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 
 /**
  * Deletes a single paper and all associated data:
@@ -12,7 +13,8 @@ import type { Id, Doc } from "../_generated/dataModel";
  */
 export async function deletePaperAndAssociatedData(
   ctx: MutationCtx,
-  paper: Doc<"papers">
+  paper: Doc<"papers">,
+  options?: { skipCacheClear?: boolean }
 ): Promise<{ versionsDeleted: number; jobsDeleted: number; storageFilesDeleted: number }> {
   const storageIdsToDelete: Id<"_storage">[] = [];
   let versionsDeleted = 0;
@@ -60,6 +62,12 @@ export async function deletePaperAndAssociatedData(
   // Delete the paper
   await ctx.db.delete(paper._id);
 
+  if (!options?.skipCacheClear) {
+    await ctx.scheduler.runAfter(0, internal.latex.clearLatexCacheInternal, {
+      paperId: paper._id,
+    });
+  }
+
   return {
     versionsDeleted,
     jobsDeleted,
@@ -87,6 +95,7 @@ export async function deleteRepositoriesAndData(
     storageFiles: 0,
     repositories: 0,
   };
+  const paperIdsToClear: Id<"papers">[] = [];
 
   for (const repo of repositories) {
     // Delete tracked files for this repository
@@ -107,7 +116,8 @@ export async function deleteRepositoriesAndData(
       .collect();
 
     for (const paper of papers) {
-      const result = await deletePaperAndAssociatedData(ctx, paper);
+      paperIdsToClear.push(paper._id);
+      const result = await deletePaperAndAssociatedData(ctx, paper, { skipCacheClear: true });
       deletedCounts.paperVersions += result.versionsDeleted;
       deletedCounts.compilationJobs += result.jobsDeleted;
       deletedCounts.storageFiles += result.storageFilesDeleted;
@@ -118,6 +128,12 @@ export async function deleteRepositoriesAndData(
     await ctx.db.delete(repo._id);
   }
   deletedCounts.repositories = repositories.length;
+
+  if (paperIdsToClear.length > 0) {
+    await ctx.scheduler.runAfter(0, internal.latex.clearLatexCacheInternal, {
+      paperIds: paperIdsToClear,
+    });
+  }
 
   return deletedCounts;
 }

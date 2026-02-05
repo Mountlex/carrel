@@ -22,6 +22,15 @@ const extendedAuthTables = {
     // Custom fields for Overleaf credentials (Basic Auth: email + Git token)
     overleafEmail: v.optional(v.string()),
     overleafToken: v.optional(v.string()),
+    // LaTeX compilation cache preference (global default)
+    latexCacheMode: v.optional(v.union(
+      v.literal("off"),
+      v.literal("aux")
+    )),
+    // Allow compilation cache (master pause)
+    latexCacheAllowed: v.optional(v.boolean()),
+    // Background refresh default (used for repo inherit)
+    backgroundRefreshDefault: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
@@ -67,7 +76,13 @@ export default defineSchema({
       v.literal("syncing"),
       v.literal("error")
     ),
-    backgroundRefreshEnabled: v.optional(v.boolean()),
+    backgroundRefreshEnabled: v.optional(v.union(v.boolean(), v.null())),
+    // LaTeX compilation cache preference (repo override)
+    latexCacheMode: v.optional(v.union(
+      v.literal("off"),
+      v.literal("aux"),
+      v.null()
+    )),
   })
     .index("by_user", ["userId"])
     .index("by_git_url", ["gitUrl"])
@@ -139,6 +154,9 @@ export default defineSchema({
       path: v.string(),
       hash: v.string(),
     }))),
+
+    // Cached dependency paths for sparse checkout (stored even if hashing fails)
+    cachedDependencyPaths: v.optional(v.array(v.string())),
 
     // Last commit that actually affected this paper's dependencies
     lastAffectedCommitHash: v.optional(v.string()),

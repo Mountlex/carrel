@@ -4,6 +4,7 @@ struct RepositoryCard: View {
     let repository: Repository
     var isRefreshing: Bool = false
     var showsBackgroundRefreshBadge: Bool = true
+    var onOpenSettings: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -33,11 +34,16 @@ struct RepositoryCard: View {
                     statusBadge
                 }
 
-                if showsBackgroundRefreshBadge && repository.backgroundRefreshEnabled {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .accessibilityLabel("Background refresh enabled")
+                if let onOpenSettings {
+                    Button(action: onOpenSettings) {
+                        Image(systemName: "gearshape")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Repository settings")
                 }
             }
 
@@ -80,7 +86,7 @@ struct RepositoryCard: View {
             .regular.interactive(),
             in: RoundedRectangle(cornerRadius: 16)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: onOpenSettings == nil ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view papers and add tracked files")
     }
@@ -99,10 +105,6 @@ struct RepositoryCard: View {
             components.append("refreshing")
         } else {
             components.append(statusAccessibilityLabel)
-        }
-
-        if showsBackgroundRefreshBadge && repository.backgroundRefreshEnabled {
-            components.append("background refresh enabled")
         }
 
         return components.joined(separator: ", ")

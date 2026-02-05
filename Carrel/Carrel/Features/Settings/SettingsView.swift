@@ -46,6 +46,10 @@ struct SettingsView: View {
                     backgroundRefreshSectionContent(viewModel: viewModel)
                 }
 
+                GlassSection(title: "Compilation") {
+                    compilationSectionContent(viewModel: viewModel)
+                }
+
                 GlassSection(title: "Storage") {
                     storageSectionContent()
                 }
@@ -92,6 +96,44 @@ struct SettingsView: View {
         } message: {
             Text(viewModel.error ?? "Unknown error")
         }
+    }
+
+    @ViewBuilder
+    private func compilationSectionContent(viewModel: SettingsViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(
+                "Allow compilation cache",
+                isOn: Binding(
+                    get: { viewModel.latexCacheAllowed },
+                    set: { isOn in
+                        viewModel.latexCacheAllowed = isOn
+                        Task { await viewModel.updateLatexCacheAllowed() }
+                    }
+                )
+            )
+            .disabled(viewModel.isLatexCacheAllowedUpdating)
+
+            Divider()
+
+            Toggle(
+                "Default for repositories",
+                isOn: Binding(
+                    get: { viewModel.latexCacheMode == .aux },
+                    set: { isOn in
+                        viewModel.latexCacheMode = isOn ? .aux : .off
+                        Task { await viewModel.updateLatexCacheMode() }
+                    }
+                )
+            )
+            .disabled(viewModel.isLatexCacheUpdating)
+
+            Divider()
+
+            Text("Allow compilation cache pauses or resumes all cache use. The default applies to repositories set to use it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .tint(.orange)
     }
 
     @ViewBuilder
@@ -228,7 +270,7 @@ struct SettingsView: View {
                 }
 
             if !viewModel.notificationPreferences.backgroundSync {
-                Text("Enable Background Refresh to receive update notifications.")
+                Text("Allow Background Refresh to receive update notifications.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -255,7 +297,7 @@ struct SettingsView: View {
                     Task { await viewModel.updateNotificationPreferences() }
                 }
 
-                Text("If new commits arrive while a paper is already out of sync, we will notify you at most once per interval when Background Refresh is enabled. Choose Never to disable update notifications.")
+                Text("If new commits arrive while a paper is already out of sync, we will notify you at most once per interval when Background Refresh is allowed. Choose Never to disable update notifications.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -267,13 +309,29 @@ struct SettingsView: View {
 
     private func backgroundRefreshSectionContent(viewModel: SettingsViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Enable Background Refresh", isOn: preferenceBinding(\.backgroundSync, viewModel: viewModel))
+            Toggle("Allow Background Refresh", isOn: preferenceBinding(\.backgroundSync, viewModel: viewModel))
                 .onChange(of: viewModel.notificationPreferences.backgroundSync) { _, _ in
                     Task { await viewModel.updateNotificationPreferences() }
                 }
-                .accessibilityHint("Runs periodic sync checks for enabled repositories.")
+                .accessibilityHint("Allows periodic sync checks for enabled repositories.")
 
-            Text("Background refresh checks enabled repositories every 5 minutes and keeps their status up to date. You can enable it per repository, and it works independently of notifications.")
+            Divider()
+
+            Toggle(
+                "Default for repositories",
+                isOn: Binding(
+                    get: { viewModel.backgroundRefreshDefault },
+                    set: { isOn in
+                        viewModel.backgroundRefreshDefault = isOn
+                        Task { await viewModel.updateBackgroundRefreshDefault() }
+                    }
+                )
+            )
+            .disabled(viewModel.isBackgroundRefreshDefaultUpdating)
+
+            Divider()
+
+            Text("Allow Background Refresh pauses or resumes all background refresh tasks. The default applies to repositories set to use it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

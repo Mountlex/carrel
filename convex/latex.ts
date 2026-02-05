@@ -24,6 +24,7 @@ import {
   type DependencyHash,
 } from "./lib/http";
 import { FileNotFoundError } from "./lib/providers/types";
+import { resolveCacheMode } from "./lib/settings";
 
 // Helper to get authentication for any git provider
 async function getAuthForProvider(
@@ -115,8 +116,18 @@ export const compileLatex = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
+    const userCacheMode = await ctx.runQuery(internal.users.getUserCacheModeInternal, { userId });
+    const userCacheAllowed = await ctx.runQuery(internal.users.getUserCacheAllowedInternal, { userId });
+    const cacheMode = resolveCacheMode({
+      userCacheMode,
+      cacheAllowed: userCacheAllowed ?? true,
+    });
     // Delegate to the internal implementation
-    return await ctx.runAction(internal.latex.compileLatexInternal, args);
+    return await ctx.runAction(internal.latex.compileLatexInternal, {
+      ...args,
+      userId,
+      cacheMode,
+    });
   },
 });
 
@@ -133,6 +144,13 @@ export const compileLatexInternal = internalAction({
     )),
     paperId: v.optional(v.id("papers")),
     userId: v.optional(v.id("users")), // Optional userId for mobile auth
+    cacheMode: v.optional(v.union(v.literal("off"), v.literal("aux"))),
+    knownDependencies: v.optional(v.array(v.string())),
+    previousDependencyPaths: v.optional(v.array(v.string())),
+    previousDependencyHashes: v.optional(v.array(v.object({
+      path: v.string(),
+      hash: v.string(),
+    }))),
   },
   handler: async (ctx, args) => {
     const MAX_LOG_CHARS = 20000;
@@ -199,6 +217,9 @@ export const compileLatexInternal = internalAction({
           target: args.filePath,
           compiler: args.compiler ?? "pdflatex",
           progressCallback,
+          paperId: args.paperId,
+          cacheMode: args.cacheMode,
+          knownDependencies: args.knownDependencies,
         }),
         timeout: 600000, // 10 minutes for clone + compile of large repos
       }, 2);
@@ -275,6 +296,7 @@ export const compileLatexInternal = internalAction({
         finalDependencies.push(args.filePath);
         console.log(`Added target file ${args.filePath} to dependencies`);
       }
+      finalDependencies = Array.from(new Set(finalDependencies));
 
       // Store PDF
       await updateProgress("Storing PDF...");
@@ -285,7 +307,17 @@ export const compileLatexInternal = internalAction({
 
       // Fetch blob hashes for dependencies (for file-level change detection)
       let dependencyHashes: DependencyHash[] = [];
-      if (finalDependencies.length > 0) {
+      const previousPaths = args.previousDependencyPaths ?? [];
+      const normalizedFinal = Array.from(new Set(finalDependencies)).sort();
+      const normalizedPrevious = Array.from(new Set(previousPaths)).sort();
+      const depsUnchanged = normalizedFinal.length > 0 &&
+        normalizedFinal.length === normalizedPrevious.length &&
+        normalizedFinal.every((value, index) => value === normalizedPrevious[index]);
+
+      if (depsUnchanged && args.previousDependencyHashes && args.previousDependencyHashes.length > 0) {
+        dependencyHashes = args.previousDependencyHashes;
+        console.log("Dependencies unchanged; reusing cached hashes");
+      } else if (finalDependencies.length > 0) {
         await updateProgress("Caching dependency info...");
         dependencyHashes = await fetchDependencyHashes(
           ctx,
@@ -303,11 +335,52 @@ export const compileLatexInternal = internalAction({
         storageId,
         size: pdfBuffer.byteLength,
         dependencies: dependencyHashes,
+        dependencyPaths: finalDependencies,
       };
     } catch (error) {
       // Clear progress on any error before re-throwing
       await updateProgress(null);
       throw error;
+    }
+  },
+});
+
+// Internal action to clear LaTeX service cache for one or more papers
+export const clearLatexCacheInternal = internalAction({
+  args: {
+    paperId: v.optional(v.id("papers")),
+    paperIds: v.optional(v.array(v.id("papers"))),
+  },
+  handler: async (_ctx, args) => {
+    const latexServiceUrl = process.env.LATEX_SERVICE_URL;
+    if (!latexServiceUrl) {
+      return { skipped: true, reason: "LATEX_SERVICE_URL not configured" };
+    }
+
+    const ids = (args.paperIds && args.paperIds.length > 0)
+      ? args.paperIds
+      : (args.paperId ? [args.paperId] : []);
+
+    if (ids.length === 0) {
+      return { skipped: true, reason: "No paper IDs provided" };
+    }
+
+    try {
+      const response = await fetchWithRetry(`${latexServiceUrl}/cache/clear`, {
+        method: "POST",
+        headers: getLatexServiceHeaders(),
+        body: JSON.stringify({ paperIds: ids }),
+        timeout: 30000,
+      }, 1);
+
+      if (!response.ok) {
+        const message = await response.text();
+        return { cleared: 0, error: message || `HTTP ${response.status}` };
+      }
+
+      return { cleared: ids.length };
+    } catch (error) {
+      return { cleared: 0, error: error instanceof Error ? error.message : String(error) };
     }
   },
 });
