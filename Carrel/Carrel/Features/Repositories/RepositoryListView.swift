@@ -15,32 +15,11 @@ struct RepositoryListView: View {
             .sheet(item: $repositoryForSettings) { repository in
                 RepositorySettingsView(
                     repository: repository,
+                    viewModel: viewModel,
                     userCacheMode: viewModel.userCacheMode,
                     isCompilationCacheAllowed: viewModel.isCompilationCacheAllowed,
                     backgroundRefreshDefault: viewModel.backgroundRefreshDefault,
-                    isBackgroundRefreshAllowed: viewModel.isBackgroundRefreshAllowed,
-                    onUpdateCacheMode: { mode in
-                        let success = await viewModel.setCompilationCacheMode(repository, mode: mode)
-                        if success {
-                            await MainActor.run {
-                                if repositoryForSettings?.id == repository.id {
-                                    repositoryForSettings = repository.with(latexCacheMode: mode)
-                                }
-                            }
-                        }
-                        return success
-                    },
-                    onUpdateBackgroundRefresh: { mode in
-                        let success = await viewModel.setBackgroundRefresh(repository, enabled: mode)
-                        if success {
-                            await MainActor.run {
-                                if repositoryForSettings?.id == repository.id {
-                                    repositoryForSettings = repository.with(backgroundRefreshEnabled: mode)
-                                }
-                            }
-                        }
-                        return success
-                    }
+                    isBackgroundRefreshAllowed: viewModel.isBackgroundRefreshAllowed
                 )
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
@@ -125,13 +104,16 @@ struct RepositoryListView: View {
                             isRefreshing: viewModel.refreshingRepoId == repository.id,
                             showsBackgroundRefreshBadge: isBackgroundRefreshActive,
                             onOpenSettings: {
-                                repositoryForSettings = repository
+                                let latest = viewModel.repositories.first(where: { $0.id == repository.id })
+                                    ?? repository
+                                repositoryForSettings = latest
                             }
                         )
                         .contentShape(Rectangle())
                         .padding(.horizontal, 16)
                         .onTapGesture {
-                            selectedRepository = repository
+                            selectedRepository = viewModel.repositories.first(where: { $0.id == repository.id })
+                                ?? repository
                         }
                         .accessibilityIdentifier("repository_card_\(repository.id)")
                         .listRowSeparator(.hidden)
@@ -183,12 +165,11 @@ struct RepositoryListView: View {
 
 private struct RepositorySettingsView: View {
     let repository: Repository
+    let viewModel: RepositoryViewModel
     let userCacheMode: LatexCacheMode
     let isCompilationCacheAllowed: Bool
     let backgroundRefreshDefault: Bool
     let isBackgroundRefreshAllowed: Bool
-    let onUpdateCacheMode: (LatexCacheMode?) async -> Bool
-    let onUpdateBackgroundRefresh: (Bool?) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var selection: RepoCacheSelection
@@ -198,20 +179,18 @@ private struct RepositorySettingsView: View {
 
     init(
         repository: Repository,
+        viewModel: RepositoryViewModel,
         userCacheMode: LatexCacheMode,
         isCompilationCacheAllowed: Bool,
         backgroundRefreshDefault: Bool,
-        isBackgroundRefreshAllowed: Bool,
-        onUpdateCacheMode: @escaping (LatexCacheMode?) async -> Bool,
-        onUpdateBackgroundRefresh: @escaping (Bool?) async -> Bool
+        isBackgroundRefreshAllowed: Bool
     ) {
         self.repository = repository
+        self.viewModel = viewModel
         self.userCacheMode = userCacheMode
         self.isCompilationCacheAllowed = isCompilationCacheAllowed
         self.backgroundRefreshDefault = backgroundRefreshDefault
         self.isBackgroundRefreshAllowed = isBackgroundRefreshAllowed
-        self.onUpdateCacheMode = onUpdateCacheMode
-        self.onUpdateBackgroundRefresh = onUpdateBackgroundRefresh
         self._selection = State(initialValue: RepoCacheSelection.from(mode: repository.latexCacheMode))
         self._backgroundRefreshSelection = State(
             initialValue: RepoBackgroundRefreshSelection.from(mode: repository.backgroundRefreshEnabled)
@@ -306,23 +285,28 @@ private struct RepositorySettingsView: View {
                     }
                 }
             }
-            .onAppear {
-                selection = RepoCacheSelection.from(mode: repository.latexCacheMode)
-                backgroundRefreshSelection = RepoBackgroundRefreshSelection.from(
-                    mode: repository.backgroundRefreshEnabled
-                )
-            }
         }
     }
 
     private func updateSelection(_ newValue: RepoCacheSelection) {
         guard !isUpdating else { return }
+        guard newValue != selection else { return }
         let previous = selection
+        let requestedSelection = newValue
         selection = newValue
         isUpdating = true
 
-        Task {
-            let success = await onUpdateCacheMode(newValue.mode)
+        let requestedMode: LatexCacheMode?
+        switch requestedSelection {
+        case .inherit:
+            requestedMode = nil
+        case .off:
+            requestedMode = .off
+        case .aux:
+            requestedMode = .aux
+        }
+        Task { @MainActor [requestedMode] in
+            let success = await viewModel.setCompilationCacheMode(repositoryId: repository.id, mode: requestedMode)
             if !success {
                 selection = previous
             }
@@ -332,12 +316,23 @@ private struct RepositorySettingsView: View {
 
     private func updateBackgroundRefresh(_ newValue: RepoBackgroundRefreshSelection) {
         guard !isUpdatingBackground else { return }
+        guard newValue != backgroundRefreshSelection else { return }
         let previous = backgroundRefreshSelection
+        let requestedSelection = newValue
         backgroundRefreshSelection = newValue
         isUpdatingBackground = true
 
-        Task {
-            let success = await onUpdateBackgroundRefresh(newValue.mode)
+        let requestedMode: Bool?
+        switch requestedSelection {
+        case .inherit:
+            requestedMode = nil
+        case .off:
+            requestedMode = false
+        case .on:
+            requestedMode = true
+        }
+        Task { @MainActor [requestedMode] in
+            let success = await viewModel.setBackgroundRefresh(repositoryId: repository.id, enabled: requestedMode)
             if !success {
                 backgroundRefreshSelection = previous
             }

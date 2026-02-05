@@ -25,6 +25,9 @@ final class RepositoryViewModel: SubscribableViewModel {
     /// Current toast message to display
     var toastMessage: ToastMessage?
 
+    private var reposUpdatingBackgroundRefresh: Set<String> = []
+    private var reposUpdatingCacheMode: Set<String> = []
+
     /// Whether background refresh is allowed (master pause)
     private(set) var isBackgroundRefreshAllowed = true
 
@@ -160,37 +163,47 @@ final class RepositoryViewModel: SubscribableViewModel {
     }
 
     /// Toggle background refresh for a repository
-    func setBackgroundRefresh(_ repository: Repository, enabled: Bool?) async -> Bool {
+    func setBackgroundRefresh(repositoryId: String, enabled: Bool?) async -> Bool {
+        let repoId = repositoryId
+        if reposUpdatingBackgroundRefresh.contains(repoId) { return true }
+        reposUpdatingBackgroundRefresh.insert(repoId)
+        defer { reposUpdatingBackgroundRefresh.remove(repoId) }
         do {
             try await ConvexService.shared.setBackgroundRefresh(
-                repositoryId: repository.id,
+                repositoryId: repoId,
                 enabled: enabled
             )
-            if let index = repositories.firstIndex(where: { $0.id == repository.id }) {
+            if let index = repositories.firstIndex(where: { $0.id == repoId }) {
                 var updated = repositories
                 updated[index] = updated[index].with(backgroundRefreshEnabled: enabled)
                 repositories = updated
             }
             return true
         } catch {
+            toastMessage = ToastMessage(text: "Failed to update background refresh", type: .error)
             return false
         }
     }
 
     /// Update compilation cache mode for a repository (nil = default)
-    func setCompilationCacheMode(_ repository: Repository, mode: LatexCacheMode?) async -> Bool {
+    func setCompilationCacheMode(repositoryId: String, mode: LatexCacheMode?) async -> Bool {
+        let repoId = repositoryId
+        if reposUpdatingCacheMode.contains(repoId) { return true }
+        reposUpdatingCacheMode.insert(repoId)
+        defer { reposUpdatingCacheMode.remove(repoId) }
         do {
             try await ConvexService.shared.setRepositoryLatexCacheMode(
-                repositoryId: repository.id,
+                repositoryId: repoId,
                 mode: mode
             )
-            if let index = repositories.firstIndex(where: { $0.id == repository.id }) {
+            if let index = repositories.firstIndex(where: { $0.id == repoId }) {
                 var updated = repositories
                 updated[index] = updated[index].with(latexCacheMode: mode)
                 repositories = updated
             }
             return true
         } catch {
+            toastMessage = ToastMessage(text: "Failed to update compilation cache", type: .error)
             return false
         }
     }

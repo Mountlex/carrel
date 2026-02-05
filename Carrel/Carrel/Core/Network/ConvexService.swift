@@ -450,20 +450,62 @@ final class ConvexService: ObservableObject {
 
     /// Update background refresh setting for a repository
     func setBackgroundRefresh(repositoryId: String, enabled: Bool?) async throws {
-        let args: [String: ConvexEncodable?] = [
-            "id": repositoryId,
-            "backgroundRefreshEnabled": enabled
-        ]
-        let _: EmptyResult? = try await client.mutation("repositories:update", with: args)
+        let mode: String
+        switch enabled {
+        case nil:
+            mode = "default"
+        case true:
+            mode = "on"
+        case false:
+            mode = "off"
+        }
+
+        do {
+            let _: EmptyResult? = try await client.mutation(
+                "repositories:update",
+                with: [
+                    "id": repositoryId,
+                    "backgroundRefreshMode": mode,
+                ]
+            )
+        } catch {
+            // Backward-compatibility for deployments that only accept the legacy field.
+            let legacyArgs: [String: ConvexEncodable?] = [
+                "id": repositoryId,
+                "backgroundRefreshEnabled": enabled,
+            ]
+            let _: EmptyResult? = try await client.mutation("repositories:update", with: legacyArgs)
+        }
     }
 
     /// Update LaTeX cache mode for a repository (nil = default)
     func setRepositoryLatexCacheMode(repositoryId: String, mode: LatexCacheMode?) async throws {
-        let args: [String: ConvexEncodable?] = [
-            "id": repositoryId,
-            "latexCacheMode": mode?.rawValue
-        ]
-        let _: EmptyResult? = try await client.mutation("repositories:update", with: args)
+        let modeSetting: String
+        switch mode {
+        case nil:
+            modeSetting = "default"
+        case .off:
+            modeSetting = "off"
+        case .aux:
+            modeSetting = "aux"
+        }
+
+        do {
+            let _: EmptyResult? = try await client.mutation(
+                "repositories:update",
+                with: [
+                    "id": repositoryId,
+                    "latexCacheModeSetting": modeSetting,
+                ]
+            )
+        } catch {
+            // Backward-compatibility for deployments that only accept the legacy field.
+            let legacyArgs: [String: ConvexEncodable?] = [
+                "id": repositoryId,
+                "latexCacheMode": mode?.rawValue,
+            ]
+            let _: EmptyResult? = try await client.mutation("repositories:update", with: legacyArgs)
+        }
     }
 
     // MARK: - Repository Files
