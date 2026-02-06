@@ -29,9 +29,9 @@ function SharePageError({ error }: { error: Error }) {
 
   return (
     <div className="flex flex-col items-center justify-center py-12">
-      <div className="mb-4 rounded-full bg-red-100 p-4 dark:bg-red-900/30">
+      <div className="mb-4 rounded-full bg-danger-100 p-4 dark:bg-danger-900/30">
         <svg
-          className="h-8 w-8 text-red-600 dark:text-red-400"
+          className="h-8 w-8 text-danger-600 dark:text-danger-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -83,7 +83,7 @@ function SharePage() {
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
           This paper may have been made private or deleted.
         </p>
-        <Link to="/" className="mt-4 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+        <Link to="/" className="mt-4 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
           Go to Carrel
         </Link>
       </div>
@@ -129,7 +129,7 @@ function SharePage() {
             <a
               href={paper.pdfUrl}
               download
-              className="inline-flex items-center rounded-md border border-primary-200 bg-primary-50 px-6 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+              className="inline-flex items-center rounded-md bg-primary-600 px-6 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-primary-600 dark:hover:bg-primary-700"
             >
               <svg
                 className="mr-2 h-4 w-4"
@@ -153,7 +153,7 @@ function SharePage() {
       {/* Footer */}
       <div className="mt-12 border-t pt-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
         Shared via{" "}
-        <Link to="/" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+        <Link to="/" className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
           Carrel
         </Link>{" "}
         | Create your own carrel

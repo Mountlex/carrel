@@ -206,7 +206,7 @@ function PaperDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <h2 className="text-lg font-normal text-gray-900 dark:text-gray-100">Paper not found</h2>
-        <Link to="/" className="mt-4 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+        <Link to="/" className="mt-4 text-primary-600 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
           Back to Gallery
         </Link>
       </div>
@@ -218,7 +218,7 @@ function PaperDetailPage() {
       <div className="mb-6">
         <Link
           to="/"
-          className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+          className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
         >
           <svg
             className="mr-1 h-4 w-4"
@@ -240,7 +240,7 @@ function PaperDetailPage() {
       <div className="grid gap-8 lg:grid-cols-3">
         {/* PDF Preview */}
         <div className="lg:col-span-2">
-          <div className="h-[calc(100vh-12rem)] w-full overflow-hidden rounded-lg border bg-gray-100 shadow-sm dark:border-gray-800 dark:bg-gray-800">
+          <div className="h-[calc(100vh-12rem)] w-full overflow-hidden rounded-xl border border-gray-200/60 bg-gray-100 shadow-sm dark:border-gray-800/60 dark:bg-gray-800">
             {paper.pdfUrl ? (
               <PdfViewer ref={pdfViewerRef} url={paper.pdfUrl} title={paper.title} />
             ) : (
@@ -270,7 +270,7 @@ function PaperDetailPage() {
                       <button
                         onClick={handlePrimaryBuild}
                         disabled={isBuilding}
-                        className="inline-flex items-center justify-center rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+                        className="inline-flex items-center justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
                       >
                         {isBuilding ? (
                           <span className="flex items-center">
@@ -305,7 +305,7 @@ function PaperDetailPage() {
         {/* Paper Details */}
         <div className="space-y-6">
           <div>
-            <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">{paper.title}</h1>
+            <h1 className="font-serif text-2xl tracking-tight text-gray-900 dark:text-gray-100">{paper.title}</h1>
             {paper.authors && paper.authors.length > 0 && (
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 Authors: {paper.authors.join(", ")}
@@ -313,7 +313,7 @@ function PaperDetailPage() {
             )}
           </div>
 
-          <div className="rounded-lg border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="rounded-xl border border-gray-200/60 bg-white p-4 dark:border-gray-800/60 dark:bg-gray-900">
             <h3 className="mb-3 text-sm font-normal text-gray-900 dark:text-gray-100">Details</h3>
             <dl className="space-y-2 text-sm">
               {paper.pageCount && (
@@ -416,7 +416,7 @@ function PaperDetailPage() {
                           <button
                             onClick={() => handleBuild()}
                             disabled={isBuilding}
-                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                           >
                             Retry
                           </button>
@@ -470,7 +470,7 @@ function PaperDetailPage() {
                           <button
                             onClick={() => handleBuild()}
                             disabled={isBuilding}
-                            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                           >
                             Retry
                           </button>
@@ -491,19 +491,19 @@ function PaperDetailPage() {
           {/* Persisted compilation error */}
           {paper.lastSyncError && !buildError && (
             isSourceFileNotFound(paper.lastSyncError) ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/50">
+              <div className="rounded-lg border border-danger-200 bg-danger-50 p-4 dark:border-danger-900 dark:bg-danger-950/50">
                 <div className="flex items-start gap-3">
-                  <svg className="h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 flex-shrink-0 text-danger-600 dark:text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <div className="flex-1">
-                    <h4 className="text-sm font-medium text-red-800 dark:text-red-200">Source file not found</h4>
-                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                    <h4 className="text-sm font-medium text-danger-800 dark:text-danger-200">Source file not found</h4>
+                    <p className="mt-1 text-sm text-danger-700 dark:text-danger-300">
                       The source file for this paper was deleted or renamed in the repository. You can delete this paper from your gallery.
                     </p>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="mt-3 inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:bg-red-700 dark:hover:bg-red-600"
+                      className="mt-3 inline-flex items-center rounded-md bg-danger-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-danger-700 focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2 dark:bg-danger-700 dark:hover:bg-danger-600"
                     >
                       <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -524,7 +524,7 @@ function PaperDetailPage() {
               <button
                 onClick={handlePrimaryBuild}
                 disabled={isBuilding}
-                className="w-full rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+                className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
               >
                 {isBuilding ? (
                   <span className="flex items-center justify-center">
@@ -563,8 +563,8 @@ function PaperDetailPage() {
 
           {/* Share Link */}
           {paper.isPublic && paper.shareSlug && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
-              <h3 className="mb-2 text-sm font-normal text-green-900 dark:text-green-100">
+            <div className="rounded-lg border border-success-200 bg-success-50 p-4 dark:border-success-800 dark:bg-success-950">
+              <h3 className="mb-2 text-sm font-normal text-success-900 dark:text-success-100">
                 Share Link
               </h3>
               <div className="flex items-center gap-2">
@@ -572,7 +572,7 @@ function PaperDetailPage() {
                   type="text"
                   readOnly
                   value={`${window.location.origin}/share/${paper.shareSlug}`}
-                  className="flex-1 rounded border border-green-300 bg-white px-2 py-1 text-xs dark:border-green-700 dark:bg-green-900/50 dark:text-green-100"
+                  className="flex-1 rounded border border-success-300 bg-white px-2 py-1 text-xs dark:border-success-700 dark:bg-success-900/50 dark:text-success-100"
                 />
                 <button
                   onClick={() => {
@@ -605,7 +605,7 @@ function PaperDetailPage() {
                       }
                     }
                   }}
-                  className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
+                  className="rounded bg-success-600 px-2 py-1 text-xs text-white hover:bg-success-700"
                   aria-label="Copy share link to clipboard"
                 >
                   Copy
@@ -616,7 +616,7 @@ function PaperDetailPage() {
 
           {/* Tracked File Info */}
           {paper.trackedFile && (
-            <div className="rounded-lg border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <div className="rounded-xl border border-gray-200/60 bg-white p-4 dark:border-gray-800/60 dark:bg-gray-900">
               <h3 className="mb-3 text-sm font-normal text-gray-900 dark:text-gray-100">
                 Source
               </h3>
@@ -665,7 +665,7 @@ function PaperDetailPage() {
           )}
 
           {/* Version History */}
-          <div className="rounded-lg border bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="rounded-xl border border-gray-200/60 bg-white p-4 dark:border-gray-800/60 dark:bg-gray-900">
             <button
               onClick={() => setShowVersionHistory(!showVersionHistory)}
               aria-expanded={showVersionHistory}
@@ -684,10 +684,10 @@ function PaperDetailPage() {
             {showVersionHistory && (
               <div className="mt-3 space-y-2">
                 {/* Current version indicator */}
-                <div className="rounded border border-green-200 bg-green-50 p-2 dark:border-green-800 dark:bg-green-950">
+                <div className="rounded border border-success-200 bg-success-50 p-2 dark:border-success-800 dark:bg-success-950">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center rounded bg-green-600 px-1.5 py-0.5 text-xs font-normal text-white">
+                      <span className="inline-flex items-center rounded bg-success-600 px-1.5 py-0.5 text-xs font-normal text-white">
                         Current
                       </span>
                       <span className="font-mono text-xs text-gray-700 dark:text-gray-300">
@@ -714,7 +714,7 @@ function PaperDetailPage() {
                     key={version._id}
                     className={`rounded border p-2 ${
                       version.pinned
-                        ? "border-yellow-300 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-950"
+                        ? "border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950"
                         : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
                     }`}
                   >
@@ -727,8 +727,8 @@ function PaperDetailPage() {
                           }}
                           className={`rounded p-0.5 transition-colors ${
                             version.pinned
-                              ? "text-yellow-500 hover:text-yellow-600"
-                              : "text-gray-400 hover:text-yellow-500"
+                              ? "text-warning-500 hover:text-warning-600"
+                              : "text-gray-400 hover:text-warning-500"
                           }`}
                           title={version.pinned ? "Unpin version (allows auto-deletion)" : "Pin version (prevents auto-deletion)"}
                         >
@@ -748,7 +748,7 @@ function PaperDetailPage() {
                           href={version.pdfUrl || "#"}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                         >
                           View
                         </a>

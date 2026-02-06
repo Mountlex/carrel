@@ -56,7 +56,7 @@ export function OverleafSetupModal({ onClose, onSave }: OverleafSetupModalProps)
             href="https://www.overleaf.com/user/settings"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline dark:text-blue-400"
+            className="text-primary-600 hover:underline dark:text-primary-400"
           >
             Overleaf Account Settings ↗
           </a>{" "}
@@ -77,7 +77,7 @@ export function OverleafSetupModal({ onClose, onSave }: OverleafSetupModalProps)
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
@@ -91,11 +91,11 @@ export function OverleafSetupModal({ onClose, onSave }: OverleafSetupModalProps)
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="Your Overleaf Git token"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-sm text-danger-600 dark:text-danger-400">{error}</p>}
 
           <div className="flex justify-end gap-3">
             <button
@@ -107,7 +107,7 @@ export function OverleafSetupModal({ onClose, onSave }: OverleafSetupModalProps)
             <button
               onClick={handleSave}
               disabled={isSaving || !email.trim() || !token.trim()}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-normal text-white hover:bg-green-700 disabled:opacity-50"
+              className="rounded-md bg-[#47A141] px-4 py-2 text-sm font-normal text-white hover:bg-[#3d8a37] disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Save Credentials"}
             </button>

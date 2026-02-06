@@ -280,10 +280,10 @@ function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-8 text-2xl font-normal text-gray-900 dark:text-gray-100">Profile</h1>
+      <h1 className="mb-8 font-serif text-2xl tracking-tight text-gray-900 dark:text-gray-100">Profile</h1>
 
       {/* Account Settings */}
-      <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-8 rounded-xl border border-gray-200/60 bg-white p-6 shadow-sm dark:border-gray-800/60 dark:bg-gray-900">
         <h3 className="mb-6 text-lg font-normal text-gray-900 dark:text-gray-100">Account Settings</h3>
 
         {/* Name Field */}
@@ -330,8 +330,8 @@ function ProfilePage() {
               </button>
             </div>
           )}
-          {nameError && <p className="mt-2 text-sm text-red-600">{nameError}</p>}
-          {nameSuccess && <p className="mt-2 text-sm text-green-600">Name updated to "{user?.name}"</p>}
+          {nameError && <p className="mt-2 text-sm text-danger-600">{nameError}</p>}
+          {nameSuccess && <p className="mt-2 text-sm text-success-600">Name updated to "{user?.name}"</p>}
         </div>
 
         {/* Email Field (read-only) */}
@@ -377,8 +377,8 @@ function ProfilePage() {
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             Allow compilation cache pauses or resumes all cache usage. The default applies to repositories set to use it.
           </p>
-          {cacheAllowedError && <p className="mt-2 text-sm text-red-600">{cacheAllowedError}</p>}
-          {cacheModeError && <p className="mt-2 text-sm text-red-600">{cacheModeError}</p>}
+          {cacheAllowedError && <p className="mt-2 text-sm text-danger-600">{cacheAllowedError}</p>}
+          {cacheModeError && <p className="mt-2 text-sm text-danger-600">{cacheModeError}</p>}
         </div>
 
         {/* Background Refresh */}
@@ -416,9 +416,9 @@ function ProfilePage() {
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             Allow Background Refresh pauses or resumes all background refresh tasks. The default applies to repositories set to use it.
           </p>
-          {backgroundSyncError && <p className="mt-2 text-sm text-red-600">{backgroundSyncError}</p>}
+          {backgroundSyncError && <p className="mt-2 text-sm text-danger-600">{backgroundSyncError}</p>}
           {backgroundRefreshDefaultError && (
-            <p className="mt-2 text-sm text-red-600">{backgroundRefreshDefaultError}</p>
+            <p className="mt-2 text-sm text-danger-600">{backgroundRefreshDefaultError}</p>
           )}
         </div>
 
@@ -443,7 +443,7 @@ function ProfilePage() {
                 We sent a verification code to <strong>{user?.email}</strong>
               </p>
               {codeSentSuccess && (
-                <p className="text-sm text-green-600 dark:text-green-400">
+                <p className="text-sm text-success-600 dark:text-success-400">
                   Verification code sent successfully. Please check your email.
                 </p>
               )}
@@ -496,9 +496,9 @@ function ProfilePage() {
               </button>
             </form>
           )}
-          {passwordError && <p className="mt-2 text-sm text-red-600">{passwordError}</p>}
+          {passwordError && <p className="mt-2 text-sm text-danger-600">{passwordError}</p>}
           {passwordSuccess && (
-            <p className="mt-2 text-sm text-green-600">
+            <p className="mt-2 text-sm text-success-600">
               Password updated successfully. You've been signed out of other devices for security.
             </p>
           )}
@@ -506,7 +506,7 @@ function ProfilePage() {
       </div>
 
       {/* Connected Accounts */}
-      <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-8 rounded-xl border border-gray-200/60 bg-white p-6 shadow-sm dark:border-gray-800/60 dark:bg-gray-900">
         <h3 className="mb-4 text-lg font-normal text-gray-900 dark:text-gray-100">
           Connected Accounts
         </h3>
@@ -516,7 +516,7 @@ function ProfilePage() {
 
         <div className="space-y-4">
           {/* GitHub */}
-          <div className="flex items-center justify-between rounded-lg border p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between rounded-xl border border-gray-200/60 p-4 dark:border-gray-800/60">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-900 dark:bg-gray-100">
                 <GitHubIcon className="h-5 w-5 text-white dark:text-gray-900" />
@@ -548,7 +548,7 @@ function ProfilePage() {
           </div>
 
           {/* GitLab */}
-          <div className="flex items-center justify-between rounded-lg border p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between rounded-xl border border-gray-200/60 p-4 dark:border-gray-800/60">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FC6D26]">
                 <GitLabIcon className="h-5 w-5 text-white" />
@@ -587,7 +587,7 @@ function ProfilePage() {
           </div>
 
           {/* Overleaf */}
-          <div className="flex items-center justify-between rounded-lg border p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between rounded-xl border border-gray-200/60 p-4 dark:border-gray-800/60">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#47A141]">
                 <OverleafIcon className="h-5 w-5 text-white" />
@@ -624,7 +624,7 @@ function ProfilePage() {
               {selfHostedGitLabInstances.map((instance: { _id: string; name: string; url: string }) => (
                 <div
                   key={instance._id}
-                  className="flex items-center justify-between rounded-lg border p-4 dark:border-gray-800"
+                  className="flex items-center justify-between rounded-xl border border-gray-200/60 p-4 dark:border-gray-800/60"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#554488]">
@@ -650,7 +650,7 @@ function ProfilePage() {
           )}
 
           {/* Add Self-hosted GitLab Instance */}
-          <div className="flex items-center justify-between rounded-lg border border-dashed p-4 dark:border-gray-700">
+          <div className="flex items-center justify-between rounded-xl border border-dashed border-gray-300 p-4 dark:border-gray-700">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                 <GitLabIcon className="h-5 w-5 text-[#554488]" />
@@ -677,8 +677,8 @@ function ProfilePage() {
       </div>
 
       {/* Danger Zone */}
-      <div className="rounded-lg border border-red-200 bg-white p-6 shadow-sm dark:border-red-900 dark:bg-gray-900">
-        <h3 className="mb-4 text-lg font-normal text-red-600 dark:text-red-400">
+      <div className="rounded-xl border border-danger-200/60 bg-white p-6 shadow-sm dark:border-danger-900/60 dark:bg-gray-900">
+        <h3 className="mb-4 text-lg font-medium text-danger-600 dark:text-danger-400">
           Danger Zone
         </h3>
         <div className="flex items-center justify-between">
@@ -690,13 +690,13 @@ function ProfilePage() {
           </div>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="shrink-0 rounded-md border border-red-600 px-4 py-2 text-sm font-normal text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-500 dark:hover:bg-red-950"
+            className="shrink-0 rounded-lg border border-danger-300 px-4 py-2 text-sm text-danger-600 transition-colors hover:bg-danger-50 dark:border-danger-700 dark:text-danger-400 dark:hover:bg-danger-950"
           >
             Delete Account
           </button>
         </div>
         {deleteError && (
-          <p className="mt-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+          <p className="mt-4 text-sm text-danger-600 dark:text-danger-400">{deleteError}</p>
         )}
       </div>
 

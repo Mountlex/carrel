@@ -12,11 +12,11 @@ interface StatusBadgeProps {
 }
 
 const statusStyles: Record<StatusType, string> = {
-  success: "text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-950",
-  warning: "text-yellow-700 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-950",
-  error: "text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950",
-  info: "text-purple-700 bg-purple-50 dark:text-purple-400 dark:bg-purple-950",
-  building: "text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-950",
+  success: "text-success-700 bg-success-50 dark:text-success-400 dark:bg-success-950",
+  warning: "text-warning-700 bg-warning-50 dark:text-warning-400 dark:bg-warning-950",
+  error: "text-danger-700 bg-danger-50 dark:text-danger-400 dark:bg-danger-950",
+  info: "text-info-700 bg-info-50 dark:text-info-400 dark:bg-info-950",
+  building: "text-info-700 bg-info-50 dark:text-info-400 dark:bg-info-950",
 };
 
 const defaultIcons: Record<StatusType, ReactNode> = {

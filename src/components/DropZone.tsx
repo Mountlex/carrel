@@ -86,10 +86,10 @@ export function DropZone({
 
       {/* Drop overlay */}
       {isDragOver && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg border-4 border-dashed border-blue-500 bg-blue-50/90 dark:bg-blue-950/90">
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-primary-400 bg-primary-50/90 dark:border-primary-600 dark:bg-primary-950/90">
           <div className="text-center">
             <svg
-              className="mx-auto h-12 w-12 text-blue-500"
+              className="mx-auto h-12 w-12 text-primary-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -102,7 +102,7 @@ export function DropZone({
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
               />
             </svg>
-            <p className="mt-2 text-lg font-normal text-blue-700 dark:text-blue-300">
+            <p className="mt-2 text-lg text-primary-700 dark:text-primary-300">
               Drop PDF to upload
             </p>
           </div>

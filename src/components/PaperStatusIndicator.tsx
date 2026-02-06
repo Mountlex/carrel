@@ -37,7 +37,7 @@ export function PaperStatusIndicator({
   if (buildStatus === "building") {
     return (
       <span
-        className="flex shrink-0 items-center gap-0.5 text-blue-600"
+        className="flex shrink-0 items-center gap-0.5 text-info-600"
         title={compilationProgress || (pdfSourceType === "compile" ? "Compiling LaTeX..." : "Fetching PDF...")}
       >
         <LoadingSpinner size="xs" />
@@ -65,7 +65,7 @@ export function PaperStatusIndicator({
   if (isUpToDate === true) {
     return (
       <span
-        className="flex shrink-0 items-center gap-0.5 text-green-600"
+        className="flex shrink-0 items-center gap-0.5 text-success-600"
         title={`Up to date - committed ${formatRelativeTime(lastTime)}`}
       >
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -80,7 +80,7 @@ export function PaperStatusIndicator({
   if (isUpToDate === false && !lastSyncError) {
     return (
       <span
-        className="flex shrink-0 items-center gap-0.5 text-yellow-600"
+        className="flex shrink-0 items-center gap-0.5 text-warning-600"
         title={`New commit available - committed ${formatRelativeTime(lastTime)}`}
       >
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -104,7 +104,7 @@ export function PaperStatusIndicator({
 
     return (
       <span
-        className="flex shrink-0 items-center gap-0.5 text-red-600"
+        className="flex shrink-0 items-center gap-0.5 text-danger-600"
         title={isSourceFileMissing ? "Source file was deleted from repository" : `${pdfSourceType === "compile" ? "Compilation" : "Sync"} failed: ${lastSyncError}`}
       >
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

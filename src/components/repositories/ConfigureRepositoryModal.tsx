@@ -155,7 +155,7 @@ export function ConfigureRepositoryModal({
           <div className="flex w-1/2 flex-col border-r dark:border-gray-700">
             <div className="border-b bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900">
               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <button onClick={() => navigateToFolder("")} className="hover:text-blue-600 dark:hover:text-blue-400">
+                <button onClick={() => navigateToFolder("")} className="hover:text-primary-600 dark:hover:text-primary-400">
                   {repo.name}
                 </button>
                 {currentPath && (
@@ -165,7 +165,7 @@ export function ConfigureRepositoryModal({
                         <span>/</span>
                         <button
                           onClick={() => navigateToFolder(arr.slice(0, i + 1).join("/"))}
-                          className="hover:text-blue-600 dark:hover:text-blue-400"
+                          className="hover:text-primary-600 dark:hover:text-primary-400"
                         >
                           {part}
                         </button>
@@ -231,7 +231,7 @@ export function ConfigureRepositoryModal({
                         <span className="text-xs text-gray-500 dark:text-gray-400">{file.path}</span>
                         <button
                           onClick={() => toggleFileSelection({ path: file.path, name: file.path.split("/").pop() || "" })}
-                          className="text-gray-400 hover:text-red-500"
+                          className="text-gray-400 hover:text-danger-500"
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -243,12 +243,12 @@ export function ConfigureRepositoryModal({
                         value={file.title}
                         onChange={(e) => updateFileTitle(file.path, e.target.value)}
                         placeholder="Paper title"
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
                       />
                       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                         {file.pdfSourceType === "compile" ? (
                           <div className="flex flex-col gap-2">
-                            <span className="text-green-600 dark:text-green-400">Will be compiled from LaTeX</span>
+                            <span className="text-success-600 dark:text-success-400">Will be compiled from LaTeX</span>
                             <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                               <span>Compiler</span>
                               <select
@@ -263,7 +263,7 @@ export function ConfigureRepositoryModal({
                             </label>
                           </div>
                         ) : (
-                          <span className="text-blue-600 dark:text-blue-400">PDF from repository</span>
+                          <span className="text-info-600 dark:text-info-400">PDF from repository</span>
                         )}
                       </div>
                     </div>
@@ -284,7 +284,7 @@ export function ConfigureRepositoryModal({
           <button
             onClick={handleAddFiles}
             disabled={selectedFiles.length === 0 || isAddingFiles}
-            className="rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+            className="rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
           >
             {isAddingFiles ? "Adding..." : `Add ${selectedFiles.length} Paper${selectedFiles.length !== 1 ? "s" : ""}`}
           </button>
@@ -317,7 +317,7 @@ function FileItem({
         onClick={() => onNavigate(file.path)}
         className="flex w-full items-center gap-2 rounded p-2 text-left text-sm hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
       >
-        <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
         {file.name}
@@ -334,7 +334,7 @@ function FileItem({
           ? "cursor-not-allowed bg-gray-50 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400"
           : isTexOrPdf
             ? isSelected
-              ? "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-300"
+              ? "bg-info-100 text-info-900 dark:bg-info-900/30 dark:text-info-300"
               : "hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
             : "cursor-not-allowed text-gray-400 dark:text-gray-500"
       }`}
@@ -344,11 +344,11 @@ function FileItem({
           type="checkbox"
           checked={isSelected}
           onChange={() => {}}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 dark:border-gray-600 dark:bg-gray-700"
+          className="h-4 w-4 rounded border-gray-300 text-primary-600 dark:border-gray-600 dark:bg-gray-700"
         />
       )}
       {isAlreadyTracked && (
-        <svg className="h-4 w-4 text-green-500 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4 text-success-500 dark:text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       )}
@@ -360,10 +360,10 @@ function FileItem({
         <span className="ml-auto rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-400">Added</span>
       )}
       {!isAlreadyTracked && lowerName.endsWith(".tex") && (
-        <span className="ml-auto rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-400">LaTeX</span>
+        <span className="ml-auto rounded bg-success-100 px-1.5 py-0.5 text-xs text-success-700 dark:bg-success-900/30 dark:text-success-400">LaTeX</span>
       )}
       {!isAlreadyTracked && lowerName.endsWith(".pdf") && (
-        <span className="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400">PDF</span>
+        <span className="ml-auto rounded bg-danger-100 px-1.5 py-0.5 text-xs text-danger-700 dark:bg-danger-900/30 dark:text-danger-400">PDF</span>
       )}
     </button>
   );

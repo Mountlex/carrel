@@ -22,7 +22,7 @@ export function CompilationLog({ error }: CompilationLogProps) {
     : errorMessage;
 
   return (
-    <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+    <div className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700 dark:bg-danger-900/30 dark:text-danger-300">
       <p className="font-normal">
         {displayedMessage}
         {isLongError && (
@@ -39,7 +39,7 @@ export function CompilationLog({ error }: CompilationLogProps) {
         <div className="mt-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-xs font-normal text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200"
+            className="flex items-center gap-1 text-xs font-normal text-danger-600 hover:text-danger-800 dark:text-danger-400 dark:hover:text-danger-200"
           >
             <svg
               className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}

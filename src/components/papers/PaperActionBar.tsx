@@ -21,7 +21,7 @@ export function PaperActionBar({
         <a
           href={pdfUrl}
           download
-          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
           title="Download PDF"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -32,7 +32,7 @@ export function PaperActionBar({
       {pdfUrl && (
         <button
           onClick={onToggleFullscreen}
-          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
           title="View Full Screen (F)"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -44,8 +44,8 @@ export function PaperActionBar({
         onClick={onTogglePublic}
         className={`flex h-10 w-10 items-center justify-center rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 ${
           isPublic
-            ? "border-green-300 text-green-700 hover:bg-green-50 focus:ring-green-500 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/30"
-            : "border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-blue-500 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            ? "border-success-300 text-success-700 hover:bg-success-50 focus:ring-success-500 dark:border-success-700 dark:text-success-400 dark:hover:bg-success-900/30"
+            : "border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
         }`}
         title={isPublic ? "Make Private" : "Make Public"}
         aria-label={`${isPublic ? "Make" : "Make"} ${title} ${isPublic ? "private" : "public"}`}
@@ -62,7 +62,7 @@ export function PaperActionBar({
       </button>
       <button
         onClick={onDelete}
-        className="flex h-10 w-10 items-center justify-center rounded-md border border-red-300 text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
+        className="flex h-10 w-10 items-center justify-center rounded-md border border-danger-300 text-danger-700 hover:bg-danger-50 focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2 dark:border-danger-700 dark:text-danger-400 dark:hover:bg-danger-900/30"
         title={`Delete ${title}`}
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -57,22 +57,22 @@ export function PaperCard({
   onFullscreen,
 }: PaperCardProps) {
   const cardClassName =
-    "group overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:border-gray-200 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700";
+    "group card-hover overflow-hidden rounded-xl border border-gray-200/60 bg-white shadow-sm dark:border-gray-800/60 dark:bg-gray-900";
 
   const cardContent = (
     <>
       {/* Thumbnail */}
-      <div className="relative aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800">
+      <div className="relative aspect-[8.5/11] w-full overflow-hidden bg-gray-100 dark:bg-gray-800">
         {paper.thumbnailUrl ? (
           <img
             src={paper.thumbnailUrl}
             alt={paper.title}
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-cover dark:invert dark:hue-rotate-180"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-400">
+          <div className="flex h-full items-center justify-center text-gray-300 dark:text-gray-600">
             <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
@@ -87,11 +87,11 @@ export function PaperCard({
         {paper.pdfUrl && (
           <button
             onClick={(e) => onFullscreen(e, paper.pdfUrl!, paper.title)}
-            className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100 focus:opacity-100"
+            className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/70 group-hover:opacity-100 focus:opacity-100"
             title="View PDF fullscreen (F)"
             aria-label={`View ${paper.title} PDF fullscreen`}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -115,20 +115,20 @@ export function PaperCard({
               onChange={(e) => onEditTitleChange(e.target.value)}
               onBlur={onSaveTitle}
               onKeyDown={onKeyDown}
-              className="min-w-0 flex-1 truncate rounded border border-blue-400 px-1 py-0.5 text-sm font-normal text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              className="min-w-0 flex-1 truncate rounded-md border border-primary-300 bg-primary-50 px-2 py-0.5 text-sm text-gray-900 focus:outline-none dark:border-primary-700 dark:bg-primary-950 dark:text-gray-100"
             />
           ) : (
             <>
-              <h3 className="min-w-0 flex-1 truncate font-serif font-normal text-gray-900 group-hover:text-blue-600 dark:text-gray-100 dark:group-hover:text-blue-400">
+              <h3 className="min-w-0 flex-1 truncate font-serif text-[0.95rem] leading-snug text-gray-900 transition-colors group-hover:text-primary-700 dark:text-gray-100 dark:group-hover:text-primary-400">
                 {paper.title}
               </h3>
               <button
                 onClick={(e) => onStartEdit(e, paper._id, paper.title)}
-                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                className="shrink-0 rounded-md p-1 text-gray-300 opacity-0 transition-all hover:bg-gray-100 hover:text-gray-500 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-400"
                 title="Rename"
                 aria-label={`Rename ${paper.title}`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -139,11 +139,11 @@ export function PaperCard({
               </button>
               <button
                 onClick={(e) => onDeleteClick(e, paper._id)}
-                className="shrink-0 rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:hover:bg-red-900/30"
+                className="shrink-0 rounded-md p-1 text-gray-300 opacity-0 transition-all hover:bg-danger-50 hover:text-danger-500 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 dark:text-gray-600 dark:hover:bg-danger-500/10 dark:hover:text-danger-400"
                 title="Delete this paper permanently"
                 aria-label={`Delete ${paper.title}`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -156,11 +156,11 @@ export function PaperCard({
           )}
         </div>
         {paper.authors && paper.authors.length > 0 && (
-          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 truncate text-xs text-gray-400 dark:text-gray-500">
             {paper.authors.join(", ")}
           </p>
         )}
-        <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+        <div className="mt-2.5 flex items-center justify-between text-xs text-gray-400">
           {paper.repository ? (
             <span className="flex items-center gap-1 truncate">
               {(() => {
@@ -171,7 +171,7 @@ export function PaperCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="truncate hover:text-blue-600 hover:underline dark:hover:text-blue-400"
+                    className="truncate transition-colors hover:text-primary-600 hover:underline dark:hover:text-primary-400"
                     title={`Open ${paper.repository.name} on ${paper.repository.provider}`}
                   >
                     {paper.repository.name}
@@ -192,12 +192,12 @@ export function PaperCard({
               />
             </span>
           ) : (
-            <span className="text-gray-400">Uploaded</span>
+            <span className="text-gray-400 dark:text-gray-500">Uploaded</span>
           )}
           <span className="flex items-center">
             {paper.isPublic ? (
-              <span className="flex items-center text-green-600">
-                <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span className="flex items-center gap-0.5 text-success-600 dark:text-success-400">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -208,8 +208,8 @@ export function PaperCard({
                 Public
               </span>
             ) : paper.repository ? (
-              <span className="flex items-center">
-                <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span className="flex items-center gap-0.5">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"

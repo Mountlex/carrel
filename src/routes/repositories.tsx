@@ -520,7 +520,7 @@ function RepositoriesPage() {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3 md:mb-8">
         <div className="flex max-w-xl flex-col gap-1">
-          <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">Repositories</h1>
+          <h1 className="font-serif text-2xl tracking-tight text-gray-900 dark:text-gray-100">Repositories</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Background refresh checks repositories every 5 minutes when allowed in Profile. Each repo can use the default or override.
           </p>
@@ -530,7 +530,7 @@ function RepositoriesPage() {
           <button
             onClick={handleCheckAll}
             disabled={isSyncingAny || !repositories || repositories.length === 0}
-            className="inline-flex items-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 md:px-4 md:py-2"
+            className="inline-flex items-center rounded-lg border border-gray-200/60 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 md:px-4 md:py-2"
             title="Check all repositories"
           >
             {isSyncingAny ? (
@@ -550,7 +550,7 @@ function RepositoriesPage() {
           {/* Add Repository - icon only on mobile */}
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:px-4 md:py-2"
+            className="inline-flex items-center rounded-md bg-primary-600 p-2 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700 md:px-4 md:py-2"
             title="Add repository"
           >
             <svg className="h-5 w-5 md:mr-2 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -567,7 +567,7 @@ function RepositoriesPage() {
           <div className="text-gray-500 dark:text-gray-400">Loading repositories...</div>
         </div>
       ) : repositories.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
+        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 p-12 text-center dark:border-gray-700">
           <div className="mb-4 rounded-full bg-gray-100 p-4 dark:bg-gray-800">
             <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -581,7 +581,7 @@ function RepositoriesPage() {
             onClick={() => {
               setIsAddModalOpen(true);
                           }}
-            className="inline-flex items-center rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
           >
             Add Repository
           </button>

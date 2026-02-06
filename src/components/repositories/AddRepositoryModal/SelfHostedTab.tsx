@@ -75,7 +75,7 @@ export function SelfHostedTab({
                 </button>
                 <button
                   onClick={() => onDeleteInstance(instance._id, instance.name)}
-                  className="ml-2 shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                  className="ml-2 shrink-0 rounded p-1 text-gray-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400"
                   title="Delete instance"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -97,7 +97,7 @@ export function SelfHostedTab({
                   value={urlValue}
                   onChange={(e) => onUrlChange(e.target.value)}
                   placeholder={`${selectedInstance.url}/owner/repo`}
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isAdding && urlValue.trim()) {
                       onAddRepo(urlValue.trim());
@@ -121,7 +121,7 @@ export function SelfHostedTab({
         </p>
       )}
       {error && (
-        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="mt-2 text-sm text-danger-600 dark:text-danger-400">{error}</p>
       )}
     </div>
   );

@@ -93,28 +93,28 @@ function PrivacyPolicy() {
           <ul className="mt-2 list-disc pl-6 text-gray-600 dark:text-gray-400">
             <li>
               <strong>Convex</strong> - Database and backend hosting (
-              <a href="https://www.convex.dev/privacy" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="https://www.convex.dev/privacy" className="text-primary-600 hover:underline dark:text-primary-400">
                 privacy policy
               </a>
               )
             </li>
             <li>
               <strong>GitHub</strong> - OAuth authentication and repository access (
-              <a href="https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement" className="text-primary-600 hover:underline dark:text-primary-400">
                 privacy policy
               </a>
               )
             </li>
             <li>
               <strong>GitLab</strong> - OAuth authentication and repository access (
-              <a href="https://about.gitlab.com/privacy/" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="https://about.gitlab.com/privacy/" className="text-primary-600 hover:underline dark:text-primary-400">
                 privacy policy
               </a>
               )
             </li>
             <li>
               <strong>Cloudflare</strong> - Website hosting and CDN (
-              <a href="https://www.cloudflare.com/privacypolicy/" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="https://www.cloudflare.com/privacypolicy/" className="text-primary-600 hover:underline dark:text-primary-400">
                 privacy policy
               </a>
               )
@@ -180,7 +180,7 @@ function PrivacyPolicy() {
           <p className="mt-3 text-gray-600 dark:text-gray-400">
             If you have questions about this privacy policy or your personal data, please
             contact us at{" "}
-            <a href="mailto:privacy@carrelapp.com" className="text-blue-600 hover:underline dark:text-blue-400">
+            <a href="mailto:privacy@carrelapp.com" className="text-primary-600 hover:underline dark:text-primary-400">
               privacy@carrelapp.com
             </a>
             .

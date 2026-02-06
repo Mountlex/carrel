@@ -73,7 +73,7 @@ export function SelfHostedGitLabSetupModal({ onClose, onSave }: SelfHostedGitLab
             href="https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline dark:text-blue-400"
+            className="text-primary-600 hover:underline dark:text-primary-400"
           >
             User Settings → Access Tokens ↗
           </a>.
@@ -94,7 +94,7 @@ export function SelfHostedGitLabSetupModal({ onClose, onSave }: SelfHostedGitLab
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Work GitLab, University GitLab"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
@@ -108,7 +108,7 @@ export function SelfHostedGitLabSetupModal({ onClose, onSave }: SelfHostedGitLab
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://gitlab.mycompany.com"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
@@ -122,11 +122,11 @@ export function SelfHostedGitLabSetupModal({ onClose, onSave }: SelfHostedGitLab
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-sm text-danger-600 dark:text-danger-400">{error}</p>}
 
           <div className="flex justify-end gap-3">
             <button

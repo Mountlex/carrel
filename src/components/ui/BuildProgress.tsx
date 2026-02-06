@@ -12,7 +12,7 @@ export function BuildProgress({ status, progress, isCompile }: BuildProgressProp
   }
 
   return (
-    <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+    <div className="rounded-md bg-info-50 px-3 py-2 text-sm text-info-700 dark:bg-info-900/30 dark:text-info-300">
       <div className="flex items-center gap-2">
         <LoadingSpinner size="sm" />
         <span className="font-normal">

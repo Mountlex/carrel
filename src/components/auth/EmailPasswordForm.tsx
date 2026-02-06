@@ -267,10 +267,10 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
         />
 
         {errors.code && (
-          <p className="mt-2 text-sm text-red-600 text-center">{errors.code}</p>
+          <p className="mt-2 text-sm text-danger-600 text-center">{errors.code}</p>
         )}
         {errors.general && (
-          <p className="mt-2 text-sm text-red-600 text-center">{errors.general}</p>
+          <p className="mt-2 text-sm text-danger-600 text-center">{errors.general}</p>
         )}
 
         <div className="mt-4 text-center">
@@ -328,7 +328,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
           </div>
 
           {errors.general && (
-            <p className="text-sm text-red-600">{errors.general}</p>
+            <p className="text-sm text-danger-600">{errors.general}</p>
           )}
 
           <button
@@ -385,7 +385,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
               placeholder="123456"
             />
             {errors.code && (
-              <p className="mt-1 text-sm text-red-600">{errors.code}</p>
+              <p className="mt-1 text-sm text-danger-600">{errors.code}</p>
             )}
           </div>
 
@@ -403,12 +403,12 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
               placeholder="Min 8 chars, 1 uppercase, 1 number"
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+              <p className="mt-1 text-sm text-danger-600">{errors.password}</p>
             )}
           </div>
 
           {errors.general && (
-            <p className="text-sm text-red-600">{errors.general}</p>
+            <p className="text-sm text-danger-600">{errors.general}</p>
           )}
 
           <button
@@ -497,7 +497,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
               placeholder="Your name"
             />
             {errors.name && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.name}</p>
+              <p className="mt-1 text-sm text-danger-600 dark:text-danger-400">{errors.name}</p>
             )}
           </div>
         )}
@@ -516,7 +516,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
             placeholder="you@example.com"
           />
           {errors.email && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+            <p className="mt-1 text-sm text-danger-600 dark:text-danger-400">{errors.email}</p>
           )}
         </div>
 
@@ -537,7 +537,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{PASSWORD_REQUIREMENTS}</p>
           )}
           {errors.password && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+            <p className="mt-1 text-sm text-danger-600 dark:text-danger-400">{errors.password}</p>
           )}
         </div>
 
@@ -557,7 +557,7 @@ export function EmailPasswordForm({ onSuccess }: EmailPasswordFormProps = {}) {
         )}
 
         {errors.general && (
-          <p className="text-sm text-red-600 dark:text-red-400">{errors.general}</p>
+          <p className="text-sm text-danger-600 dark:text-danger-400">{errors.general}</p>
         )}
 
         <button

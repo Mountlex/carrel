@@ -447,12 +447,12 @@ function GalleryPage() {
       {/* Header */}
       <div className="mb-6 md:mb-8">
         <div className="flex items-center justify-between">
-          <h1 className="font-serif text-2xl font-normal text-gray-900 dark:text-gray-100">Your Papers</h1>
+          <h1 className="font-serif text-2xl tracking-tight text-gray-900 dark:text-gray-100">Your Papers</h1>
           <div className="flex items-center gap-1 md:gap-3">
             {/* Mobile search toggle */}
             <button
               onClick={() => setShowMobileSearch(!showMobileSearch)}
-              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-gray-50/50 p-2 text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
+              className="inline-flex items-center justify-center rounded-lg border border-gray-200/60 bg-white p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
               aria-label={showMobileSearch ? "Close search" : "Open search"}
               aria-expanded={showMobileSearch}
             >
@@ -469,7 +469,7 @@ function GalleryPage() {
             {/* Mobile actions toggle */}
             <button
               onClick={() => setShowMobileActions(!showMobileActions)}
-              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-gray-50/50 p-2 text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
+              className="inline-flex items-center justify-center rounded-lg border border-gray-200/60 bg-white p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
               aria-label={showMobileActions ? "Close actions" : "Open actions"}
               aria-expanded={showMobileActions}
             >
@@ -485,7 +485,7 @@ function GalleryPage() {
                 placeholder="Search papers..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-56 rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
+                className="w-56 rounded-lg border border-gray-200/60 bg-white px-3 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600/20"
               />
               {searchQuery && (
                 <button
@@ -503,7 +503,7 @@ function GalleryPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 md:block"
+              className="hidden rounded-lg border border-gray-200/60 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-100 md:block"
             >
               <option value="recent">Recent</option>
               <option value="least-recent">Least recent</option>
@@ -514,7 +514,7 @@ function GalleryPage() {
             <button
               onClick={handleCheckAll}
               disabled={isSyncing || isRefreshing || !repositories || repositories.length === 0}
-              className="hidden items-center justify-center gap-2 whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex md:min-w-[125px] md:px-4 md:py-2"
+              className="hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary-600 p-2 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700 md:inline-flex md:min-w-[125px] md:px-4 md:py-2"
               title="Check all repositories for new commits"
               aria-label={isSyncing ? "Checking repositories" : "Check all repositories"}
             >
@@ -538,8 +538,8 @@ function GalleryPage() {
             {/* Refresh All */}
             <button
               onClick={handleRefreshAll}
-              disabled={isRefreshing || isSyncing || !paperMetadata || paperMetadata.length === 0}
-              className="relative hidden items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex md:min-w-[135px] md:px-4 md:py-2"
+              disabled={isRefreshing || isSyncing || !repositories || repositories.length === 0 || papers.length === 0}
+              className="relative hidden items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-md bg-primary-600 p-2 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700 md:inline-flex md:min-w-[135px] md:px-4 md:py-2"
               title="Refresh PDFs for all papers that are not up to date"
               aria-label={isRefreshing ? "Refreshing papers" : "Refresh all outdated papers"}
             >
@@ -574,7 +574,7 @@ function GalleryPage() {
             <button
               onClick={handleUploadClick}
               disabled={isUploading}
-              className="hidden items-center justify-center rounded-md border border-primary-200 bg-primary-50 p-2 text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 md:inline-flex"
+              className="hidden items-center justify-center rounded-md bg-primary-600 p-2 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700 md:inline-flex"
               aria-label={isUploading ? "Uploading PDF" : "Upload PDF"}
               title="Upload PDF"
             >
@@ -603,7 +603,7 @@ function GalleryPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
-                className="w-full rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
+                className="w-full rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2 pr-8 text-sm placeholder:text-gray-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800"
               />
               {searchQuery && (
                 <button
@@ -638,7 +638,7 @@ function GalleryPage() {
                 setSortBy(e.target.value as typeof sortBy);
                 setShowMobileActions(false);
               }}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-lg border border-gray-200/60 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-100"
             >
               <option value="recent">Recent</option>
               <option value="least-recent">Least recent</option>
@@ -649,21 +649,21 @@ function GalleryPage() {
               <button
                 onClick={handleCheckAll}
                 disabled={isSyncing || isRefreshing || !repositories || repositories.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
               >
                 {isSyncing ? "Checking" : "Check Repos"}
               </button>
               <button
                 onClick={handleRefreshAll}
-                disabled={isRefreshing || isSyncing || !paperMetadata || paperMetadata.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+                disabled={isRefreshing || isSyncing || !repositories || repositories.length === 0 || papers.length === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
               >
                 {isRefreshing ? "Refreshing" : "Refresh Papers"}
               </button>
               <button
                 onClick={handleUploadClick}
                 disabled={isUploading}
-                className="col-span-2 inline-flex items-center justify-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30"
+                className="col-span-2 inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
               >
                 {isUploading ? "Uploading" : "Upload PDF"}
               </button>
@@ -679,7 +679,7 @@ function GalleryPage() {
       {isPapersLoading ? (
         <PaperCardSkeletonGrid count={8} />
       ) : papers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
+        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 p-12 dark:border-gray-700 text-center dark:border-gray-700">
           <div className="mb-4 rounded-full bg-gray-100 p-4 dark:bg-gray-800">
             <svg
               className="h-8 w-8 text-gray-400"
@@ -705,7 +705,7 @@ function GalleryPage() {
             <button
               onClick={handleUploadClick}
               disabled={isUploading}
-              className="inline-flex items-center gap-2 rounded-md border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-normal text-gray-900 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-700 dark:bg-primary-500/20 dark:text-gray-100 dark:hover:bg-primary-500/30 focus:ring-offset-2 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -714,7 +714,7 @@ function GalleryPage() {
             </button>
             <Link
               to="/repositories"
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-normal text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              className="inline-flex items-center rounded-lg border border-gray-200/60 bg-white px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             >
               Add Repository
             </Link>
@@ -722,7 +722,7 @@ function GalleryPage() {
         </div>
       ) : filteredPapers.length === 0 ? (
         /* Empty search/filter state */
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
+        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 p-12 dark:border-gray-700 text-center dark:border-gray-700">
           <div className="mb-4 rounded-full bg-gray-100 p-4 dark:bg-gray-800">
             <svg
               className="h-8 w-8 text-gray-400"
@@ -746,7 +746,7 @@ function GalleryPage() {
           </p>
           <button
             onClick={clearFilters}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-normal text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200/60 bg-white px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -781,7 +781,7 @@ function GalleryPage() {
           <button
             onClick={() => loadMore(pageSize)}
             disabled={isLoadingMorePapers}
-            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-normal text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+            className="inline-flex items-center rounded-lg border border-gray-200/60 bg-white px-5 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-gray-700/60 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
           >
             {isLoadingMorePapers ? "Loading..." : "Load more"}
           </button>

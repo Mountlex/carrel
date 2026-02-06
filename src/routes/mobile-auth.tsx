@@ -103,7 +103,7 @@ function MobileAuthPage() {
             If you're not redirected automatically,{" "}
             <button
               onClick={() => exchangeAndNotify()}
-              className="text-blue-600 underline"
+              className="text-primary-600 underline"
             >
               tap here
             </button>
@@ -137,8 +137,8 @@ function MobileAuthPage() {
         </p>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-6 rounded-lg border border-danger-200 bg-danger-50 p-4">
+            <p className="text-sm text-danger-800">{error}</p>
           </div>
         )}
 
