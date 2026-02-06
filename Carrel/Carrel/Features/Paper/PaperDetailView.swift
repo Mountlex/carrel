@@ -10,7 +10,7 @@ struct PaperDetailView: View {
     @State private var isPreparingShare = false
     @State private var subscriptionTask: Task<Void, Never>?
     @State private var pdfLoadError: String?
-    @State private var showCopiedToast = false
+    @State private var toastMessage: ToastMessage?
     @State private var shareError: String?
     @Environment(\.dismiss) private var dismiss
 
@@ -21,7 +21,7 @@ struct PaperDetailView: View {
     private func copyShareLink() {
         guard let slug = viewModel.paper.shareSlug else { return }
         UIPasteboard.general.string = "https://carrelapp.com/share/\(slug)"
-        showCopiedToast = true
+        toastMessage = ToastMessage(text: "Link copied!", type: .success)
         HapticManager.success()
     }
 
@@ -156,14 +156,14 @@ struct PaperDetailView: View {
         .sheet(isPresented: $showingEditSheet) {
             EditPaperSheet(viewModel: viewModel)
         }
-        .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+        .alert("Error", isPresented: Binding(get: { viewModel.error != nil }, set: { if !$0 { viewModel.clearError() } })) {
             Button("OK") {
                 viewModel.clearError()
             }
         } message: {
             Text(viewModel.error ?? "Unknown error")
         }
-        .alert("Share Failed", isPresented: .constant(shareError != nil)) {
+        .alert("Share Failed", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK") {
                 shareError = nil
             }
@@ -171,25 +171,9 @@ struct PaperDetailView: View {
             Text(shareError ?? "Failed to prepare PDF for sharing")
         }
         .overlay(alignment: .top) {
-            if showCopiedToast {
-                Text("Link copied!")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: Capsule())
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation {
-                                showCopiedToast = false
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-            }
+            ToastContainer(message: $toastMessage)
+                .padding(.top, 8)
         }
-        .animation(.easeInOut, value: showCopiedToast)
         .task {
             await startSubscription()
         }
@@ -224,7 +208,7 @@ struct PaperDetailView: View {
             PDFViewerWithOfflineCheck(url: url) { error in
                 pdfLoadError = error
             }
-            .alert("PDF Error", isPresented: .constant(pdfLoadError != nil)) {
+            .alert("PDF Error", isPresented: Binding(get: { pdfLoadError != nil }, set: { if !$0 { pdfLoadError = nil } })) {
                 Button("OK") {
                     pdfLoadError = nil
                 }

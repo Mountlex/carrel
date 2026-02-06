@@ -133,7 +133,7 @@ struct RepositoryCard: View {
         HStack(spacing: 4) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 10, height: 10)
 
             Text(statusText)
                 .font(.caption)

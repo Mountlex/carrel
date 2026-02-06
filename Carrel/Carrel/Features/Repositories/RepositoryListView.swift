@@ -205,10 +205,6 @@ private struct RepositorySettingsView: View {
                     VStack(spacing: 20) {
                         GlassSection(title: "Compilation") {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Compilation cache")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
                                 Picker("Compilation cache", selection: Binding(
                                     get: { selection },
                                     set: { newValue in

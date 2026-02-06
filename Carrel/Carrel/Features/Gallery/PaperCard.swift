@@ -40,7 +40,7 @@ struct PaperCard: View {
 
                     if isSyncing {
                         ProgressView()
-                            .scaleEffect(0.6)
+                            .scaleEffect(0.5)
                             .padding(.top, 2)
                             .accessibilityLabel("Syncing")
                     } else {

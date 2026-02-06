@@ -8,23 +8,24 @@ struct StatusBadge: View {
             if status == .building {
                 ProgressView()
                     .scaleEffect(0.5)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 10, height: 10)
             } else {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 10, height: 10)
             }
 
             Text(statusText)
-                .font(.caption2)
+                .font(.caption)
                 .fontWeight(.medium)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .glassEffect(
-            .regular.tint(statusColor.opacity(0.3)),
+            .regular.tint(statusColor.opacity(0.25)),
             in: Capsule()
         )
+        .foregroundStyle(statusColor)
     }
 
     private var statusColor: Color {
