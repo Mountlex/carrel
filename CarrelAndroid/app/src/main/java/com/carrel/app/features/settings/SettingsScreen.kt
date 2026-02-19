@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -53,6 +53,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,14 +70,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import com.carrel.app.BuildConfig
 import com.carrel.app.core.auth.AuthManager
 import com.carrel.app.core.cache.PDFCache
+import com.carrel.app.core.cache.ThumbnailCache
 import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.models.LatexCacheMode
 import com.carrel.app.core.notifications.PushNotificationManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     convexService: ConvexService,
@@ -91,7 +94,9 @@ fun SettingsScreen(
 
     var showLogoutDialog by remember { mutableStateOf(false) }
     var pdfCacheSize by remember { mutableLongStateOf(0L) }
+    var thumbnailCacheSize by remember { mutableLongStateOf(0L) }
     val pdfCache = remember { PDFCache.getInstance(context) }
+    val thumbnailCache = remember { ThumbnailCache.getInstance(context) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -111,6 +116,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         pdfCacheSize = pdfCache.cacheSize()
+        thumbnailCacheSize = thumbnailCache.cacheSize()
     }
 
     LaunchedEffect(uiState.toastMessage) {
@@ -292,6 +298,14 @@ fun SettingsScreen(
                             viewModel.queueNotificationPreferencesUpdate()
                         }
                     )
+                    if (!uiState.notificationPreferences.backgroundSync) {
+                        Text(
+                            text = "Allow Background Refresh to receive update notifications.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                     HorizontalDivider()
                     PreferenceToggle(
                         title = "Background Refresh",
@@ -311,28 +325,39 @@ fun SettingsScreen(
                             Text("Minutes between repeated update notifications")
                         },
                         trailingContent = {
-                            Text("${uiState.notificationPreferences.updateCooldownMinutes}m")
+                            Text(updateCooldownLabel(uiState.notificationPreferences.updateCooldownMinutesInt))
                         }
                     )
-                    Row(
+                    val cooldownControlsEnabled = uiState.notificationPreferences.enabled &&
+                        uiState.notificationPreferences.paperUpdated &&
+                        uiState.notificationPreferences.backgroundSync
+                    FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(5, 15, 30, 60).forEach { value ->
+                        listOf(0, 15, 30, 60, -1).forEach { value ->
                             FilterChip(
-                                selected = uiState.notificationPreferences.updateCooldownMinutes == value,
+                                selected = uiState.notificationPreferences.updateCooldownMinutesInt == value,
                                 onClick = {
                                     viewModel.setNotificationPreferences(
-                                        uiState.notificationPreferences.copy(updateCooldownMinutes = value)
+                                        uiState.notificationPreferences.copy(updateCooldownMinutes = value.toDouble())
                                     )
                                     viewModel.queueNotificationPreferencesUpdate()
                                 },
-                                label = { Text("${value}m") }
+                                enabled = cooldownControlsEnabled,
+                                label = { Text(updateCooldownChipLabel(value)) }
                             )
                         }
                     }
+                    Text(
+                        text = "If new commits arrive while a paper is already out of sync, we'll notify at most once per interval when Background Refresh is allowed. Choose Never to disable update notifications.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                     HorizontalDivider()
                     ListItem(
                         headlineContent = { Text("Send Test Notification") },
@@ -368,7 +393,7 @@ fun SettingsScreen(
                     ListItem(
                         headlineContent = { Text("Info") },
                         supportingContent = {
-                            Text("Repositories set to default follow this value.")
+                            Text("Allow Background Refresh pauses or resumes all background refresh tasks. The default applies to repositories set to use it.")
                         }
                     )
                 }
@@ -396,6 +421,13 @@ fun SettingsScreen(
                             viewModel.updateLatexCacheMode(if (enabled) LatexCacheMode.AUX else LatexCacheMode.OFF)
                         }
                     )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Info") },
+                        supportingContent = {
+                            Text("Allow compilation cache pauses or resumes all cache use. The default applies to repositories set to use it.")
+                        }
+                    )
                 }
             }
 
@@ -411,18 +443,33 @@ fun SettingsScreen(
                     )
                     HorizontalDivider()
                     ListItem(
-                        headlineContent = { Text("Clear Cache") },
+                        headlineContent = { Text("Thumbnail Cache") },
+                        supportingContent = { Text("Cached paper thumbnails") },
+                        trailingContent = { Text(formatCacheSize(thumbnailCacheSize)) }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Clear All Caches") },
                         leadingContent = {
+                            val canClearCaches = pdfCacheSize > 0L || thumbnailCacheSize > 0L
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
+                                tint = if (canClearCaches) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         },
-                        modifier = Modifier.clickable {
+                        modifier = Modifier.clickable(
+                            enabled = pdfCacheSize > 0L || thumbnailCacheSize > 0L
+                        ) {
                             scope.launch {
                                 pdfCache.clearCache()
+                                thumbnailCache.clearCache()
                                 pdfCacheSize = 0L
+                                thumbnailCacheSize = 0L
                             }
                         }
                     )
@@ -436,12 +483,12 @@ fun SettingsScreen(
                 Column {
                     ListItem(
                         headlineContent = { Text("Version") },
-                        trailingContent = { Text("1.0") }
+                        trailingContent = { Text(BuildConfig.VERSION_NAME) }
                     )
                     HorizontalDivider()
                     ListItem(
                         headlineContent = { Text("Build") },
-                        trailingContent = { Text("1") }
+                        trailingContent = { Text(BuildConfig.VERSION_CODE.toString()) }
                     )
                     HorizontalDivider()
                     ListItem(
@@ -455,7 +502,7 @@ fun SettingsScreen(
                             )
                         },
                         modifier = Modifier.clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://carrel.app"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://carrelapp.com"))
                             context.startActivity(intent)
                         }
                     )
@@ -577,5 +624,21 @@ private fun formatCacheSize(bytes: Long): String {
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
         else -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+private fun updateCooldownChipLabel(minutes: Int): String {
+    return when {
+        minutes < 0 -> "Never"
+        minutes == 0 -> "Every update"
+        else -> "${minutes}m"
+    }
+}
+
+private fun updateCooldownLabel(minutes: Int): String {
+    return when {
+        minutes < 0 -> "Never"
+        minutes == 0 -> "Every update"
+        else -> "$minutes minutes"
     }
 }

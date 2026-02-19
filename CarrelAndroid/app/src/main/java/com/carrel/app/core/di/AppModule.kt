@@ -30,7 +30,7 @@ fun appModule(context: Context): AppContainer {
         ?: "unknown"
     val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
 
-    val authManager = AuthManager(tokenStorage, deviceId, deviceName)
+    val authManager = AuthManager(context, tokenStorage, deviceId, deviceName)
     val convexClient = ConvexClient(authManager)
     val convexService = ConvexService(context)
     val oAuthHandler = OAuthHandler(context)

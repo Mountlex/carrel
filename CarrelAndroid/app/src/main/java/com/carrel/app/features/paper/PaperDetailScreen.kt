@@ -1,17 +1,21 @@
 package com.carrel.app.features.paper
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -24,14 +28,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.NetworkMonitor
 import com.carrel.app.ui.components.StatusBadge
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
@@ -55,8 +63,13 @@ fun PaperDetailScreen(
     }
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showMenu by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(false) }
+    var editTitle by remember { mutableStateOf("") }
+    var isSharing by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -72,14 +85,28 @@ fun PaperDetailScreen(
                     uiState.paper?.pdfUrl?.let { pdfUrl ->
                         IconButton(
                             onClick = {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, pdfUrl)
+                                if (isSharing) return@IconButton
+                                val paperTitle = uiState.paper?.title
+                                scope.launch {
+                                    isSharing = true
+                                    val result = sharePdfFile(context, pdfUrl, paperTitle)
+                                    isSharing = false
+                                    result.onFailure {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Failed to prepare PDF for sharing"
+                                        )
+                                    }
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Share PDF"))
                             }
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
+                            if (isSharing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Share, contentDescription = "Share PDF")
+                            }
                         }
                     }
 
@@ -109,11 +136,36 @@ fun PaperDetailScreen(
                                 },
                                 leadingIcon = { Icon(Icons.Default.Build, contentDescription = null) }
                             )
+                            DropdownMenuItem(
+                                text = { Text("Edit Details") },
+                                onClick = {
+                                    showMenu = false
+                                    editTitle = uiState.paper?.title.orEmpty()
+                                    showEditSheet = true
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                            )
+                            uiState.paper?.takeIf { it.isPublic && !it.shareSlug.isNullOrBlank() }?.let { paper ->
+                                DropdownMenuItem(
+                                    text = { Text("Copy Public Link") },
+                                    onClick = {
+                                        showMenu = false
+                                        copyShareLink(
+                                            context = context,
+                                            slug = paper.shareSlug!!,
+                                            scope = scope,
+                                            snackbarHostState = snackbarHostState
+                                        )
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) }
+                                )
+                            }
                         }
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Box(
             modifier = Modifier
@@ -170,6 +222,29 @@ fun PaperDetailScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (showEditSheet && uiState.paper != null) {
+        ModalBottomSheet(onDismissRequest = { showEditSheet = false }) {
+            EditPaperSheetContent(
+                initialTitle = editTitle,
+                isSaving = uiState.isLoading,
+                onTitleChange = { editTitle = it },
+                onSave = {
+                    val normalized = editTitle.trim().ifEmpty { null }
+                    viewModel.updateMetadata(normalized, uiState.paper?.authors)
+                    showEditSheet = false
+                },
+                onCancel = { showEditSheet = false }
+            )
+        }
+    }
+
+    uiState.error?.let { error ->
+        LaunchedEffect(error) {
+            snackbarHostState.showSnackbar(error)
+            viewModel.clearError()
         }
     }
 }
@@ -529,6 +604,118 @@ private suspend fun renderPageBitmap(
 }
 
 private const val MAX_BITMAP_CACHE_BYTES = 20 * 1024 * 1024
+
+@Composable
+private fun EditPaperSheetContent(
+    initialTitle: String,
+    isSaving: Boolean,
+    onTitleChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var title by remember(initialTitle) { mutableStateOf(initialTitle) }
+
+    LaunchedEffect(title) {
+        onTitleChange(title)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Edit Details", style = MaterialTheme.typography.titleLarge)
+
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Title") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancel")
+            }
+            Button(
+                onClick = onSave,
+                enabled = !isSaving,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Save")
+            }
+        }
+    }
+}
+
+private suspend fun sharePdfFile(
+    context: Context,
+    pdfUrl: String,
+    paperTitle: String?
+): Result<Unit> = withContext(Dispatchers.IO) {
+    runCatching {
+        val cachedFile = PDFCache.getInstance(context).fetchPDF(pdfUrl).getOrThrow()
+        val shareDir = File(context.cacheDir, "shared").also { it.mkdirs() }
+        val safeTitle = sanitizeTitleForFileName(paperTitle ?: "Paper")
+        val targetFile = File(shareDir, "$safeTitle-${System.currentTimeMillis()}.pdf")
+        cachedFile.copyTo(targetFile, overwrite = true)
+
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            targetFile
+        )
+
+        withContext(Dispatchers.Main) {
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = ClipData.newRawUri("paper", uri)
+            }
+            context.startActivity(Intent.createChooser(sendIntent, "Share PDF"))
+        }
+    }
+}
+
+private fun sanitizeTitleForFileName(title: String): String {
+    return title
+        .replace("/", "-")
+        .replace(":", "-")
+        .replace("\\", "-")
+        .ifBlank { "Paper" }
+}
+
+private fun copyShareLink(
+    context: Context,
+    slug: String,
+    scope: CoroutineScope,
+    snackbarHostState: SnackbarHostState
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val link = "${ConvexClient.SITE_URL}/share/$slug"
+    clipboard.setPrimaryClip(ClipData.newPlainText("Carrel Public Link", link))
+    scope.launch {
+        snackbarHostState.showSnackbar("Link copied")
+    }
+}
 
 private fun formatTimeAgo(timestamp: Long): String {
     val now = System.currentTimeMillis()

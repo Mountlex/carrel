@@ -1,6 +1,7 @@
 package com.carrel.app.core.network.models
 
 import kotlinx.serialization.Serializable
+import kotlin.math.roundToInt
 
 @Serializable
 data class NotificationPreferences(
@@ -9,6 +10,8 @@ data class NotificationPreferences(
     val buildFailure: Boolean = true,
     val paperUpdated: Boolean = true,
     val backgroundSync: Boolean = true,
-    @Serializable(with = FlexibleIntSerializer::class)
-    val updateCooldownMinutes: Int = 30
-)
+    val updateCooldownMinutes: Double = 30.0
+) {
+    val updateCooldownMinutesInt: Int
+        get() = updateCooldownMinutes.roundToInt()
+}

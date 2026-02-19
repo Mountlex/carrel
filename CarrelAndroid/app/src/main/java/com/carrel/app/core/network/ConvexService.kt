@@ -247,6 +247,28 @@ class ConvexService(
         }
     }
 
+    /**
+     * Fetch one papers emission for background push handling.
+     * This mirrors iOS silent refresh behavior and re-validates auth/session state.
+     */
+    suspend fun refreshPapersOnce(): Result<Unit> {
+        return runCatching {
+            withTimeout(10_000) {
+                client.subscribe<List<Paper>>("papers:listMine")
+                    .collect { result ->
+                        result.getOrThrow()
+                        throw FirstValueReceivedException(Unit)
+                    }
+            }
+        }.recoverCatching { e ->
+            if (e is FirstValueReceivedException) {
+                Unit
+            } else {
+                throw e
+            }
+        }
+    }
+
     // MARK: - Papers (Subscriptions)
 
     /**

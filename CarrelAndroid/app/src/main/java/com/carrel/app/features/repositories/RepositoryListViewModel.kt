@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.models.LatexCacheMode
 import com.carrel.app.core.network.models.Repository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,20 +35,43 @@ class RepositoryListViewModel(
 
     private val _uiState = MutableStateFlow(RepositoryListUiState())
     val uiState: StateFlow<RepositoryListUiState> = _uiState.asStateFlow()
+    private var repositoriesSubscriptionJob: Job? = null
 
     init {
         loadPreferences()
     }
 
     fun loadRepositories() {
-        if (_uiState.value.isLoading) return
+        if (repositoriesSubscriptionJob?.isActive == true) return
 
-        viewModelScope.launch {
+        repositoriesSubscriptionJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            convexService.getRepositories()
-                .onSuccess { repositories ->
-                    Log.d(TAG, "Loaded ${repositories.size} repositories")
+            val user = convexService.getCurrentUser().getOrElse { exception ->
+                Log.e(TAG, "Failed to resolve current user for repositories subscription", exception)
+                _uiState.update { state ->
+                    state.copy(
+                        error = exception.message ?: "Failed to load repositories",
+                        isLoading = false,
+                        isRefreshing = false
+                    )
+                }
+                return@launch
+            }
+
+            if (user == null) {
+                _uiState.update { state ->
+                    state.copy(
+                        error = "Not authenticated",
+                        isLoading = false,
+                        isRefreshing = false
+                    )
+                }
+                return@launch
+            }
+
+            try {
+                convexService.subscribeToRepositories(user.id).collect { repositories ->
                     _uiState.update { state ->
                         state.copy(
                             repositories = repositories,
@@ -56,16 +80,16 @@ class RepositoryListViewModel(
                         )
                     }
                 }
-                .onFailure { exception ->
-                    Log.e(TAG, "Failed to load repositories: ${exception.message}")
-                    _uiState.update { state ->
-                        state.copy(
-                            error = exception.message,
-                            isLoading = false,
-                            isRefreshing = false
-                        )
-                    }
+            } catch (exception: Exception) {
+                Log.e(TAG, "Repositories subscription failed: ${exception.message}", exception)
+                _uiState.update { state ->
+                    state.copy(
+                        error = exception.message ?: "Failed to subscribe to repositories",
+                        isLoading = false,
+                        isRefreshing = false
+                    )
                 }
+            }
         }
     }
 
@@ -90,10 +114,12 @@ class RepositoryListViewModel(
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
-            loadRepositories()
+        if (repositoriesSubscriptionJob?.isActive == true) {
+            _uiState.update { it.copy(isRefreshing = false) }
+            return
         }
+        _uiState.update { it.copy(isRefreshing = true) }
+        loadRepositories()
     }
 
     fun checkAllRepositories() {
@@ -111,7 +137,6 @@ class RepositoryListViewModel(
                         else -> "All repos up to date"
                     }
                     _uiState.update { it.copy(toastMessage = message, isCheckingAll = false) }
-                    loadRepositories()
                 }
                 .onFailure {
                     _uiState.update { it.copy(toastMessage = "Failed to check repos", isCheckingAll = false) }
@@ -158,7 +183,6 @@ class RepositoryListViewModel(
                 }
                 .onFailure { exception ->
                     _uiState.update { it.copy(toastMessage = "Failed to delete", error = exception.message) }
-                    loadRepositories()
                 }
         }
     }
@@ -227,6 +251,11 @@ class RepositoryListViewModel(
 
     fun clearToast() {
         _uiState.update { it.copy(toastMessage = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        repositoriesSubscriptionJob?.cancel()
     }
 
     companion object {

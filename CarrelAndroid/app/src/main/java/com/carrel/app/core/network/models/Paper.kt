@@ -26,14 +26,14 @@ data class Paper(
     val createdAt: Double? = null,
     val updatedAt: Double? = null
 ) {
-    // Derive status from isUpToDate and buildStatus
+    // Derive status from isUpToDate, buildStatus, and lastSyncError.
     val status: PaperStatus
         get() = when {
             buildStatus == "building" -> PaperStatus.BUILDING
-            buildStatus == "error" -> PaperStatus.ERROR
-            buildStatus == "pending" -> PaperStatus.PENDING
+            !lastSyncError.isNullOrBlank() -> PaperStatus.ERROR
             isUpToDate == true -> PaperStatus.SYNCED
             isUpToDate == false -> PaperStatus.PENDING
+            isUpToDate == null -> PaperStatus.UPLOADED
             else -> PaperStatus.UNKNOWN
         }
 }
@@ -44,6 +44,7 @@ enum class PaperStatus {
     @SerialName("pending") PENDING,
     @SerialName("building") BUILDING,
     @SerialName("error") ERROR,
+    @SerialName("uploaded") UPLOADED,
     @SerialName("unknown") UNKNOWN;
 
     companion object {

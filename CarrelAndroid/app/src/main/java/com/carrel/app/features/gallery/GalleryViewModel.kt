@@ -25,6 +25,7 @@ data class GalleryUiState(
     val isSyncing: Boolean = false,
     val isRefreshingAll: Boolean = false,
     val refreshProgress: Pair<Int, Int>? = null,
+    val syncingPaperId: String? = null,
     val toastMessage: String? = null
 )
 
@@ -183,6 +184,7 @@ class GalleryViewModel(
 
     fun buildPaper(paper: Paper, force: Boolean = false) {
         viewModelScope.launch {
+            _uiState.update { it.copy(syncingPaperId = paper.id) }
             // Use ConvexService for mutations (works with both auth modes)
             convexService.buildPaper(paper.id, force)
                 .onSuccess {
@@ -190,9 +192,10 @@ class GalleryViewModel(
                     if (!_uiState.value.isSubscribed) {
                         loadPapersViaHttp()
                     }
+                    _uiState.update { it.copy(syncingPaperId = null) }
                 }
                 .onFailure { exception ->
-                    _uiState.update { it.copy(error = exception.message) }
+                    _uiState.update { it.copy(error = exception.message, syncingPaperId = null) }
                 }
         }
     }

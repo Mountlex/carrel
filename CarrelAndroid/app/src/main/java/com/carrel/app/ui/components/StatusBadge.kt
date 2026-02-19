@@ -30,6 +30,7 @@ fun StatusBadge(
         PaperStatus.PENDING -> StatusPending to "Pending"
         PaperStatus.BUILDING -> StatusBuilding to "Building"
         PaperStatus.ERROR -> StatusError to "Error"
+        PaperStatus.UPLOADED -> StatusUnknown to "Uploaded"
         PaperStatus.UNKNOWN -> StatusUnknown to "Unknown"
     }
 

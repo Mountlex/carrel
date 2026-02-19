@@ -188,6 +188,8 @@ fun RepositoryListScreen(
                 repository = repository,
                 backgroundRefreshDefault = uiState.backgroundRefreshDefault,
                 userCacheMode = uiState.userCacheMode,
+                isCompilationCacheAllowed = uiState.isCompilationCacheAllowed,
+                isBackgroundRefreshAllowed = uiState.isBackgroundRefreshAllowed,
                 onBackgroundRefreshChange = { enabled ->
                     viewModel.setBackgroundRefresh(repository, enabled)
                 },
@@ -327,6 +329,8 @@ private fun RepositorySettingsSheet(
     repository: Repository,
     backgroundRefreshDefault: Boolean,
     userCacheMode: LatexCacheMode,
+    isCompilationCacheAllowed: Boolean,
+    isBackgroundRefreshAllowed: Boolean,
     onBackgroundRefreshChange: (Boolean?) -> Unit,
     onCacheModeChange: (LatexCacheMode?) -> Unit
 ) {
@@ -349,6 +353,18 @@ private fun RepositorySettingsSheet(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Text(
+            text = "Checks this repository for updates every 5 minutes while background refresh is allowed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!isBackgroundRefreshAllowed) {
+            Text(
+                text = "Background refresh is paused globally, so this repo will not refresh until it's allowed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = currentBackground == null,
@@ -375,6 +391,18 @@ private fun RepositorySettingsSheet(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Text(
+            text = "Stores LaTeX aux/out files to speed up rebuilds for this repository.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!isCompilationCacheAllowed) {
+            Text(
+                text = "Compilation cache is paused globally, so this repo will not use the cache until it's allowed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = currentCache == null,

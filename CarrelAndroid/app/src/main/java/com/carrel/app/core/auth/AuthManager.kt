@@ -1,8 +1,11 @@
 package com.carrel.app.core.auth
 
+import android.content.Context
 import android.os.Build
 import android.util.Base64
 import android.util.Log
+import com.carrel.app.core.cache.PDFCache
+import com.carrel.app.core.cache.ThumbnailCache
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.models.AuthTokens
 import io.ktor.client.*
@@ -25,6 +28,7 @@ import kotlinx.serialization.json.Json
 import org.json.JSONObject
 
 class AuthManager(
+    private val context: Context,
     private val tokenStorage: TokenStorage,
     private val deviceId: String,
     private val deviceName: String
@@ -422,6 +426,10 @@ class AuthManager(
 
         // Clear all stored tokens
         tokenStorage.clearAll()
+
+        // Clear local caches for privacy and consistency with iOS behavior.
+        PDFCache.getInstance(context).clearCache()
+        ThumbnailCache.getInstance(context).clearCache()
 
         setAuthenticated(false, "logout")
     }

@@ -3,8 +3,10 @@ package com.carrel.app.features.gallery
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
@@ -12,10 +14,12 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.carrel.app.core.auth.AuthManager
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.ConvexService
+import com.carrel.app.core.network.NetworkMonitor
 import com.carrel.app.core.network.models.Paper
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,8 +34,22 @@ fun GalleryScreen(
 ) {
     val viewModel = remember { GalleryViewModel(convexClient, convexService, authManager) }
     val uiState by viewModel.uiState.collectAsState()
+    var searchText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val networkMonitor = remember { NetworkMonitor.getInstance(context) }
+    val isConnected by networkMonitor.isConnected.collectAsState()
+    val isOffline = !isConnected
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val filteredPapers = remember(uiState.papers, searchText) {
+        if (searchText.isBlank()) {
+            uiState.papers
+        } else {
+            uiState.papers.filter { paper ->
+                (paper.title ?: "").contains(searchText, ignoreCase = true)
+            }
+        }
+    }
 
     // Show toast messages
     LaunchedEffect(uiState.toastMessage) {
@@ -105,16 +123,32 @@ fun GalleryScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (uiState.papers.isEmpty() && !uiState.isLoading) {
-                EmptyState()
-            } else {
-                PaperGrid(
-                    papers = uiState.papers,
-                    onPaperClick = onPaperClick,
-                    onBuildClick = { viewModel.buildPaper(it) },
-                    onForceRebuildClick = { viewModel.buildPaper(it, force = true) },
-                    onDeleteClick = { viewModel.deletePaper(it) }
+            Column(modifier = Modifier.fillMaxSize()) {
+                SearchField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
+
+                when {
+                    uiState.papers.isEmpty() && !uiState.isLoading -> {
+                        EmptyState()
+                    }
+                    filteredPapers.isEmpty() && searchText.isNotBlank() -> {
+                        SearchEmptyState(searchText = searchText)
+                    }
+                    else -> {
+                        PaperGrid(
+                            papers = filteredPapers,
+                            syncingPaperId = uiState.syncingPaperId,
+                            isOffline = isOffline,
+                            onPaperClick = onPaperClick,
+                            onBuildClick = { viewModel.buildPaper(it) },
+                            onForceRebuildClick = { viewModel.buildPaper(it, force = true) },
+                            onDeleteClick = { viewModel.deletePaper(it) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -151,8 +185,54 @@ private fun EmptyState() {
 }
 
 @Composable
+private fun SearchEmptyState(searchText: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "No results",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "No papers match \"$searchText\"",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        label = { Text("Search papers") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (value.isNotBlank()) {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun PaperGrid(
     papers: List<Paper>,
+    syncingPaperId: String?,
+    isOffline: Boolean,
     onPaperClick: (String) -> Unit,
     onBuildClick: (Paper) -> Unit,
     onForceRebuildClick: (Paper) -> Unit,
@@ -170,7 +250,9 @@ private fun PaperGrid(
                 onClick = { onPaperClick(paper.id) },
                 onBuildClick = { onBuildClick(paper) },
                 onForceRebuildClick = { onForceRebuildClick(paper) },
-                onDeleteClick = { onDeleteClick(paper) }
+                onDeleteClick = { onDeleteClick(paper) },
+                isSyncing = syncingPaperId == paper.id,
+                isOffline = isOffline
             )
         }
     }
