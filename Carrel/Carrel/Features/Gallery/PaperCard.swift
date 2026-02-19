@@ -55,7 +55,7 @@ struct PaperCard: View {
             .padding(12)
         }
         .glassEffect(
-            .regular.interactive(),
+            .regular,
             in: RoundedRectangle(cornerRadius: 16)
         )
         .accessibilityElement(children: .combine)

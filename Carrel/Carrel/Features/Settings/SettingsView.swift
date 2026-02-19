@@ -89,7 +89,10 @@ struct SettingsView: View {
         } message: {
             Text("Are you sure you want to sign out?")
         }
-        .alert("Error", isPresented: .constant(viewModel.error != nil)) {
+        .alert("Error", isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.clearError() } }
+        )) {
             Button("OK") {
                 viewModel.clearError()
             }
@@ -235,13 +238,13 @@ struct SettingsView: View {
                             let granted = await PushNotificationManager.shared.requestAuthorization()
                             if !granted {
                                 viewModel.notificationPreferences.enabled = false
-                                await viewModel.updateNotificationPreferences()
+                                viewModel.queueNotificationPreferencesUpdate()
                                 return
                             }
                         } else {
                             await PushNotificationManager.shared.unregisterDeviceToken()
                         }
-                        await viewModel.updateNotificationPreferences()
+                        viewModel.queueNotificationPreferencesUpdate()
                     }
                 }
 
@@ -250,7 +253,7 @@ struct SettingsView: View {
             Toggle("Build Completed", isOn: preferenceBinding(\.buildSuccess, viewModel: viewModel))
                 .disabled(!viewModel.notificationPreferences.enabled)
                 .onChange(of: viewModel.notificationPreferences.buildSuccess) { _, _ in
-                    Task { await viewModel.updateNotificationPreferences() }
+                    viewModel.queueNotificationPreferencesUpdate()
                 }
 
             Divider()
@@ -258,7 +261,7 @@ struct SettingsView: View {
             Toggle("Build Failed", isOn: preferenceBinding(\.buildFailure, viewModel: viewModel))
                 .disabled(!viewModel.notificationPreferences.enabled)
                 .onChange(of: viewModel.notificationPreferences.buildFailure) { _, _ in
-                    Task { await viewModel.updateNotificationPreferences() }
+                    viewModel.queueNotificationPreferencesUpdate()
                 }
 
             Divider()
@@ -266,7 +269,7 @@ struct SettingsView: View {
             Toggle("Paper Updated", isOn: preferenceBinding(\.paperUpdated, viewModel: viewModel))
                 .disabled(!viewModel.notificationPreferences.enabled || !viewModel.notificationPreferences.backgroundSync)
                 .onChange(of: viewModel.notificationPreferences.paperUpdated) { _, _ in
-                    Task { await viewModel.updateNotificationPreferences() }
+                    viewModel.queueNotificationPreferencesUpdate()
                 }
 
             if !viewModel.notificationPreferences.backgroundSync {
@@ -294,7 +297,7 @@ struct SettingsView: View {
                     || !viewModel.notificationPreferences.backgroundSync
                 )
                 .onChange(of: viewModel.notificationPreferences.updateCooldownMinutes) { _, _ in
-                    Task { await viewModel.updateNotificationPreferences() }
+                    viewModel.queueNotificationPreferencesUpdate()
                 }
 
                 Text("If new commits arrive while a paper is already out of sync, we will notify you at most once per interval when Background Refresh is allowed. Choose Never to disable update notifications.")
@@ -311,7 +314,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle("Allow Background Refresh", isOn: preferenceBinding(\.backgroundSync, viewModel: viewModel))
                 .onChange(of: viewModel.notificationPreferences.backgroundSync) { _, _ in
-                    Task { await viewModel.updateNotificationPreferences() }
+                    viewModel.queueNotificationPreferencesUpdate()
                 }
                 .accessibilityHint("Allows periodic sync checks for enabled repositories.")
 

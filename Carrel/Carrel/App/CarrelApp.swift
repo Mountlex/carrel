@@ -5,6 +5,7 @@ struct CarrelApp: App {
     @State private var authManager = AuthManager()
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,12 @@ struct CarrelApp: App {
                 // Start network monitoring
                 NetworkMonitor.shared.start()
                 await PushNotificationManager.shared.refreshAuthorizationStatus()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task {
+                    await authManager.refreshSessionIfNeededOnAppActive()
+                }
             }
         }
     }

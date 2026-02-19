@@ -16,6 +16,8 @@ final class SettingsViewModel {
     private(set) var isLatexCacheAllowedUpdating = false
     var backgroundRefreshDefault = true
     private(set) var isBackgroundRefreshDefaultUpdating = false
+    private var isNotificationSyncLoopRunning = false
+    private var hasPendingNotificationSync = false
 
     private let authManager: AuthManager
 
@@ -56,6 +58,29 @@ final class SettingsViewModel {
             try await ConvexService.shared.updateNotificationPreferences(notificationPreferences)
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Queue a notification-preferences sync and coalesce rapid UI changes.
+    func queueNotificationPreferencesUpdate() {
+        guard !isNotificationsLoading else { return }
+
+        hasPendingNotificationSync = true
+        guard !isNotificationSyncLoopRunning else { return }
+
+        isNotificationSyncLoopRunning = true
+        Task { @MainActor in
+            while hasPendingNotificationSync {
+                hasPendingNotificationSync = false
+                await updateNotificationPreferences()
+            }
+
+            isNotificationSyncLoopRunning = false
+
+            // Handle any update requests queued while shutting down.
+            if hasPendingNotificationSync {
+                queueNotificationPreferencesUpdate()
+            }
         }
     }
 

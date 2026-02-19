@@ -30,7 +30,7 @@ struct ConfigurePaperSheet: View {
     }
 
     private var isTexFile: Bool {
-        filePath.hasSuffix(".tex")
+        filePath.lowercased().hasSuffix(".tex")
     }
 
     private var canAddPaper: Bool {

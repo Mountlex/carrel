@@ -2,6 +2,12 @@ package com.carrel.app.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -11,16 +17,19 @@ import com.carrel.app.core.di.AppContainer
 import com.carrel.app.core.network.models.Repository
 import com.carrel.app.features.auth.LoginScreen
 import com.carrel.app.features.gallery.GalleryScreen
+import com.carrel.app.features.onboarding.OnboardingScreen
 import com.carrel.app.features.paper.PaperDetailScreen
 import com.carrel.app.features.repositories.AddPaperFromRepoScreen
 import com.carrel.app.features.repositories.RepositoryListScreen
 import com.carrel.app.features.settings.SettingsScreen
+import com.carrel.app.ui.components.OfflineBanner
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.URLDecoder
 import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
+    data object Onboarding : Screen("onboarding")
     data object Login : Screen("login")
     data object Gallery : Screen("gallery")
     data object Settings : Screen("settings")
@@ -40,14 +49,24 @@ sealed class Screen(val route: String) {
 @Composable
 fun NavGraph(
     isAuthenticated: Boolean,
+    hasCompletedOnboarding: Boolean,
     container: AppContainer
 ) {
     val navController = rememberNavController()
-    val startDestination = if (isAuthenticated) Screen.Gallery.route else Screen.Login.route
+    val isConnected by container.networkMonitor.isConnected.collectAsState()
+    val startDestination = when {
+        !hasCompletedOnboarding -> Screen.Onboarding.route
+        isAuthenticated -> Screen.Gallery.route
+        else -> Screen.Login.route
+    }
 
     // Handle auth state changes - navigate to appropriate screen
-    LaunchedEffect(isAuthenticated) {
-        if (isAuthenticated) {
+    LaunchedEffect(isAuthenticated, hasCompletedOnboarding) {
+        if (!hasCompletedOnboarding) {
+            navController.navigate(Screen.Onboarding.route) {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+            }
+        } else if (isAuthenticated) {
             // Clear back stack and go to Gallery
             navController.navigate(Screen.Gallery.route) {
                 popUpTo(navController.graph.startDestinationId) { inclusive = true }
@@ -60,87 +79,103 @@ fun NavGraph(
         }
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = startDestination
-    ) {
-        composable(Screen.Login.route) {
-            LoginScreen(
-                oAuthHandler = container.oAuthHandler,
-                authManager = container.authManager,
-                convexService = container.convexService
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = startDestination
+        ) {
+            composable(Screen.Onboarding.route) {
+                OnboardingScreen(
+                    onComplete = {
+                        container.onboardingManager.complete()
+                    }
+                )
+            }
+
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    oAuthHandler = container.oAuthHandler,
+                    authManager = container.authManager,
+                    convexService = container.convexService
+                )
+            }
+
+            composable(Screen.Gallery.route) {
+                GalleryScreen(
+                    convexClient = container.convexClient,
+                    convexService = container.convexService,
+                    authManager = container.authManager,
+                    onPaperClick = { paperId ->
+                        navController.navigate(Screen.PaperDetail.createRoute(paperId))
+                    },
+                    onSettingsClick = {
+                        navController.navigate(Screen.Settings.route)
+                    },
+                    onRepositoriesClick = {
+                        navController.navigate(Screen.Repositories.route)
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.PaperDetail.route,
+                arguments = listOf(
+                    navArgument("paperId") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val paperId = backStackEntry.arguments?.getString("paperId") ?: return@composable
+                PaperDetailScreen(
+                    paperId = paperId,
+                    convexClient = container.convexClient,
+                    convexService = container.convexService,
+                    useConvexSubscriptions = container.authManager.hasConvexAuth(),
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    convexService = container.convexService,
+                    authManager = container.authManager,
+                    pushNotificationManager = container.pushNotificationManager,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Repositories.route) {
+                RepositoryListScreen(
+                    convexService = container.convexService,
+                    onRepositoryClick = { repository ->
+                        navController.navigate(Screen.AddPaperFromRepo.createRoute(repository))
+                    },
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.AddPaperFromRepo.route,
+                arguments = listOf(
+                    navArgument("repoJson") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val repoJson = backStackEntry.arguments?.getString("repoJson") ?: return@composable
+                val decoded = URLDecoder.decode(repoJson, "UTF-8")
+                val repository = Json.decodeFromString<Repository>(decoded)
+                AddPaperFromRepoScreen(
+                    repository = repository,
+                    convexService = container.convexService,
+                    onBackClick = { navController.popBackStack() },
+                    onPaperAdded = {
+                        // Navigate back to gallery after adding paper
+                        navController.popBackStack(Screen.Gallery.route, inclusive = false)
+                    }
+                )
+            }
         }
 
-        composable(Screen.Gallery.route) {
-            GalleryScreen(
-                convexClient = container.convexClient,
-                convexService = container.convexService,
-                authManager = container.authManager,
-                onPaperClick = { paperId ->
-                    navController.navigate(Screen.PaperDetail.createRoute(paperId))
-                },
-                onSettingsClick = {
-                    navController.navigate(Screen.Settings.route)
-                },
-                onRepositoriesClick = {
-                    navController.navigate(Screen.Repositories.route)
-                }
-            )
-        }
-
-        composable(
-            route = Screen.PaperDetail.route,
-            arguments = listOf(
-                navArgument("paperId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val paperId = backStackEntry.arguments?.getString("paperId") ?: return@composable
-            PaperDetailScreen(
-                paperId = paperId,
-                convexClient = container.convexClient,
-                convexService = container.convexService,
-                useConvexSubscriptions = container.authManager.hasConvexAuth(),
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                convexService = container.convexService,
-                authManager = container.authManager,
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Repositories.route) {
-            RepositoryListScreen(
-                convexService = container.convexService,
-                onRepositoryClick = { repository ->
-                    navController.navigate(Screen.AddPaperFromRepo.createRoute(repository))
-                },
-                onBackClick = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Screen.AddPaperFromRepo.route,
-            arguments = listOf(
-                navArgument("repoJson") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val repoJson = backStackEntry.arguments?.getString("repoJson") ?: return@composable
-            val decoded = URLDecoder.decode(repoJson, "UTF-8")
-            val repository = Json.decodeFromString<Repository>(decoded)
-            AddPaperFromRepoScreen(
-                repository = repository,
-                convexService = container.convexService,
-                onBackClick = { navController.popBackStack() },
-                onPaperAdded = {
-                    // Navigate back to gallery after adding paper
-                    navController.popBackStack(Screen.Gallery.route, inclusive = false)
-                }
-            )
-        }
+        OfflineBanner(
+            visible = !isConnected,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }

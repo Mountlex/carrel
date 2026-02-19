@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -28,6 +29,8 @@ import java.util.*
 fun RepositoryCard(
     repository: Repository,
     isRefreshing: Boolean = false,
+    showsBackgroundRefreshBadge: Boolean = true,
+    onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -81,6 +84,16 @@ fun RepositoryCard(
                         syncStatus = repository.syncStatus,
                         paperSyncStatus = repository.paperSyncStatus
                     )
+                }
+
+                onOpenSettings?.let {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(onClick = it) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Repository settings"
+                        )
+                    }
                 }
             }
 
@@ -138,6 +151,14 @@ fun RepositoryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
+            }
+
+            if (!showsBackgroundRefreshBadge) {
+                Text(
+                    text = "Background refresh paused",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

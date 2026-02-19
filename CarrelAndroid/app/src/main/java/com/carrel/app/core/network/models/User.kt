@@ -13,5 +13,8 @@ data class User(
     val emailVerificationTime: Double? = null,
     val hasOverleafCredentials: Boolean = false,
     val hasGitHubToken: Boolean = false,
-    val hasGitLabToken: Boolean = false
+    val hasGitLabToken: Boolean = false,
+    val latexCacheMode: LatexCacheMode? = null,
+    val latexCacheAllowed: Boolean? = null,
+    val backgroundRefreshDefault: Boolean? = null
 )

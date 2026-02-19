@@ -13,8 +13,11 @@ data class TogglePublicResult(
 
 @Serializable
 data class CheckAllResult(
+    @Serializable(with = FlexibleIntSerializer::class)
     val checked: Int,
+    @Serializable(with = FlexibleIntSerializer::class)
     val updated: Int,
+    @Serializable(with = FlexibleIntSerializer::class)
     val failed: Int
 )
 
@@ -31,6 +34,13 @@ data class RefreshRepositoryResult(
 data class AddTrackedFileResult(
     val trackedFileId: String,
     val paperId: String
+)
+
+@Serializable
+data class TestNotificationResult(
+    @Serializable(with = FlexibleIntSerializer::class)
+    val delivered: Int,
+    val reason: String? = null
 )
 
 @Serializable

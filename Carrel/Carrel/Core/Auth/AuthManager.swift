@@ -14,11 +14,15 @@ final class AuthManager {
 
     /// The current access token (JWT)
     private var accessToken: String?
+    private var refreshAuthSession: ASWebAuthenticationSession?
+    private var tokenMonitorTask: Task<Void, Never>?
 
     private let keychain = KeychainManager.shared
 
     /// How long before expiration to trigger a refresh (7 days)
     private let refreshThreshold: TimeInterval = 7 * 24 * 60 * 60
+    /// How often to re-check token freshness while app stays open.
+    private let tokenMonitorInterval: TimeInterval = 60 * 60
 
     /// Base URL for the web app. Configure this for your deployment.
     /// Uses Info.plist value if available, otherwise falls back to default.
@@ -53,6 +57,7 @@ final class AuthManager {
         defer { isLoading = false }
 
         guard let token = await keychain.loadConvexAuthToken() else {
+            stopTokenMonitor()
             #if DEBUG
             print("AuthManager: No stored token found")
             #endif
@@ -78,6 +83,7 @@ final class AuthManager {
                 print("AuthManager: Silent refresh failed, clearing tokens")
                 #endif
                 await keychain.clearAllTokens()
+                stopTokenMonitor()
                 isAuthenticated = false
             }
             return
@@ -102,6 +108,7 @@ final class AuthManager {
         if success {
             accessToken = token
             isAuthenticated = true
+            startTokenMonitor()
             #if DEBUG
             print("AuthManager: Restored session, isAuthenticated = true")
             #endif
@@ -118,9 +125,16 @@ final class AuthManager {
                     return
                 }
                 await keychain.clearAllTokens()
+                stopTokenMonitor()
                 isAuthenticated = false
             }
         }
+    }
+
+    /// Re-check token freshness when app becomes active.
+    func refreshSessionIfNeededOnAppActive() async {
+        guard isAuthenticated else { return }
+        await ensureTokenFreshness()
     }
 
     // MARK: - Silent Token Refresh
@@ -180,6 +194,7 @@ final class AuthManager {
                 if success {
                     accessToken = result.accessToken
                     isAuthenticated = true
+                    startTokenMonitor()
 
                     #if DEBUG
                     let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
@@ -228,6 +243,7 @@ final class AuthManager {
                     continuation.resume(returning: false)
                     return
                 }
+                self.refreshAuthSession = nil
 
                 if error != nil {
                     #if DEBUG
@@ -257,7 +273,12 @@ final class AuthManager {
 
             session.prefersEphemeralWebBrowserSession = false
             session.presentationContextProvider = WebAuthContextProvider.shared
-            session.start()
+            self.refreshAuthSession = session
+            guard session.start() else {
+                self.refreshAuthSession = nil
+                continuation.resume(returning: false)
+                return
+            }
         }
     }
 
@@ -371,6 +392,7 @@ final class AuthManager {
             if success {
                 accessToken = result.accessToken
                 isAuthenticated = true
+                startTokenMonitor()
 
                 #if DEBUG
                 let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
@@ -404,6 +426,7 @@ final class AuthManager {
         if success {
             accessToken = token
             isAuthenticated = true
+            startTokenMonitor()
             #if DEBUG
             print("AuthManager: Using original Convex Auth token (expires in ~1 hour)")
             #endif
@@ -412,6 +435,8 @@ final class AuthManager {
 
     /// Logout and clear all auth state
     func logout() async {
+        stopTokenMonitor()
+        await PushNotificationManager.shared.unregisterDeviceToken()
         accessToken = nil
         await ConvexService.shared.clearAuth()
         await keychain.clearAllTokens()
@@ -421,6 +446,55 @@ final class AuthManager {
         await ThumbnailCache.shared.clearCache()
 
         isAuthenticated = false
+    }
+
+    private func startTokenMonitor() {
+        guard tokenMonitorTask == nil else { return }
+
+        tokenMonitorTask = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Int(tokenMonitorInterval)))
+                guard !Task.isCancelled else { break }
+                await self.ensureTokenFreshness()
+            }
+        }
+    }
+
+    private func stopTokenMonitor() {
+        tokenMonitorTask?.cancel()
+        tokenMonitorTask = nil
+    }
+
+    private func ensureTokenFreshness() async {
+        guard isAuthenticated else {
+            stopTokenMonitor()
+            return
+        }
+
+        var candidateToken = accessToken
+        if candidateToken == nil {
+            candidateToken = await keychain.loadConvexAuthToken()
+        }
+        guard let token = candidateToken else { return }
+        accessToken = token
+
+        guard isTokenExpired(token) || isTokenExpiringSoon(token) else { return }
+
+        let refreshed = await refreshTokenSilently()
+        guard !refreshed else { return }
+
+        // If token is already expired and we have no refresh token, force re-auth UI.
+        let hasRefreshToken = await keychain.loadRefreshToken() != nil
+        if isTokenExpired(token) && !hasRefreshToken {
+            #if DEBUG
+            print("AuthManager: Expired token with no refresh token, forcing sign-in")
+            #endif
+            stopTokenMonitor()
+            accessToken = nil
+            await keychain.clearConvexAuthToken()
+            await ConvexService.shared.clearAuth()
+            isAuthenticated = false
+        }
     }
 }
 

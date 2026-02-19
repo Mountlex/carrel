@@ -66,7 +66,10 @@ struct LoginView: View {
                     .frame(height: 60)
             }
         }
-        .alert("Error", isPresented: .constant(error != nil)) {
+        .alert("Error", isPresented: Binding(
+            get: { error != nil },
+            set: { if !$0 { error = nil } }
+        )) {
             Button("OK") { error = nil }
         } message: {
             Text(error ?? "Unknown error")

@@ -14,8 +14,8 @@ struct RepositoryFile: Codable, Identifiable, Equatable {
     }
 
     var isDirectory: Bool { type == .dir }
-    var isTexFile: Bool { name.hasSuffix(".tex") }
-    var isPdfFile: Bool { name.hasSuffix(".pdf") }
+    var isTexFile: Bool { name.lowercased().hasSuffix(".tex") }
+    var isPdfFile: Bool { name.lowercased().hasSuffix(".pdf") }
     var isSelectable: Bool { isTexFile || isPdfFile }
 }
 

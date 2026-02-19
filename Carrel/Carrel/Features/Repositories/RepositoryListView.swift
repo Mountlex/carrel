@@ -109,12 +109,15 @@ struct RepositoryListView: View {
                                 repositoryForSettings = latest
                             }
                         )
-                        .contentShape(Rectangle())
                         .padding(.horizontal, 16)
-                        .onTapGesture {
-                            selectedRepository = viewModel.repositories.first(where: { $0.id == repository.id })
-                                ?? repository
-                        }
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(
+                            TapGesture().onEnded {
+                                selectedRepository = viewModel.repositories.first(where: { $0.id == repository.id })
+                                    ?? repository
+                            },
+                            including: .gesture
+                        )
                         .accessibilityIdentifier("repository_card_\(repository.id)")
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)

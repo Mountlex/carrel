@@ -5,6 +5,15 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.services) apply false
+}
+
+val hasGoogleServicesConfig = file("google-services.json").exists() ||
+    file("src/debug/google-services.json").exists() ||
+    file("src/release/google-services.json").exists()
+
+if (hasGoogleServicesConfig) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -104,6 +113,9 @@ dependencies {
 
     // Convex real-time backend
     implementation(libs.convex.android)
+
+    // Push notifications
+    implementation("com.google.firebase:firebase-messaging:24.1.0")
 
     debugImplementation(libs.androidx.ui.tooling)
 }

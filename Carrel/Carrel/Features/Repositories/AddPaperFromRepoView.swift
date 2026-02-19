@@ -131,7 +131,7 @@ struct AddPaperFromRepoView: View {
                                 iconColor: .secondary,
                                 name: "..",
                                 isTracked: false,
-                                isInteractive: true
+                                isInteractive: false
                             )
                         }
                         .buttonStyle(.plain)
@@ -149,7 +149,7 @@ struct AddPaperFromRepoView: View {
                                 iconColor: .blue,
                                 name: file.name,
                                 isTracked: false,
-                                isInteractive: true
+                                isInteractive: false
                             )
                         }
                         .buttonStyle(.plain)
@@ -173,7 +173,7 @@ struct AddPaperFromRepoView: View {
                                     iconColor: file.isTexFile ? .green : .red,
                                     name: file.name,
                                     isTracked: false,
-                                    isInteractive: true
+                                    isInteractive: false
                                 )
                             }
                             .buttonStyle(.plain)

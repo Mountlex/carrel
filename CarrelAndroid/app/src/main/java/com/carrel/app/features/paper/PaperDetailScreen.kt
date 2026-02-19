@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.ConvexService
+import com.carrel.app.core.network.NetworkMonitor
 import com.carrel.app.ui.components.StatusBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -322,19 +323,26 @@ private fun PdfViewer(
     var pageCount by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val pdfCache = remember { PDFCache.getInstance(context) }
+    val networkMonitor = remember { NetworkMonitor.getInstance(context) }
+    val isConnected by networkMonitor.isConnected.collectAsState()
     val bitmapCache = remember {
         object : LruCache<Int, Bitmap>(MAX_BITMAP_CACHE_BYTES) {
             override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
         }
     }
 
-    LaunchedEffect(pdfUrl) {
+    LaunchedEffect(pdfUrl, isConnected) {
         isLoading = true
         isCached = pdfCache.isCached(pdfUrl)
         error = null
         pdfFile = null
         pageCount = 0
         bitmapCache.evictAll()
+        if (!isConnected && !isCached) {
+            error = "This PDF has not been downloaded yet. Connect to the internet to view it."
+            isLoading = false
+            return@LaunchedEffect
+        }
         try {
             val (file, count) = withContext(Dispatchers.IO) {
                 // Fetch PDF (from cache or network)

@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isAuthenticated by container.authManager.isAuthenticated.collectAsState()
+            val hasCompletedOnboarding by container.onboardingManager.hasCompleted.collectAsState()
 
             // Load stored tokens and restore auth on startup
             LaunchedEffect(Unit) {
@@ -59,6 +60,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            LaunchedEffect(isAuthenticated) {
+                container.pushNotificationManager.setAuthenticated(isAuthenticated)
+            }
+
             CarrelTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -66,6 +71,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavGraph(
                         isAuthenticated = isAuthenticated,
+                        hasCompletedOnboarding = hasCompletedOnboarding,
                         container = container
                     )
                 }

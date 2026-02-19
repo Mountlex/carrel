@@ -16,6 +16,8 @@ data class Repository(
     val lastCommitHash: String? = null,
     val lastCommitTime: Double? = null,
     val lastCommitAuthor: String? = null,
+    val backgroundRefreshEnabled: Boolean? = null,
+    val latexCacheMode: LatexCacheMode? = null,
     val paperSyncStatus: PaperSyncStatus,
     // Convex returns numbers as doubles
     val paperCount: Double,
@@ -63,5 +65,17 @@ enum class PaperSyncStatus {
             IN_SYNC -> "Up to date"
             NEEDS_SYNC -> "Outdated"
             NEVER_SYNCED -> "Not synced"
+        }
+}
+
+@Serializable
+enum class LatexCacheMode {
+    @SerialName("off") OFF,
+    @SerialName("aux") AUX;
+
+    val displayName: String
+        get() = when (this) {
+            OFF -> "Off"
+            AUX -> "On"
         }
 }

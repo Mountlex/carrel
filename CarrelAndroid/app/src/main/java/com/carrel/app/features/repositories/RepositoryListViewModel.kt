@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.carrel.app.core.network.ConvexService
+import com.carrel.app.core.network.models.LatexCacheMode
 import com.carrel.app.core.network.models.Repository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,13 @@ data class RepositoryListUiState(
     val isCheckingAll: Boolean = false,
     val refreshingRepoId: String? = null,
     val error: String? = null,
-    val toastMessage: String? = null
+    val toastMessage: String? = null,
+    val isBackgroundRefreshAllowed: Boolean = true,
+    val backgroundRefreshDefault: Boolean = true,
+    val userCacheMode: LatexCacheMode = LatexCacheMode.AUX,
+    val isCompilationCacheAllowed: Boolean = true,
+    val updatingRepoBackgroundId: String? = null,
+    val updatingRepoCacheId: String? = null
 )
 
 class RepositoryListViewModel(
@@ -27,6 +34,10 @@ class RepositoryListViewModel(
 
     private val _uiState = MutableStateFlow(RepositoryListUiState())
     val uiState: StateFlow<RepositoryListUiState> = _uiState.asStateFlow()
+
+    init {
+        loadPreferences()
+    }
 
     fun loadRepositories() {
         if (_uiState.value.isLoading) return
@@ -58,6 +69,26 @@ class RepositoryListViewModel(
         }
     }
 
+    private fun loadPreferences() {
+        viewModelScope.launch {
+            convexService.getCurrentUser()
+                .onSuccess { user ->
+                    _uiState.update {
+                        it.copy(
+                            userCacheMode = user?.latexCacheMode ?: LatexCacheMode.AUX,
+                            isCompilationCacheAllowed = user?.latexCacheAllowed ?: true,
+                            backgroundRefreshDefault = user?.backgroundRefreshDefault ?: true
+                        )
+                    }
+                }
+
+            convexService.getNotificationPreferences()
+                .onSuccess { preferences ->
+                    _uiState.update { it.copy(isBackgroundRefreshAllowed = preferences.backgroundSync) }
+                }
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
@@ -82,7 +113,7 @@ class RepositoryListViewModel(
                     _uiState.update { it.copy(toastMessage = message, isCheckingAll = false) }
                     loadRepositories()
                 }
-                .onFailure { exception ->
+                .onFailure {
                     _uiState.update { it.copy(toastMessage = "Failed to check repos", isCheckingAll = false) }
                 }
         }
@@ -117,7 +148,6 @@ class RepositoryListViewModel(
 
     fun deleteRepository(repository: Repository) {
         viewModelScope.launch {
-            // Optimistic update
             _uiState.update { state ->
                 state.copy(repositories = state.repositories.filter { it.id != repository.id })
             }
@@ -129,6 +159,64 @@ class RepositoryListViewModel(
                 .onFailure { exception ->
                     _uiState.update { it.copy(toastMessage = "Failed to delete", error = exception.message) }
                     loadRepositories()
+                }
+        }
+    }
+
+    fun setBackgroundRefresh(repository: Repository, enabled: Boolean?) {
+        if (_uiState.value.updatingRepoBackgroundId != null) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(updatingRepoBackgroundId = repository.id) }
+
+            convexService.setBackgroundRefresh(repository.id, enabled)
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(
+                            repositories = state.repositories.map {
+                                if (it.id == repository.id) it.copy(backgroundRefreshEnabled = enabled) else it
+                            },
+                            updatingRepoBackgroundId = null,
+                            toastMessage = "Repository setting updated"
+                        )
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(
+                            updatingRepoBackgroundId = null,
+                            toastMessage = "Failed to update background refresh"
+                        )
+                    }
+                }
+        }
+    }
+
+    fun setCompilationCacheMode(repository: Repository, mode: LatexCacheMode?) {
+        if (_uiState.value.updatingRepoCacheId != null) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(updatingRepoCacheId = repository.id) }
+
+            convexService.setRepositoryLatexCacheMode(repository.id, mode)
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(
+                            repositories = state.repositories.map {
+                                if (it.id == repository.id) it.copy(latexCacheMode = mode) else it
+                            },
+                            updatingRepoCacheId = null,
+                            toastMessage = "Repository setting updated"
+                        )
+                    }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(
+                            updatingRepoCacheId = null,
+                            toastMessage = "Failed to update compilation cache"
+                        )
+                    }
                 }
         }
     }

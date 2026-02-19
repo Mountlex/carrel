@@ -39,6 +39,7 @@ final class GalleryViewModel: SubscribableViewModel {
 
     /// Current toast message to display
     var toastMessage: ToastMessage?
+    private(set) var deletingPaperIds: Set<String> = []
 
     // MARK: - SubscribableViewModel
 
@@ -137,11 +138,17 @@ final class GalleryViewModel: SubscribableViewModel {
     }
 
     func deletePaper(_ paper: Paper) async {
+        guard !deletingPaperIds.contains(paper.id) else { return }
+        deletingPaperIds.insert(paper.id)
+        defer { deletingPaperIds.remove(paper.id) }
+
         do {
             try await ConvexService.shared.deletePaper(id: paper.id)
             papers.removeAll { $0.id == paper.id }
+            toastMessage = ToastMessage(text: "Paper deleted", type: .success)
         } catch {
             self.error = error.localizedDescription
+            toastMessage = ToastMessage(text: "Failed to delete paper", type: .error)
         }
     }
 

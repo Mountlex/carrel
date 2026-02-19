@@ -366,41 +366,105 @@ async function sendPushToUser(
   ctx: NotificationCtx,
   userId: Id<"users">,
   payload: PushPayload
-): Promise<{ delivered: number }> {
+): Promise<{ delivered: number; reason?: string }> {
   const tokens = await ctx.runQuery(internal.notifications.listDeviceTokensForUserInternal, {
     userId,
   });
 
-  if (!tokens.length) return { delivered: 0 };
+  if (!tokens.length) return { delivered: 0, reason: "no_tokens" };
 
   let delivered = 0;
+  let attempted = 0;
+  let configuredProviderFound = false;
+  let deliveryFailed = false;
+  let fcmAccessToken: string | null = null;
+  let fcmConfigMissingLogged = false;
+  let apnsConfigMissingLogged = false;
 
   for (const token of tokens) {
-    const config = getApnsConfig(token.environment);
-    if (!config) {
-      console.log("APNs config missing; skipping push");
+    if (token.platform === "ios") {
+      const apnsConfig = getApnsConfig(token.environment);
+      if (!apnsConfig) {
+        if (!apnsConfigMissingLogged) {
+          console.log("APNs config missing; skipping iOS push");
+          apnsConfigMissingLogged = true;
+        }
+        continue;
+      }
+
+      configuredProviderFound = true;
+      attempted += 1;
+
+      const jwt = await createApnsJwt(apnsConfig);
+      const result = await sendApnsRequest({
+        jwt,
+        token: token.token,
+        topic: apnsConfig.topic,
+        env: apnsConfig.env,
+        payload,
+      });
+
+      if (result.status === 200) {
+        delivered += 1;
+        continue;
+      }
+
+      deliveryFailed = true;
+      if (result.unregisterToken) {
+        await ctx.runMutation(internal.notifications.deleteDeviceTokenInternal, {
+          tokenId: token._id,
+        });
+      }
       continue;
     }
 
-    const jwt = await createApnsJwt(config);
-    const result = await sendApnsRequest({
-      jwt,
-      token: token.token,
-      topic: config.topic,
-      env: config.env,
-      payload,
-    });
+    if (token.platform === "android") {
+      const fcmConfig = getFcmConfig();
+      if (!fcmConfig) {
+        if (!fcmConfigMissingLogged) {
+          console.log("FCM config missing; skipping Android push");
+          fcmConfigMissingLogged = true;
+        }
+        continue;
+      }
 
-    if (result.status === 200) {
-      delivered += 1;
-    } else if (result.status === 410) {
-      await ctx.runMutation(internal.notifications.deleteDeviceTokenInternal, {
-        tokenId: token._id,
+      configuredProviderFound = true;
+      attempted += 1;
+
+      if (!fcmAccessToken) {
+        fcmAccessToken = await createFcmAccessToken(fcmConfig);
+      }
+
+      const result = await sendFcmRequest({
+        accessToken: fcmAccessToken,
+        projectId: fcmConfig.projectId,
+        token: token.token,
+        payload,
       });
+
+      if (result.status === 200) {
+        delivered += 1;
+        continue;
+      }
+
+      deliveryFailed = true;
+      if (result.unregisterToken) {
+        await ctx.runMutation(internal.notifications.deleteDeviceTokenInternal, {
+          tokenId: token._id,
+        });
+      }
     }
   }
 
-  return { delivered };
+  if (delivered > 0) return { delivered };
+  if (!configuredProviderFound || attempted === 0) {
+    return { delivered: 0, reason: "provider_not_configured" };
+  }
+  if (deliveryFailed) {
+    return { delivered: 0, reason: "delivery_failed" };
+  }
+
+  return { delivered: 0 };
 }
 
 type ApnsConfig = {
@@ -411,16 +475,33 @@ type ApnsConfig = {
   env: "production" | "sandbox";
 };
 
+type FcmConfig = {
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
+};
+
 function getApnsConfig(overrideEnv?: "production" | "sandbox" | null): ApnsConfig | null {
   const keyId = process.env.APNS_KEY_ID;
   const teamId = process.env.APNS_TEAM_ID;
   const topic = process.env.APNS_TOPIC;
-  const privateKey = process.env.APNS_PRIVATE_KEY;
+  const privateKey = process.env.APNS_PRIVATE_KEY?.replace(/\\n/g, "\n");
   if (!keyId || !teamId || !topic || !privateKey) {
     return null;
   }
   const env = overrideEnv ?? (process.env.APNS_ENV === "sandbox" ? "sandbox" : "production");
   return { keyId, teamId, topic, privateKey, env };
+}
+
+function getFcmConfig(): FcmConfig | null {
+  const projectId = process.env.FCM_PROJECT_ID;
+  const clientEmail = process.env.FCM_CLIENT_EMAIL;
+  const privateKey = process.env.FCM_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+  return { projectId, clientEmail, privateKey };
 }
 
 async function createApnsJwt(config: ApnsConfig): Promise<string> {
@@ -464,7 +545,7 @@ type ApnsRequestArgs = {
   payload: PushPayload;
 };
 
-async function sendApnsRequest(args: ApnsRequestArgs): Promise<{ status: number }> {
+async function sendApnsRequest(args: ApnsRequestArgs): Promise<{ status: number; unregisterToken: boolean }> {
   const host = args.env === "sandbox"
     ? "https://api.sandbox.push.apple.com"
     : "https://api.push.apple.com";
@@ -505,7 +586,118 @@ async function sendApnsRequest(args: ApnsRequestArgs): Promise<{ status: number 
     console.log(`APNs error (${response.status}): ${text}`);
   }
 
-  return { status: response.status };
+  return { status: response.status, unregisterToken: response.status === 410 };
+}
+
+type FcmRequestArgs = {
+  accessToken: string;
+  projectId: string;
+  token: string;
+  payload: PushPayload;
+};
+
+async function createFcmAccessToken(config: FcmConfig): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: config.clientEmail,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const message = `${encodedHeader}.${encodedPayload}`;
+
+  const keyData = pemToArrayBuffer(config.privateKey);
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    keyData,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(message)
+  );
+  const assertion = `${message}.${base64UrlEncode(new Uint8Array(signature))}`;
+
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    const text = await tokenResponse.text();
+    throw new Error(`FCM auth failed (${tokenResponse.status}): ${text}`);
+  }
+
+  const tokenJson = await tokenResponse.json();
+  if (!tokenJson.access_token || typeof tokenJson.access_token !== "string") {
+    throw new Error("FCM auth response missing access_token");
+  }
+  return tokenJson.access_token;
+}
+
+async function sendFcmRequest(args: FcmRequestArgs): Promise<{ status: number; unregisterToken: boolean }> {
+  const data = args.payload.data
+    ? Object.fromEntries(
+      Object.entries(args.payload.data).map(([key, value]) => [
+        key,
+        typeof value === "string" ? value : JSON.stringify(value),
+      ])
+    )
+    : undefined;
+
+  const message: Record<string, unknown> = {
+    token: args.token,
+    android: {
+      priority: args.payload.pushType === "background" ? "NORMAL" : "HIGH",
+    },
+  };
+  if (args.payload.title || args.payload.body) {
+    message.notification = {
+      title: args.payload.title,
+      body: args.payload.body,
+    };
+  }
+  if (data) {
+    message.data = data;
+  }
+
+  const response = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${args.projectId}/messages:send`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${args.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ message }),
+    }
+  );
+
+  if (response.status === 200) {
+    return { status: 200, unregisterToken: false };
+  }
+
+  const text = await response.text();
+  console.log(`FCM error (${response.status}): ${text}`);
+  const unregisterToken = text.includes("UNREGISTERED") ||
+    text.includes("registration-token-not-registered");
+
+  return { status: response.status, unregisterToken };
 }
 
 function pemToArrayBuffer(pem: string): Uint8Array {

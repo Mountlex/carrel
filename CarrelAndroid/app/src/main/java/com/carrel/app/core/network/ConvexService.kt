@@ -149,6 +149,104 @@ class ConvexService(
         }
     }
 
+    /**
+     * Get notification preferences for the current user.
+     */
+    suspend fun getNotificationPreferences(): Result<NotificationPreferences> {
+        return runCatching {
+            withTimeout(10_000) {
+                var preferences: NotificationPreferences? = null
+                client.subscribe<NotificationPreferences>("notifications:getNotificationPreferences")
+                    .collect { result ->
+                        preferences = result.getOrNull()
+                        throw FirstValueReceivedException(preferences)
+                    }
+                preferences ?: NotificationPreferences()
+            }
+        }.recoverCatching { e ->
+            if (e is FirstValueReceivedException) {
+                @Suppress("UNCHECKED_CAST")
+                e.value as NotificationPreferences? ?: NotificationPreferences()
+            } else {
+                throw e
+            }
+        }
+    }
+
+    suspend fun updateNotificationPreferences(preferences: NotificationPreferences): Result<Unit> {
+        return runCatching {
+            client.mutation(
+                "notifications:updateNotificationPreferences",
+                mapOf(
+                    "enabled" to preferences.enabled,
+                    "buildSuccess" to preferences.buildSuccess,
+                    "buildFailure" to preferences.buildFailure,
+                    "paperUpdated" to preferences.paperUpdated,
+                    "backgroundSync" to preferences.backgroundSync,
+                    "updateCooldownMinutes" to preferences.updateCooldownMinutes
+                )
+            )
+        }
+    }
+
+    suspend fun updateLatexCacheMode(mode: LatexCacheMode): Result<Unit> {
+        return runCatching {
+            client.mutation(
+                "users:updateLatexCacheMode",
+                mapOf("latexCacheMode" to mode.name.lowercase())
+            )
+        }
+    }
+
+    suspend fun updateLatexCacheAllowed(allowed: Boolean): Result<Unit> {
+        return runCatching {
+            client.mutation(
+                "users:updateLatexCacheAllowed",
+                mapOf("latexCacheAllowed" to allowed)
+            )
+        }
+    }
+
+    suspend fun updateBackgroundRefreshDefault(enabled: Boolean): Result<Unit> {
+        return runCatching {
+            client.mutation(
+                "users:updateBackgroundRefreshDefault",
+                mapOf("backgroundRefreshDefault" to enabled)
+            )
+        }
+    }
+
+    suspend fun registerDeviceToken(
+        token: String,
+        platform: String = "android",
+        environment: String,
+        deviceId: String? = null,
+        appVersion: String? = null
+    ): Result<Unit> {
+        return runCatching {
+            val args = mutableMapOf<String, Any>(
+                "token" to token,
+                "platform" to platform,
+                "environment" to environment
+            )
+            deviceId?.let { args["deviceId"] = it }
+            appVersion?.let { args["appVersion"] = it }
+            client.mutation("notifications:registerDeviceToken", args)
+        }
+    }
+
+    suspend fun unregisterDeviceToken(token: String): Result<Unit> {
+        return runCatching {
+            client.mutation("notifications:unregisterDeviceToken", mapOf("token" to token))
+        }
+    }
+
+    suspend fun sendTestNotification(): Result<TestNotificationResult> {
+        return runCatching {
+            client.action<TestNotificationResult>("notifications:sendTestNotification")
+        }
+    }
+
     // MARK: - Papers (Subscriptions)
 
     /**
@@ -292,6 +390,60 @@ class ConvexService(
     suspend fun refreshRepository(id: String): Result<RefreshRepositoryResult> {
         return runCatching {
             client.action<RefreshRepositoryResult>("sync:refreshRepository", mapOf("repositoryId" to id))
+        }
+    }
+
+    suspend fun setBackgroundRefresh(repositoryId: String, enabled: Boolean?): Result<Unit> {
+        return runCatching {
+            val mode = when (enabled) {
+                null -> "default"
+                true -> "on"
+                false -> "off"
+            }
+            try {
+                client.mutation(
+                    "repositories:update",
+                    mapOf(
+                        "id" to repositoryId,
+                        "backgroundRefreshMode" to mode
+                    )
+                )
+            } catch (_: Exception) {
+                client.mutation(
+                    "repositories:update",
+                    mapOf(
+                        "id" to repositoryId,
+                        "backgroundRefreshEnabled" to enabled
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun setRepositoryLatexCacheMode(repositoryId: String, mode: LatexCacheMode?): Result<Unit> {
+        return runCatching {
+            val modeSetting = when (mode) {
+                null -> "default"
+                LatexCacheMode.OFF -> "off"
+                LatexCacheMode.AUX -> "aux"
+            }
+            try {
+                client.mutation(
+                    "repositories:update",
+                    mapOf(
+                        "id" to repositoryId,
+                        "latexCacheModeSetting" to modeSetting
+                    )
+                )
+            } catch (_: Exception) {
+                client.mutation(
+                    "repositories:update",
+                    mapOf(
+                        "id" to repositoryId,
+                        "latexCacheMode" to mode?.name?.lowercase()
+                    )
+                )
+            }
         }
     }
 

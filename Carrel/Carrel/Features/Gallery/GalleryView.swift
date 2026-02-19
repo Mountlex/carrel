@@ -104,17 +104,22 @@ struct GalleryView: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(filteredPapers) { paper in
-                        Button {
-                            selectedPaper = paper
-                        } label: {
-                            PaperCard(
-                                paper: paper,
-                                isSyncing: viewModel.syncingPaperId == paper.id,
-                                isOffline: isOffline
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        let isDeletingPaper = viewModel.deletingPaperIds.contains(paper.id)
+
+                        PaperCard(
+                            paper: paper,
+                            isSyncing: viewModel.syncingPaperId == paper.id,
+                            isOffline: isOffline
+                        )
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(
+                            TapGesture().onEnded {
+                                selectedPaper = paper
+                            },
+                            including: .gesture
+                        )
                         .accessibilityIdentifier("gallery_paper_card_\(paper.id)")
+                        .accessibilityAddTraits(.isButton)
                         .contextMenu {
                             Button {
                                 Task {
@@ -139,8 +144,13 @@ struct GalleryView: View {
                                     await viewModel.deletePaper(paper)
                                 }
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                if isDeletingPaper {
+                                    Label("Deleting...", systemImage: "hourglass")
+                                } else {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
+                            .disabled(isDeletingPaper)
                         }
                     }
                 }

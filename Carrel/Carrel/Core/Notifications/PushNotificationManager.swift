@@ -60,6 +60,12 @@ final class PushNotificationManager {
 
     func setAuthenticated(_ authenticated: Bool) {
         isAuthenticated = authenticated
+        if !authenticated {
+            // Force fresh registration on next login.
+            lastRegisteredToken = nil
+            return
+        }
+
         Task {
             await refreshAuthorizationStatus()
             await registerTokenIfPossible()
@@ -73,7 +79,7 @@ final class PushNotificationManager {
     }
 
     func unregisterDeviceToken() async {
-        guard let token = deviceToken else { return }
+        guard let token = lastRegisteredToken ?? deviceToken else { return }
         do {
             try await ConvexService.shared.unregisterDeviceToken(token)
             lastRegisteredToken = nil

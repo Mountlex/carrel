@@ -12,7 +12,26 @@ Native Android app for Carrel paper gallery, built with Kotlin and Jetpack Compo
        const val SITE_URL = "https://your-site.com"
    }
    ```
-3. Sync Gradle and run the app
+3. Configure Firebase Cloud Messaging (required for push notifications):
+   1. In [Firebase Console](https://console.firebase.google.com), create/select the project used by Carrel.
+   2. Add Android app package `com.carrel.app`.
+   3. Add SHA-1 and SHA-256 fingerprints for your debug and release keystores.
+   4. Download `google-services.json`.
+   5. Place it at `app/google-services.json` (or `app/src/debug/google-services.json` and `app/src/release/google-services.json` for per-build config).
+4. Sync Gradle and run the app
+
+## Updating Firebase App Config
+
+When Firebase settings change (new keystore fingerprint, sender ID, etc.):
+
+1. Open Firebase Console → **Project settings** → **Your apps** → **Android (`com.carrel.app`)**.
+2. Update SHA fingerprints or other app config.
+3. Download a fresh `google-services.json`.
+4. Replace the file in `app/google-services.json` (or the debug/release variant files).
+5. Rebuild the app:
+   ```bash
+   ./gradlew clean :app:assembleDebug
+   ```
 
 ## Project Structure
 

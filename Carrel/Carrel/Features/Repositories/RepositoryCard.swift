@@ -83,7 +83,7 @@ struct RepositoryCard: View {
         }
         .padding(16)
         .glassEffect(
-            .regular.interactive(),
+            .regular,
             in: RoundedRectangle(cornerRadius: 16)
         )
         .accessibilityElement(children: onOpenSettings == nil ? .combine : .contain)

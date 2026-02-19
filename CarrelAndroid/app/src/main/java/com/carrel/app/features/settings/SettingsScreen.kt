@@ -1,29 +1,79 @@
 package com.carrel.app.features.settings
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Launch
-import androidx.compose.material.icons.filled.*
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.carrel.app.core.auth.AuthManager
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.ConvexService
+import com.carrel.app.core.network.models.LatexCacheMode
+import com.carrel.app.core.notifications.PushNotificationManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,6 +81,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     convexService: ConvexService,
     authManager: AuthManager,
+    pushNotificationManager: PushNotificationManager,
     onBackClick: () -> Unit
 ) {
     val viewModel = remember { SettingsViewModel(convexService, authManager) }
@@ -41,10 +92,32 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var pdfCacheSize by remember { mutableLongStateOf(0L) }
     val pdfCache = remember { PDFCache.getInstance(context) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load cache size on launch
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val updated = uiState.notificationPreferences.copy(enabled = true)
+            viewModel.setNotificationPreferences(updated)
+            viewModel.queueNotificationPreferencesUpdate()
+            pushNotificationManager.fetchCurrentToken()
+        } else {
+            val updated = uiState.notificationPreferences.copy(enabled = false)
+            viewModel.setNotificationPreferences(updated)
+            viewModel.queueNotificationPreferencesUpdate()
+        }
+    }
+
     LaunchedEffect(Unit) {
         pdfCacheSize = pdfCache.cacheSize()
+    }
+
+    LaunchedEffect(uiState.toastMessage) {
+        uiState.toastMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearToast()
+        }
     }
 
     Scaffold(
@@ -57,25 +130,18 @@ fun SettingsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Account section
-            Text(
-                text = "Account",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            SectionTitle("Account")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 when {
                     uiState.isLoading -> {
                         Box(
@@ -84,7 +150,7 @@ fun SettingsScreen(
                                 .padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator()
+                            androidx.compose.material3.CircularProgressIndicator()
                         }
                     }
                     uiState.user != null -> {
@@ -95,7 +161,6 @@ fun SettingsScreen(
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Avatar
                             if (user.image != null) {
                                 AsyncImage(
                                     model = user.image,
@@ -123,21 +188,15 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                user.name?.let { name ->
+                                user.name?.let { Text(text = it, style = MaterialTheme.typography.titleMedium) }
+                                user.email?.let {
                                     Text(
-                                        text = name,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                                user.email?.let { email ->
-                                    Text(
-                                        text = email,
+                                        text = it,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
-                                // Show provider badges
                                 val providers = buildList {
                                     if (user.hasGitHubToken) add("github")
                                     if (user.hasGitLabToken) add("gitlab")
@@ -145,9 +204,7 @@ fun SettingsScreen(
                                 }
                                 if (providers.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         providers.forEach { provider ->
                                             ProviderBadge(provider = provider)
                                         }
@@ -168,17 +225,214 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // About section
-            Text(
-                text = "About",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            SectionTitle("Notifications")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    PreferenceToggle(
+                        title = "Enable Notifications",
+                        checked = uiState.notificationPreferences.enabled,
+                        enabled = !uiState.isNotificationsUpdating,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    val granted = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (!granted) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        return@PreferenceToggle
+                                    }
+                                }
+                                val updated = uiState.notificationPreferences.copy(enabled = true)
+                                viewModel.setNotificationPreferences(updated)
+                                viewModel.queueNotificationPreferencesUpdate()
+                                pushNotificationManager.fetchCurrentToken()
+                            } else {
+                                val updated = uiState.notificationPreferences.copy(enabled = false)
+                                viewModel.setNotificationPreferences(updated)
+                                viewModel.queueNotificationPreferencesUpdate()
+                                pushNotificationManager.unregisterDeviceToken()
+                            }
+                        }
+                    )
+                    HorizontalDivider()
+                    PreferenceToggle(
+                        title = "Build Completed",
+                        checked = uiState.notificationPreferences.buildSuccess,
+                        enabled = uiState.notificationPreferences.enabled,
+                        onCheckedChange = {
+                            viewModel.setNotificationPreferences(
+                                uiState.notificationPreferences.copy(buildSuccess = it)
+                            )
+                            viewModel.queueNotificationPreferencesUpdate()
+                        }
+                    )
+                    HorizontalDivider()
+                    PreferenceToggle(
+                        title = "Build Failed",
+                        checked = uiState.notificationPreferences.buildFailure,
+                        enabled = uiState.notificationPreferences.enabled,
+                        onCheckedChange = {
+                            viewModel.setNotificationPreferences(
+                                uiState.notificationPreferences.copy(buildFailure = it)
+                            )
+                            viewModel.queueNotificationPreferencesUpdate()
+                        }
+                    )
+                    HorizontalDivider()
+                    PreferenceToggle(
+                        title = "Paper Updated",
+                        checked = uiState.notificationPreferences.paperUpdated,
+                        enabled = uiState.notificationPreferences.enabled && uiState.notificationPreferences.backgroundSync,
+                        onCheckedChange = {
+                            viewModel.setNotificationPreferences(
+                                uiState.notificationPreferences.copy(paperUpdated = it)
+                            )
+                            viewModel.queueNotificationPreferencesUpdate()
+                        }
+                    )
+                    HorizontalDivider()
+                    PreferenceToggle(
+                        title = "Background Refresh",
+                        checked = uiState.notificationPreferences.backgroundSync,
+                        enabled = uiState.notificationPreferences.enabled,
+                        onCheckedChange = {
+                            viewModel.setNotificationPreferences(
+                                uiState.notificationPreferences.copy(backgroundSync = it)
+                            )
+                            viewModel.queueNotificationPreferencesUpdate()
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Update Cooldown") },
+                        supportingContent = {
+                            Text("Minutes between repeated update notifications")
+                        },
+                        trailingContent = {
+                            Text("${uiState.notificationPreferences.updateCooldownMinutes}m")
+                        }
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(5, 15, 30, 60).forEach { value ->
+                            FilterChip(
+                                selected = uiState.notificationPreferences.updateCooldownMinutes == value,
+                                onClick = {
+                                    viewModel.setNotificationPreferences(
+                                        uiState.notificationPreferences.copy(updateCooldownMinutes = value)
+                                    )
+                                    viewModel.queueNotificationPreferencesUpdate()
+                                },
+                                label = { Text("${value}m") }
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Send Test Notification") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = null
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                pushNotificationManager.registerCurrentTokenNow()
+                                viewModel.sendTestNotification()
+                            }
+                        }
+                    )
+                }
+            }
 
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionTitle("Background Refresh")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    PreferenceToggle(
+                        title = "Default for repositories",
+                        checked = uiState.backgroundRefreshDefault,
+                        enabled = !uiState.isBackgroundRefreshDefaultUpdating,
+                        onCheckedChange = { enabled ->
+                            viewModel.updateBackgroundRefreshDefault(enabled)
+                        }
+                    )
+                    ListItem(
+                        headlineContent = { Text("Info") },
+                        supportingContent = {
+                            Text("Repositories set to default follow this value.")
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionTitle("Compilation")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    PreferenceToggle(
+                        title = "Allow compilation cache",
+                        checked = uiState.latexCacheAllowed,
+                        enabled = !uiState.isLatexCacheAllowedUpdating,
+                        onCheckedChange = { enabled ->
+                            viewModel.updateLatexCacheAllowed(enabled)
+                        }
+                    )
+                    HorizontalDivider()
+                    PreferenceToggle(
+                        title = "Default for repositories",
+                        checked = uiState.latexCacheMode == LatexCacheMode.AUX,
+                        enabled = !uiState.isLatexCacheUpdating,
+                        onCheckedChange = { enabled ->
+                            viewModel.updateLatexCacheMode(if (enabled) LatexCacheMode.AUX else LatexCacheMode.OFF)
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionTitle("Storage")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("PDF Cache") },
+                        supportingContent = { Text("Cached PDFs for offline viewing") },
+                        trailingContent = { Text(formatCacheSize(pdfCacheSize)) }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Clear Cache") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                pdfCache.clearCache()
+                                pdfCacheSize = 0L
+                            }
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionTitle("About")
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     ListItem(
                         headlineContent = { Text("Version") },
@@ -210,52 +464,10 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Cache section
-            Text(
-                text = "Storage",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column {
-                    ListItem(
-                        headlineContent = { Text("PDF Cache") },
-                        supportingContent = { Text("Cached PDFs for offline viewing") },
-                        trailingContent = { Text(formatCacheSize(pdfCacheSize)) }
-                    )
-                    HorizontalDivider()
-                    ListItem(
-                        headlineContent = { Text("Clear Cache") },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                pdfCache.clearCache()
-                                pdfCacheSize = 0L
-                            }
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Sign out button
             Button(
                 onClick = { showLogoutDialog = true },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -267,7 +479,6 @@ fun SettingsScreen(
         }
     }
 
-    // Logout confirmation dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -290,29 +501,53 @@ fun SettingsScreen(
             }
         )
     }
+
+    uiState.error?.let {
+        LaunchedEffect(it) {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun PreferenceToggle(
+    title: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled
+            )
+        }
+    )
 }
 
 @Composable
 private fun ProviderBadge(provider: String) {
-    val icon: ImageVector
-    val name: String
-
-    when (provider.lowercase()) {
-        "github" -> {
-            icon = Icons.Default.Cloud
-            name = "GitHub"
-        }
-        "gitlab" -> {
-            icon = Icons.Default.Code
-            name = "GitLab"
-        }
-        else -> {
-            icon = Icons.Default.VpnKey
-            name = provider.replaceFirstChar { it.uppercase() }
-        }
+    val (icon, name) = when (provider.lowercase()) {
+        "github" -> Icons.Default.Cloud to "GitHub"
+        "gitlab" -> Icons.Default.Code to "GitLab"
+        else -> Icons.Default.VpnKey to provider.replaceFirstChar { it.uppercase() }
     }
 
-    Surface(
+    androidx.compose.material3.Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
@@ -344,4 +579,3 @@ private fun formatCacheSize(bytes: Long): String {
         else -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }
-
