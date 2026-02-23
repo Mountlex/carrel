@@ -1,5 +1,37 @@
 import SwiftUI
 
+extension PaperStatus {
+    func iconName(showsDownloadedIndicator: Bool = false) -> String {
+        switch self {
+        case .synced:
+            return showsDownloadedIndicator ? "arrow.down.circle.fill" : "checkmark.circle.fill"
+        case .pending:
+            return "arrow.triangle.2.circlepath"
+        case .building:
+            return "ellipsis.circle.fill"
+        case .error:
+            return "exclamationmark.triangle.fill"
+        case .uploaded, .unknown:
+            return "doc.fill"
+        }
+    }
+
+    func accessibilityLabel(showsDownloadedIndicator: Bool = false) -> String {
+        switch self {
+        case .synced:
+            return showsDownloadedIndicator ? "downloaded" : "up to date"
+        case .pending:
+            return "needs sync"
+        case .building:
+            return "building"
+        case .error:
+            return "error"
+        case .uploaded, .unknown:
+            return "status unknown"
+        }
+    }
+}
+
 /// Rich status indicator for paper detail view, showing status icon and relative time
 struct PaperStatusIndicator: View {
     let paper: Paper
@@ -20,14 +52,8 @@ struct PaperStatusIndicator: View {
         case .building:
             ProgressView()
                 .scaleEffect(0.7)
-        case .synced:
-            Image(systemName: showsDownloadedIndicator ? "arrow.down.circle.fill" : "checkmark.circle.fill")
-        case .pending:
-            Image(systemName: "arrow.triangle.2.circlepath")
-        case .error:
-            Image(systemName: "exclamationmark.triangle.fill")
-        case .uploaded, .unknown:
-            Image(systemName: "doc.fill")
+        case .synced, .pending, .error, .uploaded, .unknown:
+            Image(systemName: paper.status.iconName(showsDownloadedIndicator: showsDownloadedIndicator))
         }
     }
 

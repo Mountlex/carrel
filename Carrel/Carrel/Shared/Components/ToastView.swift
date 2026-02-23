@@ -28,6 +28,7 @@ struct ToastView: View {
     let message: ToastMessage
 
     var body: some View {
+        let toastShape = Capsule()
         HStack(spacing: 8) {
             icon
             Text(message.text)
@@ -37,11 +38,15 @@ struct ToastView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .glassEffect(
-            .regular.tint(backgroundColor.opacity(0.35)),
-            in: Capsule()
+            .regular.tint(backgroundColor.opacity(0.32)),
+            in: toastShape
         )
+        .overlay {
+            toastShape
+                .strokeBorder(GlassTheme.overlayStroke.opacity(0.8), lineWidth: 0.8)
+        }
         .foregroundStyle(.white)
-        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 
     @ViewBuilder
@@ -89,7 +94,8 @@ struct ToastContainer: View {
             }
             Spacer()
         }
-        .animation(.spring(duration: 0.3), value: isVisible)
+        .allowsHitTesting(false)
+        .animation(GlassTheme.motion, value: isVisible)
         .onChange(of: message) { _, newMessage in
             // Cancel any existing hide task
             hideTask?.cancel()

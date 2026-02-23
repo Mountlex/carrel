@@ -10,11 +10,18 @@ struct GlassCard<Content: View>: View {
     }
 
     var body: some View {
+        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         content
             .glassEffect(
-                isInteractive ? .regular.interactive() : .regular,
-                in: RoundedRectangle(cornerRadius: 20)
+                isInteractive
+                    ? .regular.tint(GlassTheme.cardTint).interactive()
+                    : .regular.tint(GlassTheme.cardTint),
+                in: cardShape
             )
+            .overlay {
+                cardShape
+                    .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
+            }
     }
 }
 
@@ -28,10 +35,10 @@ struct GlassSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if let title = title {
                 Text(title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
 
@@ -61,9 +68,21 @@ struct GlassButton<Label: View>: View {
 }
 
 enum GlassTheme {
-    static let rowCornerRadius: CGFloat = 12
+    static let heroCornerRadius: CGFloat = 22
+    static let cardCornerRadius: CGFloat = 18
+    static let rowCornerRadius: CGFloat = 14
     static let rowPadding: CGFloat = 12
     static let bannerCornerRadius: CGFloat = 12
+
+    static let heroTint: Color = Color.white.opacity(0.12)
+    static let cardTint: Color = Color.white.opacity(0.08)
+    static let overlayTint: Color = Color.white.opacity(0.18)
+
+    static let cardStroke: Color = Color.white.opacity(0.22)
+    static let overlayStroke: Color = Color.white.opacity(0.28)
+
+    static let motion = Animation.spring(response: 0.32, dampingFraction: 0.86, blendDuration: 0.12)
+    static let quickMotion = Animation.easeInOut(duration: 0.22)
 
     static var rowShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: rowCornerRadius, style: .continuous)
@@ -79,7 +98,8 @@ struct GlassBackdrop: View {
         LinearGradient(
             colors: [
                 Color(.systemBackground),
-                Color(.systemGray6)
+                Color(.systemGray6),
+                Color(.systemBackground).opacity(0.96)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -98,13 +118,43 @@ struct GlassRow<Content: View>: View {
     }
 
     var body: some View {
+        let rowShape = GlassTheme.rowShape
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(GlassTheme.rowPadding)
             .glassEffect(
-                isInteractive ? .regular.interactive() : .regular,
-                in: GlassTheme.rowShape
+                isInteractive
+                    ? .regular.tint(GlassTheme.cardTint).interactive()
+                    : .regular.tint(GlassTheme.cardTint),
+                in: rowShape
             )
+            .overlay {
+                rowShape
+                    .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.7)
+            }
+    }
+}
+
+private struct CardPressFeedbackModifier: ViewModifier {
+    @GestureState private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed ? 0.985 : 1)
+            .opacity(isPressed ? 0.95 : 1)
+            .animation(GlassTheme.quickMotion, value: isPressed)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.01, maximumDistance: 16)
+                    .updating($isPressed) { value, state, _ in
+                        state = value
+                    }
+            )
+    }
+}
+
+extension View {
+    func cardPressFeedback() -> some View {
+        modifier(CardPressFeedbackModifier())
     }
 }
 

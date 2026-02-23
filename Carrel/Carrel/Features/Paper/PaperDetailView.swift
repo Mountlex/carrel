@@ -124,6 +124,7 @@ struct PaperDetailView: View {
                     Divider()
 
                     Button {
+                        HapticManager.impact(.light)
                         Task {
                             await viewModel.build()
                         }
@@ -132,6 +133,7 @@ struct PaperDetailView: View {
                     }
 
                     Button {
+                        HapticManager.impact(.medium)
                         Task {
                             await viewModel.build(force: true)
                         }
@@ -238,6 +240,7 @@ struct PaperDetailView: View {
                 Text("This paper doesn't have a PDF yet.")
             } actions: {
                 Button("Build PDF") {
+                    HapticManager.impact(.light)
                     Task {
                         await viewModel.build()
                     }
@@ -248,10 +251,12 @@ struct PaperDetailView: View {
     }
 
     private var infoPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let panelShape = Rectangle()
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
                         Text(viewModel.paper.title ?? "Untitled")
                             .font(.headline)
 
@@ -266,11 +271,11 @@ struct PaperDetailView: View {
                 Spacer()
 
                 if viewModel.isBuilding || viewModel.paper.buildStatus == "building" {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         ProgressView()
                             .scaleEffect(0.7)
                         Text(viewModel.paper.compilationProgress ?? "Building...")
-                            .font(.caption)
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -285,7 +290,7 @@ struct PaperDetailView: View {
 
             // Last commit info
             if viewModel.paper.lastAffectedCommitTime != nil || viewModel.paper.lastAffectedCommitAuthor != nil {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -298,16 +303,26 @@ struct PaperDetailView: View {
 
                     if let author = viewModel.paper.lastAffectedCommitAuthor {
                         Text("by \(author)")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                     }
 
                     Spacer()
                 }
             }
         }
-        .padding(12)
-        .glassEffect(.regular, in: Rectangle())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .glassEffect(.regular.tint(GlassTheme.cardTint.opacity(0.95)), in: panelShape)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(GlassTheme.cardStroke.opacity(0.92))
+                .frame(height: 0.8)
+            .allowsHitTesting(false)
+        }
+        .animation(GlassTheme.quickMotion, value: viewModel.paper.status)
+        .animation(GlassTheme.quickMotion, value: isPaperCached)
     }
 
     private func refreshPaperCacheState() async {

@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -129,7 +130,16 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Settings", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = "Account, notifications, and app behavior",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -147,7 +157,7 @@ fun SettingsScreen(
                 .padding(16.dp)
         ) {
             SectionTitle("Account")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 when {
                     uiState.isLoading -> {
                         Box(
@@ -232,7 +242,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             SectionTitle("Notifications")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     PreferenceToggle(
                         title = "Enable Notifications",
@@ -380,7 +390,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             SectionTitle("Background Refresh")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     PreferenceToggle(
                         title = "Default for repositories",
@@ -402,7 +412,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             SectionTitle("Compilation")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     PreferenceToggle(
                         title = "Allow compilation cache",
@@ -434,7 +444,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             SectionTitle("Storage")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     ListItem(
                         headlineContent = { Text("PDF Cache") },
@@ -479,7 +489,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             SectionTitle("About")
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            SectionCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     ListItem(
                         headlineContent = { Text("Version") },
@@ -514,7 +524,10 @@ fun SettingsScreen(
             Button(
                 onClick = { showLogoutDialog = true },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -561,10 +574,29 @@ fun SettingsScreen(
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+@Composable
+private fun SectionCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
+        tonalElevation = 1.dp
+    ) {
+        content()
+    }
 }
 
 @Composable
@@ -594,7 +626,7 @@ private fun ProviderBadge(provider: String) {
         else -> Icons.Default.VpnKey to provider.replaceFirstChar { it.uppercase() }
     }
 
-    androidx.compose.material3.Surface(
+    Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {

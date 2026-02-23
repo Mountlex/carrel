@@ -1,17 +1,50 @@
 package com.carrel.app.features.gallery
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.staggeredgrid.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +68,8 @@ fun GalleryScreen(
     val viewModel = remember { GalleryViewModel(convexClient, convexService, authManager) }
     val uiState by viewModel.uiState.collectAsState()
     var searchText by remember { mutableStateOf("") }
+    var showActionsMenu by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
     val networkMonitor = remember { NetworkMonitor.getInstance(context) }
     val isConnected by networkMonitor.isConnected.collectAsState()
@@ -51,7 +86,6 @@ fun GalleryScreen(
         }
     }
 
-    // Show toast messages
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -59,50 +93,37 @@ fun GalleryScreen(
         }
     }
 
+    val subtitle = when {
+        uiState.isRefreshingAll -> {
+            uiState.refreshProgress?.let { (current, total) ->
+                "Refreshing $current/$total"
+            } ?: "Refreshing papers"
+        }
+        uiState.isSyncing -> "Checking repositories"
+        else -> "${filteredPapers.size} papers"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Papers") },
-                actions = {
-                    // Check All Repositories button
-                    IconButton(
-                        onClick = { viewModel.checkAllRepositories() },
-                        enabled = !uiState.isSyncing
-                    ) {
-                        if (uiState.isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.Sync, contentDescription = "Check all repositories")
-                        }
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Papers", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-
-                    // Refresh All Papers button
-                    IconButton(
-                        onClick = { viewModel.refreshAllPapers() },
-                        enabled = !uiState.isRefreshingAll
-                    ) {
-                        if (uiState.isRefreshingAll) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                uiState.refreshProgress?.let { (current, total) ->
-                                    Text(
-                                        text = "$current/$total",
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            }
-                        } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Refresh all papers")
-                        }
+                },
+                actions = {
+                    if (uiState.isSyncing || uiState.isRefreshingAll) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .padding(end = 8.dp),
+                            strokeWidth = 2.dp
+                        )
                     }
 
                     IconButton(onClick = onRepositoriesClick) {
@@ -110,6 +131,36 @@ fun GalleryScreen(
                     }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+
+                    Box {
+                        IconButton(onClick = { showActionsMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                        }
+
+                        DropdownMenu(
+                            expanded = showActionsMenu,
+                            onDismissRequest = { showActionsMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Check repositories") },
+                                onClick = {
+                                    showActionsMenu = false
+                                    viewModel.checkAllRepositories()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null) },
+                                enabled = !uiState.isSyncing
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Refresh papers") },
+                                onClick = {
+                                    showActionsMenu = false
+                                    viewModel.refreshAllPapers()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                enabled = !uiState.isRefreshingAll
+                            )
+                        }
                     }
                 }
             )
@@ -131,12 +182,8 @@ fun GalleryScreen(
                 )
 
                 when {
-                    uiState.papers.isEmpty() && !uiState.isLoading -> {
-                        EmptyState()
-                    }
-                    filteredPapers.isEmpty() && searchText.isNotBlank() -> {
-                        SearchEmptyState(searchText = searchText)
-                    }
+                    uiState.papers.isEmpty() && !uiState.isLoading -> EmptyState()
+                    filteredPapers.isEmpty() && searchText.isNotBlank() -> SearchEmptyState(searchText)
                     else -> {
                         PaperGrid(
                             papers = filteredPapers,
@@ -153,10 +200,10 @@ fun GalleryScreen(
         }
     }
 
-    // Error snackbar
     uiState.error?.let { error ->
         LaunchedEffect(error) {
-            // Show snackbar or handle error
+            snackbarHostState.showSnackbar(error)
+            viewModel.clearError()
         }
     }
 }
@@ -167,13 +214,8 @@ private fun EmptyState() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "No Papers",
-                style = MaterialTheme.typography.headlineSmall
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "No Papers", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Add repositories on the web to see your papers here.",
@@ -191,10 +233,7 @@ private fun SearchEmptyState(searchText: String) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "No results",
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Text(text = "No results", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "No papers match \"$searchText\"",
@@ -211,21 +250,33 @@ private fun SearchField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        singleLine = true,
-        label = { Text("Search papers") },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = {
-            if (value.isNotBlank()) {
-                IconButton(onClick = { onValueChange("") }) {
-                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("Search papers") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (value.isNotBlank()) {
+                    IconButton(onClick = { onValueChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                    }
                 }
-            }
-        }
-    )
+            },
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        )
+    }
 }
 
 @Composable
@@ -239,10 +290,10 @@ private fun PaperGrid(
     onDeleteClick: (Paper) -> Unit
 ) {
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Adaptive(160.dp),
+        columns = StaggeredGridCells.Adaptive(170.dp),
         contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalItemSpacing = 16.dp
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalItemSpacing = 14.dp
     ) {
         items(papers, key = { it.id }) { paper ->
             PaperCard(

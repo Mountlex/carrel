@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct ConfigurePaperSheet: View {
     let repository: Repository
@@ -10,7 +9,6 @@ struct ConfigurePaperSheet: View {
     @State private var compiler: Compiler = .pdflatex
     @State private var isAdding = false
     @State private var toastMessage: ToastMessage?
-    @State private var keyboardHeight: CGFloat = 0
     @FocusState private var focusedField: Field?
 
     @Environment(\.dismiss) private var dismiss
@@ -33,8 +31,12 @@ struct ConfigurePaperSheet: View {
         filePath.lowercased().hasSuffix(".tex")
     }
 
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canAddPaper: Bool {
-        !title.isEmpty && !isAdding
+        !trimmedTitle.isEmpty && !isAdding
     }
 
     private enum Field {
@@ -70,6 +72,12 @@ struct ConfigurePaperSheet: View {
                                 TextField("Title", text: $title)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .title)
+                                    .textInputAutocapitalization(.words)
+                                    .autocorrectionDisabled(true)
+                                    .submitLabel(.done)
+                                    .onSubmit {
+                                        focusedField = nil
+                                    }
 
                                 if isTexFile {
                                     Picker("Compiler", selection: $compiler) {
@@ -81,35 +89,12 @@ struct ConfigurePaperSheet: View {
                                 }
                             }
                         }
-
-                        Button {
-                            Task {
-                                await addPaper()
-                            }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                if isAdding {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                        .padding(.trailing, 8)
-                                }
-                                Text(isAdding ? "Adding..." : "Add Paper")
-                                    .fontWeight(.semibold)
-                                Spacer()
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.liquidGlass)
-                        .disabled(!canAddPaper)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 96)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .padding(.bottom, keyboardHeight)
-                .animation(.easeInOut(duration: 0.2), value: keyboardHeight)
             }
             .navigationTitle("Add Paper")
             .navigationBarTitleDisplayMode(.inline)
@@ -119,21 +104,76 @@ struct ConfigurePaperSheet: View {
                         dismiss()
                     }
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                addButtonBar
             }
             .overlay(alignment: .top) {
                 ToastContainer(message: $toastMessage)
                     .padding(.top, 8)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-            keyboardHeight = max(0, frame.height - 20)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardHeight = 0
+        .task {
+            // Give the sheet a short moment to settle before focusing for smoother animation.
+            try? await Task.sleep(for: .milliseconds(150))
+            if !isAdding {
+                focusedField = .title
+            }
         }
     }
 
+    private var addButtonBar: some View {
+        HStack {
+            Button {
+                focusedField = nil
+                Task {
+                    await handleAddButtonTap()
+                }
+            } label: {
+                HStack {
+                    Spacer()
+                    if isAdding {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .padding(.trailing, 8)
+                    }
+                    Text(isAdding ? "Adding..." : "Add Paper")
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.liquidGlass)
+            .disabled(isAdding)
+            .opacity(canAddPaper ? 1 : 0.75)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(.clear)
+    }
+
+    @MainActor
+    private func handleAddButtonTap() async {
+        guard !isAdding else { return }
+        guard !trimmedTitle.isEmpty else {
+            HapticManager.buildError()
+            toastMessage = ToastMessage(text: "Enter a paper title", type: .error)
+            return
+        }
+        HapticManager.impact(.light)
+        await addPaper()
+    }
+
+    @MainActor
     private func addPaper() async {
         guard canAddPaper else { return }
 
@@ -142,11 +182,12 @@ struct ConfigurePaperSheet: View {
         do {
             let pdfSourceType = isTexFile ? "compile" : "committed"
             let compilerValue = isTexFile ? compiler.rawValue : nil
+            let safeTitle = trimmedTitle
 
             let result = try await ConvexService.shared.addTrackedFile(
                 repositoryId: repository.id,
                 filePath: filePath,
-                title: title,
+                title: safeTitle,
                 pdfSourceType: pdfSourceType,
                 compiler: compilerValue
             )
@@ -158,12 +199,14 @@ struct ConfigurePaperSheet: View {
             }
 
             // Dismiss immediately after paper is created
+            HapticManager.buildSuccess()
             dismiss()
             onDismiss()
         } catch {
             let message = error.localizedDescription.contains("already exists")
                 ? "File already tracked"
                 : "Failed to add paper"
+            HapticManager.buildError()
             toastMessage = ToastMessage(text: message, type: .error)
             print("ConfigurePaperSheet: Failed to add paper: \(error)")
             isAdding = false

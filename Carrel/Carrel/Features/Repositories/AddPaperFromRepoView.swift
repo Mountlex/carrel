@@ -4,6 +4,7 @@ struct AddPaperFromRepoView: View {
     let repository: Repository
     @State private var viewModel: AddPaperFromRepoViewModel
     @State private var selectedFilePath: String?
+    @State private var configureDetent: PresentationDetent = .large
     @Environment(\.dismiss) private var dismiss
 
     init(repository: Repository) {
@@ -27,7 +28,7 @@ struct AddPaperFromRepoView: View {
                     filePath: file.path,
                     onDismiss: { dismiss() }
                 )
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $configureDetent)
                 .presentationDragIndicator(.visible)
             }
     }
@@ -166,6 +167,7 @@ struct AddPaperFromRepoView: View {
                             )
                         } else {
                             Button {
+                                configureDetent = .large
                                 selectedFilePath = file.path
                             } label: {
                                 FileRow(

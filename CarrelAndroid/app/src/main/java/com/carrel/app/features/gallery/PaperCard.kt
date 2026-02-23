@@ -1,5 +1,6 @@
 package com.carrel.app.features.gallery
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +21,9 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -46,11 +47,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.models.Paper
 import com.carrel.app.core.network.models.PaperStatus
+import com.carrel.app.ui.theme.StatusBuilding
+import com.carrel.app.ui.theme.StatusError
+import com.carrel.app.ui.theme.StatusPending
+import com.carrel.app.ui.theme.StatusSynced
+import com.carrel.app.ui.theme.StatusUnknown
 
 @Composable
 fun PaperCard(
@@ -65,6 +70,7 @@ fun PaperCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isCached by remember { mutableStateOf<Boolean?>(null) }
+
     val context = LocalContext.current
     val pdfCache = remember { PDFCache.getInstance(context) }
 
@@ -76,20 +82,22 @@ fun PaperCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
-                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                    .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
                     .background(
-                        Brush.linearGradient(
+                        Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFF8F9FA),
-                                Color(0xFFE9ECEF)
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                                MaterialTheme.colorScheme.surfaceContainer
                             )
                         )
                     )
@@ -106,9 +114,9 @@ fun PaperCard(
                         imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
                             .align(Alignment.Center),
-                        tint = Color(0xFFADB5BD)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
 
@@ -116,14 +124,14 @@ fun PaperCard(
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(8.dp),
+                            .padding(10.dp),
                         shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowDownward,
                             contentDescription = "Available offline",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .size(20.dp)
                                 .padding(3.dp)
@@ -134,11 +142,11 @@ fun PaperCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(4.dp)
+                        .padding(6.dp)
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
                     ) {
                         IconButton(onClick = { showMenu = true }) {
                             Icon(
@@ -154,7 +162,7 @@ fun PaperCard(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Sync") },
+                            text = { Text("Sync now") },
                             onClick = {
                                 showMenu = false
                                 onBuildClick()
@@ -162,7 +170,7 @@ fun PaperCard(
                             leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Force Rebuild") },
+                            text = { Text("Force rebuild") },
                             onClick = {
                                 showMenu = false
                                 onForceRebuildClick()
@@ -170,12 +178,18 @@ fun PaperCard(
                             leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete") },
+                            text = { Text("Delete paper", color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 showMenu = false
                                 onDeleteClick()
                             },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         )
                     }
                 }
@@ -183,40 +197,16 @@ fun PaperCard(
 
             Column(
                 modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = paper.title ?: "Untitled",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                            lineHeight = 20.sp
-                        ),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Spacer(modifier = Modifier.size(8.dp))
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(12.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .size(9.dp)
-                                .clip(CircleShape)
-                                .background(statusColor(paper.status))
-                        )
-                    }
-                }
+                Text(
+                    text = paper.title ?: "Untitled",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
                 if (!paper.authors.isNullOrBlank()) {
                     Text(
@@ -227,18 +217,62 @@ fun PaperCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                if (isSyncing) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Syncing",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    SyncStatusPill(status = paper.status)
+                }
             }
         }
     }
 }
 
-private fun statusColor(status: PaperStatus): Color {
-    return when (status) {
-        PaperStatus.SYNCED -> Color(0xFF51CF66)
-        PaperStatus.PENDING -> Color(0xFFFFD43B)
-        PaperStatus.BUILDING -> Color(0xFF339AF0)
-        PaperStatus.ERROR -> Color(0xFFFF6B6B)
-        PaperStatus.UPLOADED -> Color(0xFF9CA3AF)
-        PaperStatus.UNKNOWN -> Color(0xFF9CA3AF)
+@Composable
+private fun SyncStatusPill(status: PaperStatus) {
+    val (color, text) = when (status) {
+        PaperStatus.SYNCED -> StatusSynced to "Synced"
+        PaperStatus.PENDING -> StatusPending to "Pending"
+        PaperStatus.BUILDING -> StatusBuilding to "Building"
+        PaperStatus.ERROR -> StatusError to "Error"
+        PaperStatus.UPLOADED -> StatusUnknown to "Uploaded"
+        PaperStatus.UNKNOWN -> StatusUnknown to "Unknown"
+    }
+
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = color.copy(alpha = 0.12f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }

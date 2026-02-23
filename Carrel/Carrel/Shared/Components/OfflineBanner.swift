@@ -4,6 +4,7 @@ import SwiftUI
 /// Shows at the top of the screen to notify users they have no network connection.
 struct OfflineBanner: View {
     var body: some View {
+        let bannerShape = GlassTheme.bannerShape
         HStack(spacing: 8) {
             Image(systemName: "wifi.slash")
                 .font(.subheadline)
@@ -16,9 +17,13 @@ struct OfflineBanner: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .glassEffect(
-            .regular.tint(Color.orange.opacity(0.35)),
-            in: GlassTheme.bannerShape
+            .regular.tint(Color.orange.opacity(0.32)),
+            in: bannerShape
         )
+        .overlay {
+            bannerShape
+                .strokeBorder(GlassTheme.overlayStroke.opacity(0.8), lineWidth: 0.8)
+        }
         .padding(.horizontal, 12)
     }
 }

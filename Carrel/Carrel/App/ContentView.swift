@@ -62,7 +62,7 @@ private struct OfflineBannerOverlay: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: showBanner)
+        .animation(GlassTheme.quickMotion, value: showBanner)
         .task {
             // Initial state
             showBanner = !NetworkMonitor.shared.isConnected

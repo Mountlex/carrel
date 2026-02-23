@@ -1,20 +1,33 @@
 package com.carrel.app.features.repositories
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -22,8 +35,12 @@ import com.carrel.app.core.network.models.PaperSyncStatus
 import com.carrel.app.core.network.models.Repository
 import com.carrel.app.core.network.models.RepositoryProvider
 import com.carrel.app.core.network.models.RepositorySyncStatus
+import com.carrel.app.ui.theme.StatusError
+import com.carrel.app.ui.theme.StatusPending
+import com.carrel.app.ui.theme.StatusSynced
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun RepositoryCard(
@@ -35,15 +52,15 @@ fun RepositoryCard(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
         tonalElevation = 1.dp
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: Provider icon and name
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -87,7 +104,7 @@ fun RepositoryCard(
                 }
 
                 onOpenSettings?.let {
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     IconButton(onClick = it) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -97,13 +114,11 @@ fun RepositoryCard(
                 }
             }
 
-            // Stats row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Paper count
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -121,7 +136,6 @@ fun RepositoryCard(
                     )
                 }
 
-                // Error count (if any)
                 if (repository.papersWithErrorsInt > 0) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -143,12 +157,11 @@ fun RepositoryCard(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Latest commit time
                 repository.lastCommitTime?.let { timestamp ->
                     Text(
                         text = formatTimestamp(timestamp.toLong()),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -175,10 +188,10 @@ private fun ProviderIcon(provider: RepositoryProvider) {
     }
 
     val backgroundColor = when (provider) {
-        RepositoryProvider.GITHUB -> Color(0xFF24292E)
-        RepositoryProvider.GITLAB -> Color(0xFFFC6D26)
-        RepositoryProvider.SELFHOSTED_GITLAB -> Color(0xFFFC6D26)
-        RepositoryProvider.OVERLEAF -> Color(0xFF47A141)
+        RepositoryProvider.GITHUB -> Color(0xFF1F2937)
+        RepositoryProvider.GITLAB -> Color(0xFFE57A44)
+        RepositoryProvider.SELFHOSTED_GITLAB -> Color(0xFFE57A44)
+        RepositoryProvider.OVERLEAF -> Color(0xFF4F9E63)
         RepositoryProvider.GENERIC -> MaterialTheme.colorScheme.primary
     }
 
@@ -204,9 +217,9 @@ private fun StatusBadge(
     paperSyncStatus: PaperSyncStatus
 ) {
     val (color, text) = when {
-        syncStatus == RepositorySyncStatus.ERROR -> Color(0xFFEF4444) to "Error"
-        paperSyncStatus == PaperSyncStatus.IN_SYNC -> Color(0xFF22C55E) to paperSyncStatus.displayText
-        paperSyncStatus == PaperSyncStatus.NEEDS_SYNC -> Color(0xFFF59E0B) to paperSyncStatus.displayText
+        syncStatus == RepositorySyncStatus.ERROR -> StatusError to "Error"
+        paperSyncStatus == PaperSyncStatus.IN_SYNC -> StatusSynced to paperSyncStatus.displayText
+        paperSyncStatus == PaperSyncStatus.NEEDS_SYNC -> StatusPending to paperSyncStatus.displayText
         else -> MaterialTheme.colorScheme.onSurfaceVariant to paperSyncStatus.displayText
     }
 

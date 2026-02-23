@@ -4,11 +4,16 @@ struct LiquidGlassButtonStyle: ButtonStyle {
     var cornerRadius: CGFloat = 16
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         configuration.label
             .glassEffect(
-                .regular.interactive(),
-                in: RoundedRectangle(cornerRadius: cornerRadius)
+                .regular.tint(GlassTheme.overlayTint).interactive(),
+                in: shape
             )
+            .overlay {
+                shape
+                    .strokeBorder(GlassTheme.overlayStroke, lineWidth: 0.8)
+            }
     }
 }
 
@@ -16,9 +21,13 @@ struct CapsuleLiquidGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .glassEffect(
-                .regular.interactive(),
+                .regular.tint(GlassTheme.overlayTint).interactive(),
                 in: Capsule()
             )
+            .overlay {
+                Capsule()
+                    .strokeBorder(GlassTheme.overlayStroke, lineWidth: 0.8)
+            }
     }
 }
 

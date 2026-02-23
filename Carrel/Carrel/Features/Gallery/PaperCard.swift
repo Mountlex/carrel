@@ -4,19 +4,24 @@ struct PaperCard: View {
     let paper: Paper
     var isSyncing: Bool = false
     var isOffline: Bool = false
-
-    @State private var isCached: Bool?
+    var isCached: Bool = false
     @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 17
 
     var body: some View {
+        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             // Thumbnail - content layer, no glass
             thumbnailView
                 .frame(height: 200)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: GlassTheme.cardCornerRadius,
+                        topTrailingRadius: GlassTheme.cardCornerRadius
+                    )
+                )
                 .overlay(alignment: .topTrailing) {
                     // Show "available offline" indicator when offline and paper is cached
-                    if isOffline, let isCached = isCached, isCached {
+                    if isOffline && isCached {
                         Image(systemName: "arrow.down.circle.fill")
                             .font(.body)
                             .foregroundStyle(.white.opacity(0.9))
@@ -27,8 +32,8 @@ struct PaperCard: View {
                 .accessibilityHidden(true)
 
             // Info section with glass backdrop
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Text(paper.title ?? "Untitled")
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -38,61 +43,47 @@ struct PaperCard: View {
 
                     Spacer()
 
-                    if isSyncing {
+                    if isSyncing || paper.status == .building {
                         ProgressView()
                             .scaleEffect(0.5)
                             .padding(.top, 2)
                             .accessibilityLabel("Syncing")
                     } else {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 10, height: 10)
-                            .padding(.top, 4)
+                        Image(systemName: statusIcon)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(statusColor)
+                            .padding(.top, 2)
                             .accessibilityLabel(statusAccessibilityLabel)
                     }
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
         }
         .glassEffect(
-            .regular,
-            in: RoundedRectangle(cornerRadius: 16)
+            .regular.tint(GlassTheme.cardTint),
+            in: cardShape
         )
+        .overlay {
+            cardShape
+                .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view paper details")
-        .task {
-            // Check if PDF is cached
-            if let pdfUrlString = paper.pdfUrl, let pdfUrl = URL(string: pdfUrlString) {
-                isCached = await PDFCache.shared.isCached(url: pdfUrl)
-            } else {
-                isCached = nil // No PDF to cache
-            }
-        }
     }
 
     /// Accessibility label for the entire card
     private var accessibilityLabel: String {
         let title = paper.title ?? "Untitled"
         let status = isSyncing ? "syncing" : statusAccessibilityLabel
-        let offlineAvailable = (isOffline && isCached == true) ? ", available offline" : ""
+        let offlineAvailable = (isOffline && isCached) ? ", available offline" : ""
         return "\(title), \(status)\(offlineAvailable)"
     }
 
     /// Accessibility label for the status indicator
     private var statusAccessibilityLabel: String {
-        switch paper.status {
-        case .synced:
-            return "up to date"
-        case .pending:
-            return "needs sync"
-        case .building:
-            return "building"
-        case .error:
-            return "error"
-        case .uploaded, .unknown:
-            return "status unknown"
-        }
+        paper.status.accessibilityLabel(showsDownloadedIndicator: paper.status == .synced && isCached)
     }
 
     @ViewBuilder
@@ -127,6 +118,10 @@ struct PaperCard: View {
         case .uploaded, .unknown:
             return .gray
         }
+    }
+
+    private var statusIcon: String {
+        paper.status.iconName(showsDownloadedIndicator: paper.status == .synced && isCached)
     }
 }
 

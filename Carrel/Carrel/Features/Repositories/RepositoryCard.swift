@@ -7,11 +7,12 @@ struct RepositoryCard: View {
     var onOpenSettings: (() -> Void)? = nil
 
     var body: some View {
+        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 12) {
             // Header: Provider icon and name
             HStack(spacing: 10) {
                 Image(systemName: repository.provider.iconName)
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
                     .frame(width: 28)
 
@@ -36,13 +37,13 @@ struct RepositoryCard: View {
 
                 if let onOpenSettings {
                     Button(action: onOpenSettings) {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "slider.horizontal.3")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.thinMaterial, in: Circle())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.capsuleLiquidGlass)
                     .accessibilityLabel("Repository settings")
                 }
             }
@@ -71,21 +72,37 @@ struct RepositoryCard: View {
                     .foregroundStyle(.red)
                 }
 
+                if showsBackgroundRefreshBadge {
+                    Label("Background", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
                 Spacer()
 
                 // Latest commit time
                 if let lastCommitTime = repository.lastCommitTime {
-                    Text(lastCommitTime, format: .dateTime.month(.abbreviated).day().year().hour().minute())
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text(lastCommitTime.relativeFormatted)
+                            .monospacedDigit()
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                 }
             }
         }
         .padding(16)
         .glassEffect(
-            .regular,
-            in: RoundedRectangle(cornerRadius: 16)
+            .regular.tint(GlassTheme.cardTint),
+            in: cardShape
         )
+        .overlay {
+            cardShape
+                .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
+        }
         .accessibilityElement(children: onOpenSettings == nil ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view papers and add tracked files")
@@ -141,10 +158,14 @@ struct RepositoryCard: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .glassEffect(
-            .regular.tint(statusColor.opacity(0.25)),
-            in: Capsule()
-        )
+        .background {
+            Capsule()
+                .fill(statusColor.opacity(0.14))
+        }
+        .overlay {
+            Capsule()
+                .strokeBorder(statusColor.opacity(0.35), lineWidth: 0.8)
+        }
         .foregroundStyle(statusColor)
     }
 

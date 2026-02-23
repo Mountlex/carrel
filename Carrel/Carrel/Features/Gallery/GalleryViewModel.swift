@@ -21,6 +21,7 @@ final class GalleryViewModel: SubscribableViewModel {
 
     deinit {
         Task { @MainActor [weak self] in
+            self?.cacheRefreshTask?.cancel()
             self?.stopSubscription()
         }
     }
@@ -40,6 +41,9 @@ final class GalleryViewModel: SubscribableViewModel {
     /// Current toast message to display
     var toastMessage: ToastMessage?
     private(set) var deletingPaperIds: Set<String> = []
+    private(set) var cachedPaperIDs: Set<String> = []
+    private var cacheRefreshTask: Task<Void, Never>?
+    private var cacheRefreshGeneration = 0
 
     // MARK: - SubscribableViewModel
 
@@ -58,6 +62,7 @@ final class GalleryViewModel: SubscribableViewModel {
         print("GalleryViewModel: Received \(data.count) papers")
         #endif
         papers = data
+        refreshCachedPaperIDs(for: data)
     }
 
     // MARK: - Check All Repositories
@@ -145,10 +150,38 @@ final class GalleryViewModel: SubscribableViewModel {
         do {
             try await ConvexService.shared.deletePaper(id: paper.id)
             papers.removeAll { $0.id == paper.id }
+            cachedPaperIDs.remove(paper.id)
             toastMessage = ToastMessage(text: "Paper deleted", type: .success)
         } catch {
             self.error = error.localizedDescription
             toastMessage = ToastMessage(text: "Failed to delete paper", type: .error)
+        }
+    }
+
+    func isPaperCached(_ paperId: String) -> Bool {
+        cachedPaperIDs.contains(paperId)
+    }
+
+    private func refreshCachedPaperIDs(for papers: [Paper]) {
+        cacheRefreshGeneration += 1
+        let generation = cacheRefreshGeneration
+        cacheRefreshTask?.cancel()
+
+        cacheRefreshTask = Task { [weak self] in
+            var nextCachedIDs = Set<String>()
+
+            for paper in papers {
+                guard !Task.isCancelled else { return }
+                guard let pdfUrlString = paper.pdfUrl, let pdfUrl = URL(string: pdfUrlString) else { continue }
+                if await PDFCache.shared.isCached(url: pdfUrl) {
+                    nextCachedIDs.insert(paper.id)
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            guard generation == self.cacheRefreshGeneration else { return }
+            self.cachedPaperIDs = nextCachedIDs
         }
     }
 
