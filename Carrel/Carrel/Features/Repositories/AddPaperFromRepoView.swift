@@ -223,7 +223,7 @@ private struct FileRow: View {
                 if isTracked {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.body)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(GlassTheme.success)
                 }
             }
         }

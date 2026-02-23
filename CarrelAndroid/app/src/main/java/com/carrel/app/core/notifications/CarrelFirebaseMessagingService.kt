@@ -1,5 +1,6 @@
 package com.carrel.app.core.notifications
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,8 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.carrel.app.CarrelApplication
 import com.carrel.app.MainActivity
 import com.carrel.app.R
@@ -40,6 +43,13 @@ class CarrelFirebaseMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["body"] ?: defaultBodyForEvent(data["event"])
 
         ensureChannel()
+        if (!hasNotificationPermission()) {
+            Log.d(TAG, "Skipping notification display due to missing permission")
+            if (data["event"] == "paper_updated") {
+                handleSilentMessage()
+            }
+            return
+        }
 
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -60,10 +70,14 @@ class CarrelFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .build()
 
-        NotificationManagerCompat.from(this).notify(
-            (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
-            notification
-        )
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        ) {
+            NotificationManagerCompat.from(this).notify(
+                (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
+                notification
+            )
+        }
 
         if (data["event"] == "paper_updated") {
             handleSilentMessage()
@@ -103,8 +117,15 @@ class CarrelFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    private fun hasNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
 

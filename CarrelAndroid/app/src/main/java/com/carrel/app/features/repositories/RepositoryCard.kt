@@ -45,10 +45,10 @@ import java.util.Locale
 @Composable
 fun RepositoryCard(
     repository: Repository,
+    modifier: Modifier = Modifier,
     isRefreshing: Boolean = false,
     showsBackgroundRefreshBadge: Boolean = true,
-    onOpenSettings: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onOpenSettings: (() -> Unit)? = null
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),

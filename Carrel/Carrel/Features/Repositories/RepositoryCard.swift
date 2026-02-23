@@ -69,7 +69,7 @@ struct RepositoryCard: View {
                         Image(systemName: "exclamationmark.triangle")
                     }
                     .font(.subheadline)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(GlassTheme.error)
                 }
 
                 if showsBackgroundRefreshBadge {
@@ -172,17 +172,17 @@ struct RepositoryCard: View {
     private var statusColor: Color {
         // First check if there's a sync error at the repository level
         if repository.syncStatus == .error {
-            return .red
+            return GlassTheme.error
         }
 
         // Then check paper sync status
         switch repository.paperSyncStatus {
         case .inSync:
-            return .green
+            return GlassTheme.success
         case .needsSync:
-            return .yellow
+            return GlassTheme.warning
         case .neverSynced, .noPapers:
-            return .gray
+            return GlassTheme.statusNeutral
         }
     }
 

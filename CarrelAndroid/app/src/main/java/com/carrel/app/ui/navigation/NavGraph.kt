@@ -25,8 +25,6 @@ import com.carrel.app.features.settings.SettingsScreen
 import com.carrel.app.ui.components.OfflineBanner
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.net.URLDecoder
-import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
@@ -37,14 +35,10 @@ sealed class Screen(val route: String) {
     data object PaperDetail : Screen("paper/{paperId}") {
         fun createRoute(paperId: String) = "paper/$paperId"
     }
-    data object AddPaperFromRepo : Screen("add-paper/{repoJson}") {
-        fun createRoute(repository: Repository): String {
-            val json = Json.encodeToString(repository)
-            val encoded = URLEncoder.encode(json, "UTF-8")
-            return "add-paper/$encoded"
-        }
-    }
+    data object AddPaperFromRepo : Screen("add-paper")
 }
+
+private const val SELECTED_REPOSITORY_JSON_KEY = "selected_repository_json"
 
 @Composable
 fun NavGraph(
@@ -124,11 +118,12 @@ fun NavGraph(
                 )
             ) { backStackEntry ->
                 val paperId = backStackEntry.arguments?.getString("paperId") ?: return@composable
+                val hasConvexAuth = container.authManager.hasConvexAuth()
                 PaperDetailScreen(
                     paperId = paperId,
                     convexClient = container.convexClient,
-                    convexService = container.convexService,
-                    useConvexSubscriptions = container.authManager.hasConvexAuth(),
+                    convexService = if (hasConvexAuth) container.convexService else null,
+                    useConvexSubscriptions = hasConvexAuth,
                     onBackClick = { navController.popBackStack() }
                 )
             }
@@ -146,21 +141,23 @@ fun NavGraph(
                 RepositoryListScreen(
                     convexService = container.convexService,
                     onRepositoryClick = { repository ->
-                        navController.navigate(Screen.AddPaperFromRepo.createRoute(repository))
+                        val repositoryJson = Json.encodeToString(repository)
+                        navController.currentBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(SELECTED_REPOSITORY_JSON_KEY, repositoryJson)
+                        navController.navigate(Screen.AddPaperFromRepo.route)
                     },
                     onBackClick = { navController.popBackStack() }
                 )
             }
 
-            composable(
-                route = Screen.AddPaperFromRepo.route,
-                arguments = listOf(
-                    navArgument("repoJson") { type = NavType.StringType }
-                )
-            ) { backStackEntry ->
-                val repoJson = backStackEntry.arguments?.getString("repoJson") ?: return@composable
-                val decoded = URLDecoder.decode(repoJson, "UTF-8")
-                val repository = Json.decodeFromString<Repository>(decoded)
+            composable(route = Screen.AddPaperFromRepo.route) { backStackEntry ->
+                val repoState = navController.previousBackStackEntry?.savedStateHandle
+                    ?: backStackEntry.savedStateHandle
+                val repoJson = repoState.get<String>(SELECTED_REPOSITORY_JSON_KEY)
+                    ?: return@composable
+                repoState.remove<String>(SELECTED_REPOSITORY_JSON_KEY)
+                val repository = Json.decodeFromString<Repository>(repoJson)
                 AddPaperFromRepoScreen(
                     repository = repository,
                     convexService = container.convexService,

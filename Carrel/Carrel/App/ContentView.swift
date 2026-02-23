@@ -44,7 +44,7 @@ struct MainTabView: View {
                 Label("Settings", systemImage: "gear")
             }
         }
-        .tint(.primary)
+        .tint(GlassTheme.accent)
         .overlay(alignment: .top) {
             OfflineBannerOverlay()
         }

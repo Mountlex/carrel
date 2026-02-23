@@ -32,9 +32,10 @@ class PaperViewModel(
     private val _uiState = MutableStateFlow(PaperDetailUiState())
     val uiState: StateFlow<PaperDetailUiState> = _uiState.asStateFlow()
     private var subscriptionJob: Job? = null
+    private val shouldUseSubscriptions = useConvexSubscriptions && convexService != null
 
     init {
-        if (convexService != null && useConvexSubscriptions) {
+        if (shouldUseSubscriptions) {
             observeConvexAuth()
         } else {
             loadPaper()
@@ -119,8 +120,13 @@ class PaperViewModel(
             _uiState.update { it.copy(isBuilding = true) }
 
             if (convexService != null) {
-                // With subscription, just trigger the build and let subscription handle updates
                 convexService.buildPaper(paperId, force)
+                    .onSuccess {
+                        if (!shouldUseSubscriptions) {
+                            loadPaper()
+                            _uiState.update { it.copy(isBuilding = false) }
+                        }
+                    }
                     .onFailure { exception ->
                         _uiState.update { state ->
                             state.copy(
@@ -165,7 +171,12 @@ class PaperViewModel(
             _uiState.update { it.copy(isLoading = true) }
 
             if (convexService != null) {
-                convexService.updatePaper(paperId, title)
+                convexService.updatePaper(paperId, title, authors)
+                    .onSuccess {
+                        if (!shouldUseSubscriptions) {
+                            loadPaper()
+                        }
+                    }
                     .onFailure { exception ->
                         _uiState.update { state ->
                             state.copy(
@@ -199,7 +210,12 @@ class PaperViewModel(
             if (convexService != null) {
                 convexService.togglePaperPublic(paperId)
                     .onSuccess {
-                        _uiState.update { it.copy(isTogglingPublic = false) }
+                        if (shouldUseSubscriptions) {
+                            _uiState.update { it.copy(isTogglingPublic = false) }
+                        } else {
+                            loadPaper()
+                            _uiState.update { it.copy(isTogglingPublic = false) }
+                        }
                     }
                     .onFailure { exception ->
                         _uiState.update { state ->

@@ -64,11 +64,11 @@ struct ToastView: View {
     private var backgroundColor: Color {
         switch message.type {
         case .info:
-            return .blue
+            return GlassTheme.info
         case .success:
-            return .green
+            return GlassTheme.success
         case .error:
-            return .red
+            return GlassTheme.error
         }
     }
 }

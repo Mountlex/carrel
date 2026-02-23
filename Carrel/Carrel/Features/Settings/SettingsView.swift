@@ -64,7 +64,7 @@ struct SettingsView: View {
                     HStack {
                         Spacer()
                         Text("Sign Out")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(GlassTheme.error)
                         Spacer()
                     }
                     .padding(.vertical, 4)
@@ -136,7 +136,7 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .tint(.orange)
+        .tint(GlassTheme.accent)
     }
 
     @ViewBuilder
@@ -307,7 +307,7 @@ struct SettingsView: View {
 
             Divider()
         }
-        .tint(.orange)
+        .tint(GlassTheme.accent)
     }
 
     private func backgroundRefreshSectionContent(viewModel: SettingsViewModel) -> some View {
@@ -338,7 +338,7 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .tint(.orange)
+        .tint(GlassTheme.accent)
     }
 
     private func preferenceBinding(

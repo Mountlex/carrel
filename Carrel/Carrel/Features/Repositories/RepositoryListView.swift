@@ -137,7 +137,7 @@ struct RepositoryListView: View {
                             } label: {
                                 Label("Update", systemImage: "arrow.clockwise")
                             }
-                            .tint(.orange)
+                            .tint(GlassTheme.warning)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -145,7 +145,7 @@ struct RepositoryListView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
-                            .tint(.red)
+                            .tint(GlassTheme.error)
                         }
                     }
                 }

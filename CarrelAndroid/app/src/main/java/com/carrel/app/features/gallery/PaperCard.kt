@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -64,9 +63,9 @@ fun PaperCard(
     onBuildClick: () -> Unit,
     onForceRebuildClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    modifier: Modifier = Modifier,
     isSyncing: Boolean = false,
-    isOffline: Boolean = false,
-    modifier: Modifier = Modifier
+    isOffline: Boolean = false
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isCached by remember { mutableStateOf<Boolean?>(null) }
@@ -199,14 +198,28 @@ fun PaperCard(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = paper.title ?: "Untitled",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = paper.title ?: "Untitled",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(statusColor(if (isSyncing) PaperStatus.BUILDING else paper.status))
+                    )
+                }
 
                 if (!paper.authors.isNullOrBlank()) {
                     Text(
@@ -217,62 +230,18 @@ fun PaperCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-
-                if (isSyncing) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Text(
-                            text = "Syncing",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    SyncStatusPill(status = paper.status)
-                }
             }
         }
     }
 }
 
-@Composable
-private fun SyncStatusPill(status: PaperStatus) {
-    val (color, text) = when (status) {
-        PaperStatus.SYNCED -> StatusSynced to "Synced"
-        PaperStatus.PENDING -> StatusPending to "Pending"
-        PaperStatus.BUILDING -> StatusBuilding to "Building"
-        PaperStatus.ERROR -> StatusError to "Error"
-        PaperStatus.UPLOADED -> StatusUnknown to "Uploaded"
-        PaperStatus.UNKNOWN -> StatusUnknown to "Unknown"
-    }
-
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = color.copy(alpha = 0.12f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                color = color,
-                fontWeight = FontWeight.Medium
-            )
-        }
+private fun statusColor(status: PaperStatus): Color {
+    return when (status) {
+        PaperStatus.SYNCED -> StatusSynced
+        PaperStatus.PENDING -> StatusPending
+        PaperStatus.BUILDING -> StatusBuilding
+        PaperStatus.ERROR -> StatusError
+        PaperStatus.UPLOADED -> StatusUnknown
+        PaperStatus.UNKNOWN -> StatusUnknown
     }
 }

@@ -286,14 +286,12 @@ class ConvexService(
                 } else {
                     val error = result.exceptionOrNull()
                     Log.e(TAG, "Subscription result failure: ${error?.message}", error)
-                    // Return empty list on error, subscription will retry automatically
-                    emptyList()
+                    throw error ?: IllegalStateException("Unknown papers subscription error")
                 }
             }
             .catch { e ->
                 Log.e(TAG, "Error in papers subscription: ${e.message}", e)
-                // Don't throw - emit empty and let subscription reconnect
-                emit(emptyList())
+                throw e
             }
     }
 
@@ -314,10 +312,16 @@ class ConvexService(
      */
     suspend fun subscribeToRepositories(userId: String): Flow<List<Repository>> {
         return client.subscribe<List<Repository>>("repositories:list", mapOf("userId" to userId))
-            .map { result -> result.getOrDefault(emptyList()) }
+            .map { result ->
+                if (result.isSuccess) {
+                    result.getOrDefault(emptyList())
+                } else {
+                    throw result.exceptionOrNull() ?: IllegalStateException("Unknown repositories subscription error")
+                }
+            }
             .catch { e ->
                 Log.e(TAG, "Error in repositories subscription: ${e.message}")
-                emit(emptyList())
+                throw e
             }
     }
 
@@ -371,10 +375,11 @@ class ConvexService(
     /**
      * Update paper metadata.
      */
-    suspend fun updatePaper(id: String, title: String?): Result<Unit> {
+    suspend fun updatePaper(id: String, title: String?, authors: String? = null): Result<Unit> {
         return runCatching {
             val args = mutableMapOf<String, Any?>("id" to id)
             title?.let { args["title"] = it }
+            authors?.let { args["authors"] = it }
             client.mutation("papers:update", args)
         }
     }

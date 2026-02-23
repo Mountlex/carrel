@@ -81,6 +81,13 @@ enum GlassTheme {
     static let cardStroke: Color = Color.white.opacity(0.22)
     static let overlayStroke: Color = Color.white.opacity(0.28)
 
+    static let accent: Color = Color(red: 14.0 / 255.0, green: 165.0 / 255.0, blue: 233.0 / 255.0) // #0EA5E9
+    static let info: Color = accent
+    static let success: Color = Color(red: 34.0 / 255.0, green: 197.0 / 255.0, blue: 94.0 / 255.0) // #22C55E
+    static let warning: Color = Color(red: 245.0 / 255.0, green: 158.0 / 255.0, blue: 11.0 / 255.0) // #F59E0B
+    static let error: Color = Color(red: 239.0 / 255.0, green: 68.0 / 255.0, blue: 68.0 / 255.0) // #EF4444
+    static let statusNeutral: Color = .gray
+
     static let motion = Animation.spring(response: 0.32, dampingFraction: 0.86, blendDuration: 0.12)
     static let quickMotion = Animation.easeInOut(duration: 0.22)
 

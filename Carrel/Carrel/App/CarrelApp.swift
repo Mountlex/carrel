@@ -21,10 +21,12 @@ struct CarrelApp: App {
                 // Start network monitoring
                 NetworkMonitor.shared.start()
                 await PushNotificationManager.shared.refreshAuthorizationStatus()
+                HapticManager.prepare()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
                 Task {
+                    HapticManager.prepare()
                     await authManager.refreshSessionIfNeededOnAppActive()
                 }
             }

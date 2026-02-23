@@ -17,7 +17,7 @@ struct OfflineBanner: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .glassEffect(
-            .regular.tint(Color.orange.opacity(0.32)),
+            .regular.tint(GlassTheme.warning.opacity(0.32)),
             in: bannerShape
         )
         .overlay {

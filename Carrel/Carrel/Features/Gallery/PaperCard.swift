@@ -108,15 +108,15 @@ struct PaperCard: View {
     private var statusColor: Color {
         switch paper.status {
         case .synced:
-            return .green
+            return GlassTheme.success
         case .pending:
-            return .yellow
+            return GlassTheme.warning
         case .building:
-            return .blue
+            return GlassTheme.accent
         case .error:
-            return .red
+            return GlassTheme.error
         case .uploaded, .unknown:
-            return .gray
+            return GlassTheme.statusNeutral
         }
     }
 
