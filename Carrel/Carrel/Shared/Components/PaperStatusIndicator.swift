@@ -3,6 +3,7 @@ import SwiftUI
 /// Rich status indicator for paper detail view, showing status icon and relative time
 struct PaperStatusIndicator: View {
     let paper: Paper
+    var showsDownloadedIndicator: Bool = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -20,7 +21,7 @@ struct PaperStatusIndicator: View {
             ProgressView()
                 .scaleEffect(0.7)
         case .synced:
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: showsDownloadedIndicator ? "arrow.down.circle.fill" : "checkmark.circle.fill")
         case .pending:
             Image(systemName: "arrow.triangle.2.circlepath")
         case .error:
@@ -77,6 +78,7 @@ struct PaperStatusIndicator: View {
 #Preview {
     VStack(spacing: 16) {
         PaperStatusIndicator(paper: Paper.preview)
+        PaperStatusIndicator(paper: Paper.preview, showsDownloadedIndicator: true)
         PaperStatusIndicator(paper: Paper.previewError)
     }
     .padding()

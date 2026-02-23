@@ -134,7 +134,6 @@ struct CachedThumbnail: View {
     let url: URL
     @State private var image: UIImage?
     @State private var isLoading = true
-    @State private var loadFailed = false
 
     var body: some View {
         Group {
@@ -158,18 +157,23 @@ struct CachedThumbnail: View {
                     }
             }
         }
-        .task {
-            await loadThumbnail()
+        .task(id: url) {
+            await loadThumbnail(for: url)
         }
     }
 
-    private func loadThumbnail() async {
+    private func loadThumbnail(for url: URL) async {
+        image = nil
+        isLoading = true
+
         do {
             let thumbnail = try await ThumbnailCache.shared.fetchThumbnail(from: url)
+            guard !Task.isCancelled else { return }
             image = thumbnail
         } catch {
-            loadFailed = true
+            guard !Task.isCancelled else { return }
         }
+        guard !Task.isCancelled else { return }
         isLoading = false
     }
 }

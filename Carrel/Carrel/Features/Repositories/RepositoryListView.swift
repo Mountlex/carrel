@@ -74,6 +74,16 @@ struct RepositoryListView: View {
                 ToastContainer(message: $viewModel.toastMessage)
                     .padding(.top, 8)
             }
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            )) {
+                Button("OK") {
+                    viewModel.clearError()
+                }
+            } message: {
+                Text(viewModel.error ?? "Unknown error")
+            }
     }
 
     @ViewBuilder
@@ -111,13 +121,10 @@ struct RepositoryListView: View {
                         )
                         .padding(.horizontal, 16)
                         .contentShape(Rectangle())
-                        .highPriorityGesture(
-                            TapGesture().onEnded {
-                                selectedRepository = viewModel.repositories.first(where: { $0.id == repository.id })
-                                    ?? repository
-                            },
-                            including: .gesture
-                        )
+                        .onTapGesture {
+                            selectedRepository = viewModel.repositories.first(where: { $0.id == repository.id })
+                                ?? repository
+                        }
                         .accessibilityIdentifier("repository_card_\(repository.id)")
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)

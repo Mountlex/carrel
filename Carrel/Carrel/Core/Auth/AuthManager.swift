@@ -16,6 +16,7 @@ final class AuthManager {
     private var accessToken: String?
     private var refreshAuthSession: ASWebAuthenticationSession?
     private var tokenMonitorTask: Task<Void, Never>?
+    private var refreshTask: Task<Bool, Never>?
 
     private let keychain = KeychainManager.shared
 
@@ -57,6 +58,8 @@ final class AuthManager {
         defer { isLoading = false }
 
         guard let token = await keychain.loadConvexAuthToken() else {
+            accessToken = nil
+            isAuthenticated = false
             stopTokenMonitor()
             #if DEBUG
             print("AuthManager: No stored token found")
@@ -73,18 +76,7 @@ final class AuthManager {
             // Try to refresh using refresh token
             let refreshed = await refreshTokenSilently()
             if !refreshed {
-                if isRefreshing {
-                    #if DEBUG
-                    print("AuthManager: Refresh already in progress, waiting for result")
-                    #endif
-                    return
-                }
-                #if DEBUG
-                print("AuthManager: Silent refresh failed, clearing tokens")
-                #endif
-                await keychain.clearAllTokens()
-                stopTokenMonitor()
-                isAuthenticated = false
+                await handleFailedStartupRefresh()
             }
             return
         }
@@ -118,23 +110,22 @@ final class AuthManager {
             #endif
             let refreshed = await refreshTokenSilently()
             if !refreshed {
-                if isRefreshing {
-                    #if DEBUG
-                    print("AuthManager: Refresh already in progress, waiting for result")
-                    #endif
-                    return
-                }
-                await keychain.clearAllTokens()
-                stopTokenMonitor()
-                isAuthenticated = false
+                await handleFailedStartupRefresh()
             }
         }
     }
 
     /// Re-check token freshness when app becomes active.
     func refreshSessionIfNeededOnAppActive() async {
-        guard isAuthenticated else { return }
-        await ensureTokenFreshness()
+        if isAuthenticated {
+            await ensureTokenFreshness()
+            return
+        }
+
+        // Retry session restoration when launch-time refresh failed due a transient issue.
+        if await keychain.loadConvexAuthToken() != nil {
+            await loadStoredTokens()
+        }
     }
 
     // MARK: - Silent Token Refresh
@@ -142,14 +133,21 @@ final class AuthManager {
     /// Refresh the access token using the stored refresh token (no user interaction)
     /// Returns true if refresh succeeded, false otherwise
     func refreshTokenSilently() async -> Bool {
-        // Prevent concurrent refresh attempts
-        guard !isRefreshing else {
-            #if DEBUG
-            print("AuthManager: Refresh already in progress, skipping")
-            #endif
-            return false
+        // Reuse any in-flight refresh to avoid duplicate network requests and races.
+        if let refreshTask {
+            return await refreshTask.value
         }
 
+        let task = Task { [weak self] in
+            await self?.performSilentRefresh() ?? false
+        }
+        refreshTask = task
+        let refreshed = await task.value
+        refreshTask = nil
+        return refreshed
+    }
+
+    private func performSilentRefresh() async -> Bool {
         guard let refreshToken = await keychain.loadRefreshToken() else {
             #if DEBUG
             print("AuthManager: No refresh token available")
@@ -212,8 +210,12 @@ final class AuthManager {
                 let responseBody = String(data: data, encoding: .utf8) ?? "no body"
                 print("AuthManager: Refresh failed with status \(httpResponse.statusCode): \(responseBody)")
                 #endif
-                // Clear invalid refresh token
-                await keychain.clearRefreshToken()
+                if shouldClearRefreshToken(for: httpResponse.statusCode) {
+                    #if DEBUG
+                    print("AuthManager: Clearing refresh token due to invalid token response")
+                    #endif
+                    await keychain.clearRefreshToken()
+                }
                 return false
             }
         } catch {
@@ -222,6 +224,35 @@ final class AuthManager {
             #endif
             return false
         }
+    }
+
+    private func shouldClearRefreshToken(for statusCode: Int) -> Bool {
+        switch statusCode {
+        case 400, 401, 403, 404:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func handleFailedStartupRefresh() async {
+        let hasRefreshToken = await keychain.loadRefreshToken() != nil
+        accessToken = nil
+        stopTokenMonitor()
+        await ConvexService.shared.clearAuth()
+        isAuthenticated = false
+
+        guard !hasRefreshToken else {
+            #if DEBUG
+            print("AuthManager: Silent refresh failed, keeping tokens for retry")
+            #endif
+            return
+        }
+
+        #if DEBUG
+        print("AuthManager: Silent refresh failed with no refresh token, clearing tokens")
+        #endif
+        await keychain.clearAllTokens()
     }
 
     // MARK: - Interactive Token Refresh (Fallback)

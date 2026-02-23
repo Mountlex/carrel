@@ -30,6 +30,7 @@ final class AddPaperFromRepoViewModel {
 
     // Tracked files (already added)
     private(set) var trackedFilePaths: Set<String> = []
+    private var loadRequestID = 0
 
     // Toast
     var toastMessage: ToastMessage?
@@ -54,12 +55,14 @@ final class AddPaperFromRepoViewModel {
     // MARK: - File Browser
 
     func loadFiles(path: String? = nil) async {
+        let loadPath = path ?? currentPath
+        loadRequestID += 1
+        let requestID = loadRequestID
+
         isLoadingFiles = true
         loadError = nil
 
         do {
-            let loadPath = path ?? currentPath
-
             // Fetch files and tracked files in parallel
             async let filesTask = ConvexService.shared.listRepositoryFiles(
                 gitUrl: repository.gitUrl,
@@ -70,11 +73,14 @@ final class AddPaperFromRepoViewModel {
 
             let (fetchedFiles, trackedFiles) = try await (filesTask, trackedTask)
 
+            // Ignore stale responses from older requests (rapid folder navigation).
+            guard requestID == loadRequestID else { return }
+
             // Update tracked file paths
             trackedFilePaths = Set(trackedFiles.map { $0.filePath })
 
             // Sort: directories first, then files, alphabetically within each group
-            files = fetchedFiles.sorted { lhs, rhs in
+            let sorted = fetchedFiles.sorted { lhs, rhs in
                 if lhs.isDirectory != rhs.isDirectory {
                     return lhs.isDirectory
                 }
@@ -82,13 +88,16 @@ final class AddPaperFromRepoViewModel {
             }
 
             // Filter to show only directories and selectable files (.tex, .pdf)
-            files = files.filter { $0.isDirectory || $0.isSelectable }
+            files = sorted.filter { $0.isDirectory || $0.isSelectable }
         } catch {
+            guard requestID == loadRequestID else { return }
             loadError = error.localizedDescription
             print("AddPaperFromRepoViewModel: Failed to load files: \(error)")
         }
 
-        isLoadingFiles = false
+        if requestID == loadRequestID {
+            isLoadingFiles = false
+        }
     }
 
     func navigateToFolder(_ folder: RepositoryFile) async {

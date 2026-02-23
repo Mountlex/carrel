@@ -12,6 +12,8 @@ struct PaperDetailView: View {
     @State private var pdfLoadError: String?
     @State private var toastMessage: ToastMessage?
     @State private var shareError: String?
+    @State private var pdfReloadToken = 0
+    @State private var isPaperCached = false
     @Environment(\.dismiss) private var dismiss
 
     init(paper: Paper) {
@@ -177,6 +179,9 @@ struct PaperDetailView: View {
         .task {
             await startSubscription()
         }
+        .task(id: viewModel.paper.pdfUrl) {
+            await refreshPaperCacheState()
+        }
         .onDisappear {
             subscriptionTask?.cancel()
             subscriptionTask = nil
@@ -205,10 +210,21 @@ struct PaperDetailView: View {
     @ViewBuilder
     private var pdfViewer: some View {
         if let pdfUrl = viewModel.paper.pdfUrl, let url = URL(string: pdfUrl) {
-            PDFViewerWithOfflineCheck(url: url) { error in
-                pdfLoadError = error
-            }
+            PDFViewerWithOfflineCheck(
+                url: url,
+                reloadToken: pdfReloadToken,
+                onError: { error in
+                    pdfLoadError = error
+                },
+                onLoaded: {
+                    isPaperCached = true
+                }
+            )
             .alert("PDF Error", isPresented: Binding(get: { pdfLoadError != nil }, set: { if !$0 { pdfLoadError = nil } })) {
+                Button("Retry") {
+                    pdfLoadError = nil
+                    pdfReloadToken += 1
+                }
                 Button("OK") {
                     pdfLoadError = nil
                 }
@@ -260,7 +276,10 @@ struct PaperDetailView: View {
                     }
                 } else {
                     // Use the rich status indicator for detail view
-                    PaperStatusIndicator(paper: viewModel.paper)
+                    PaperStatusIndicator(
+                        paper: viewModel.paper,
+                        showsDownloadedIndicator: viewModel.paper.status == .synced && isPaperCached
+                    )
                 }
             }
 
@@ -290,14 +309,25 @@ struct PaperDetailView: View {
         .padding(12)
         .glassEffect(.regular, in: Rectangle())
     }
+
+    private func refreshPaperCacheState() async {
+        guard let pdfUrlString = viewModel.paper.pdfUrl, let pdfUrl = URL(string: pdfUrlString) else {
+            isPaperCached = false
+            return
+        }
+        isPaperCached = await PDFCache.shared.isCached(url: pdfUrl)
+    }
 }
 
 /// Wrapper that checks offline status before showing PDF
 struct PDFViewerWithOfflineCheck: View {
     let url: URL
+    let reloadToken: Int
     var onError: ((String) -> Void)?
+    var onLoaded: (() -> Void)?
 
     @State private var showOfflineMessage = false
+    @State private var networkReloadToken = 0
 
     var body: some View {
         Group {
@@ -310,14 +340,21 @@ struct PDFViewerWithOfflineCheck: View {
                 }
             } else {
                 // Show the PDF viewer - it will call onError if offline and not cached
-                PDFViewerContainer(url: url) { error in
-                    // Check if this is a network error while offline
-                    if !NetworkMonitor.shared.isConnected {
-                        showOfflineMessage = true
-                    } else {
-                        onError?(error)
+                PDFViewerContainer(
+                    url: url,
+                    reloadToken: reloadToken + networkReloadToken,
+                    onError: { error in
+                        // Check if this is a network error while offline
+                        if !NetworkMonitor.shared.isConnected {
+                            showOfflineMessage = true
+                        } else {
+                            onError?(error)
+                        }
+                    },
+                    onLoaded: {
+                        onLoaded?()
                     }
-                }
+                )
             }
         }
         .task {
@@ -335,6 +372,7 @@ struct PDFViewerWithOfflineCheck: View {
             Task { @MainActor in
                 if isConnected {
                     showOfflineMessage = false
+                    networkReloadToken += 1
                 } else {
                     let isCached = await PDFCache.shared.isCached(url: url)
                     showOfflineMessage = !isCached
@@ -346,7 +384,9 @@ struct PDFViewerWithOfflineCheck: View {
 
 struct PDFViewerContainer: UIViewRepresentable {
     let url: URL
+    let reloadToken: Int
     var onError: ((String) -> Void)?
+    var onLoaded: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -361,15 +401,17 @@ struct PDFViewerContainer: UIViewRepresentable {
     }
 
     func updateUIView(_ pdfView: PDFView, context: Context) {
-        if context.coordinator.lastLoadedURL == url {
+        if context.coordinator.lastLoadedURL == url && context.coordinator.lastReloadToken == reloadToken {
             return
         }
         context.coordinator.lastLoadedURL = url
+        context.coordinator.lastReloadToken = reloadToken
 
         // Cancel any existing load task
         context.coordinator.loadTask?.cancel()
 
         let errorHandler = onError
+        let loadedHandler = onLoaded
         // Start new load task
         context.coordinator.loadTask = Task {
             do {
@@ -380,6 +422,7 @@ struct PDFViewerContainer: UIViewRepresentable {
                     await MainActor.run {
                         guard !Task.isCancelled else { return }
                         pdfView.document = document
+                        loadedHandler?()
                     }
                 } else {
                     await MainActor.run {
@@ -404,6 +447,7 @@ struct PDFViewerContainer: UIViewRepresentable {
     class Coordinator {
         var loadTask: Task<Void, Never>?
         var lastLoadedURL: URL?
+        var lastReloadToken: Int?
     }
 }
 

@@ -84,6 +84,16 @@ struct GalleryView: View {
                 ToastContainer(message: $viewModel.toastMessage)
                     .padding(.top, 8)
             }
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            )) {
+                Button("OK") {
+                    viewModel.clearError()
+                }
+            } message: {
+                Text(viewModel.error ?? "Unknown error")
+            }
             .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { notification in
                 if let connected = notification.object as? Bool {
                     isOffline = !connected
