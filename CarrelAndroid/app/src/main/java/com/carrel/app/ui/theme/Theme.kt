@@ -73,7 +73,7 @@ private val AppShapes = Shapes(
 @Composable
 fun CarrelTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

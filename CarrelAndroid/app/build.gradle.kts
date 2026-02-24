@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.File
 
 plugins {
     alias(libs.plugins.android.application)
@@ -24,8 +25,8 @@ android {
         applicationId = "com.carrel.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,7 +44,14 @@ android {
             if (keystorePropertiesFile.exists()) {
                 val keystoreProperties = Properties()
                 keystoreProperties.load(keystorePropertiesFile.inputStream())
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+
+                val configuredStoreFile = keystoreProperties.getProperty("storeFile")
+                if (!configuredStoreFile.isNullOrBlank()) {
+                    val resolvedStoreFile = File(configuredStoreFile).let {
+                        if (it.isAbsolute) it else rootProject.file(configuredStoreFile)
+                    }
+                    storeFile = resolvedStoreFile
+                }
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -82,6 +90,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -89,7 +98,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
 
     // Security
@@ -115,7 +124,7 @@ dependencies {
     implementation(libs.convex.android)
 
     // Push notifications
-    implementation("com.google.firebase:firebase-messaging:24.1.0")
+    implementation(libs.firebase.messaging)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

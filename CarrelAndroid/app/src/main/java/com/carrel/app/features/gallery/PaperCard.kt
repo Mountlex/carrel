@@ -40,21 +40,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.carrel.app.R
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.models.Paper
 import com.carrel.app.core.network.models.PaperStatus
-import com.carrel.app.ui.theme.StatusBuilding
-import com.carrel.app.ui.theme.StatusError
-import com.carrel.app.ui.theme.StatusPending
-import com.carrel.app.ui.theme.StatusSynced
-import com.carrel.app.ui.theme.StatusUnknown
+import com.carrel.app.ui.components.StatusBadge
 
 @Composable
 fun PaperCard(
@@ -161,7 +158,7 @@ fun PaperCard(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Sync now") },
+                            text = { Text(stringResource(R.string.paper_menu_sync_now)) },
                             onClick = {
                                 showMenu = false
                                 onBuildClick()
@@ -169,7 +166,7 @@ fun PaperCard(
                             leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Force rebuild") },
+                            text = { Text(stringResource(R.string.paper_menu_force_rebuild)) },
                             onClick = {
                                 showMenu = false
                                 onForceRebuildClick()
@@ -177,7 +174,7 @@ fun PaperCard(
                             leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete paper", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.paper_menu_delete), color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 showMenu = false
                                 onDeleteClick()
@@ -200,10 +197,10 @@ fun PaperCard(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = paper.title ?: "Untitled",
+                        text = paper.title ?: stringResource(R.string.paper_untitled),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
@@ -212,13 +209,7 @@ fun PaperCard(
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.size(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .size(9.dp)
-                            .clip(CircleShape)
-                            .background(statusColor(if (isSyncing) PaperStatus.BUILDING else paper.status))
-                    )
+                    StatusBadge(status = if (isSyncing) PaperStatus.BUILDING else paper.status)
                 }
 
                 if (!paper.authors.isNullOrBlank()) {
@@ -232,16 +223,5 @@ fun PaperCard(
                 }
             }
         }
-    }
-}
-
-private fun statusColor(status: PaperStatus): Color {
-    return when (status) {
-        PaperStatus.SYNCED -> StatusSynced
-        PaperStatus.PENDING -> StatusPending
-        PaperStatus.BUILDING -> StatusBuilding
-        PaperStatus.ERROR -> StatusError
-        PaperStatus.UPLOADED -> StatusUnknown
-        PaperStatus.UNKNOWN -> StatusUnknown
     }
 }

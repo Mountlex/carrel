@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,13 +26,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.carrel.app.core.cache.PDFCache
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.ConvexService
@@ -53,15 +61,20 @@ fun PaperDetailScreen(
     useConvexSubscriptions: Boolean = false,
     onBackClick: () -> Unit
 ) {
-    val viewModel = remember {
-        PaperViewModel(
-            paperId = paperId,
-            convexClient = convexClient,
-            convexService = convexService,
-            useConvexSubscriptions = useConvexSubscriptions
-        )
-    }
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: PaperViewModel = viewModel(
+        key = "paper-$paperId",
+        factory = viewModelFactory {
+            initializer {
+                PaperViewModel(
+                    paperId = paperId,
+                    convexClient = convexClient,
+                    convexService = convexService,
+                    useConvexSubscriptions = useConvexSubscriptions
+                )
+            }
+        }
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -377,7 +390,7 @@ private fun PaperInfoPanel(
                         Text(
                             text = "by $author",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -399,7 +412,7 @@ private fun PdfViewer(
     val context = LocalContext.current
     val pdfCache = remember { PDFCache.getInstance(context) }
     val networkMonitor = remember { NetworkMonitor.getInstance(context) }
-    val isConnected by networkMonitor.isConnected.collectAsState()
+    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
     val bitmapCache = remember {
         object : LruCache<Int, Bitmap>(MAX_BITMAP_CACHE_BYTES) {
             override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
@@ -448,6 +461,45 @@ private fun PdfViewer(
         contentAlignment = Alignment.Center
     ) {
         val targetWidthPx = constraints.maxWidth
+        val viewportWidthPx = constraints.maxWidth.toFloat()
+        val viewportHeightPx = constraints.maxHeight.toFloat()
+        var scale by remember(pdfUrl) { mutableFloatStateOf(1f) }
+        var offsetX by remember(pdfUrl) { mutableFloatStateOf(0f) }
+        var offsetY by remember(pdfUrl) { mutableFloatStateOf(0f) }
+
+        fun clampedOffsetX(value: Float, currentScale: Float): Float {
+            if (currentScale <= 1f) return 0f
+            val maxOffset = ((currentScale - 1f) * viewportWidthPx) / 2f
+            return value.coerceIn(-maxOffset, maxOffset)
+        }
+
+        fun clampedOffsetY(value: Float, currentScale: Float): Float {
+            if (currentScale <= 1f) return 0f
+            val maxOffset = ((currentScale - 1f) * viewportHeightPx) / 2f
+            return value.coerceIn(-maxOffset, maxOffset)
+        }
+
+        val zoomModifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .pointerInput(pdfUrl, viewportWidthPx, viewportHeightPx) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val newScale = (scale * zoom).coerceIn(1f, 4f)
+                    val nextOffsetX = clampedOffsetX(offsetX + pan.x, newScale)
+                    val nextOffsetY = clampedOffsetY(offsetY + pan.y, newScale)
+
+                    scale = newScale
+                    offsetX = if (newScale <= 1f) 0f else nextOffsetX
+                    offsetY = if (newScale <= 1f) 0f else nextOffsetY
+                }
+            }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offsetX
+                translationY = offsetY
+            }
+
         LaunchedEffect(targetWidthPx) {
             if (targetWidthPx > 0) {
                 bitmapCache.evictAll()
@@ -476,7 +528,7 @@ private fun PdfViewer(
             }
             pdfFile != null && pageCount > 0 -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = zoomModifier,
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(8.dp)

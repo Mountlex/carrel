@@ -7,12 +7,15 @@ import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.models.Paper
 import com.carrel.app.core.network.models.PaperStatus
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 data class PaperDetailUiState(
     val paper: Paper? = null,
@@ -138,16 +141,43 @@ class PaperViewModel(
             } else {
                 // Fallback to polling when no ConvexService available
                 val pollingJob = viewModelScope.launch {
-                    while (true) {
-                        delay(1500) // 1.5 seconds
-                        convexClient.paper(paperId)
-                            .onSuccess { paper ->
-                                _uiState.update { it.copy(paper = paper) }
-                                // Stop polling if build completed
-                                if (paper.compilationProgress == null && paper.status != PaperStatus.BUILDING) {
-                                    return@launch
+                    try {
+                        withTimeout(BUILD_POLL_TIMEOUT_MS) {
+                            var consecutiveErrors = 0
+                            while (isActive) {
+                                delay(BUILD_POLL_INTERVAL_MS)
+                                var shouldStopPolling = false
+
+                                convexClient.paper(paperId)
+                                    .onSuccess { paper ->
+                                        _uiState.update { it.copy(paper = paper) }
+                                        consecutiveErrors = 0
+                                        if (paper.compilationProgress == null && paper.status != PaperStatus.BUILDING) {
+                                            shouldStopPolling = true
+                                        }
+                                    }
+                                    .onError { exception ->
+                                        consecutiveErrors += 1
+                                        if (consecutiveErrors >= MAX_POLL_CONSECUTIVE_ERRORS) {
+                                            throw IllegalStateException(
+                                                exception.message ?: "Failed to refresh build status"
+                                            )
+                                        }
+                                    }
+
+                                if (shouldStopPolling) {
+                                    return@withTimeout
                                 }
                             }
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        _uiState.update {
+                            it.copy(error = "Build is taking longer than expected. Please try refreshing.")
+                        }
+                    } catch (e: Exception) {
+                        _uiState.update {
+                            it.copy(error = e.message ?: "Failed to refresh build status")
+                        }
                     }
                 }
 
@@ -248,5 +278,11 @@ class PaperViewModel(
     override fun onCleared() {
         super.onCleared()
         subscriptionJob?.cancel()
+    }
+
+    companion object {
+        private const val BUILD_POLL_INTERVAL_MS = 1500L
+        private const val BUILD_POLL_TIMEOUT_MS = 120_000L
+        private const val MAX_POLL_CONSECUTIVE_ERRORS = 3
     }
 }

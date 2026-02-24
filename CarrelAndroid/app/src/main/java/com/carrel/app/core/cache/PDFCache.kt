@@ -69,26 +69,32 @@ class PDFCache private constructor(private val cacheDir: File) {
             getCachedPDF(url)?.let { return@runCatching it }
 
             // Download from network
-            val data = fetchWithRetry(url)
+            val downloadedFile = fetchWithRetry(url)
+            val fileSize = downloadedFile.length()
 
             // Validate file size
-            if (data.size > MAX_FILE_SIZE) {
-                throw PDFCacheException.FileTooLarge(data.size)
+            if (fileSize > MAX_FILE_SIZE) {
+                downloadedFile.delete()
+                throw PDFCacheException.FileTooLarge(fileSize)
             }
 
-            // Evict old files if needed
-            mutex.withLock {
-                evictIfNeeded(data.size.toLong())
-            }
+            try {
+                mutex.withLock {
+                    // Evict old files if needed
+                    evictIfNeeded(fileSize)
 
-            // Save to cache
-            val cacheFile = cacheFileFor(url)
-            cacheFile.writeBytes(data)
-            cacheFile
+                    // Save to cache
+                    val cacheFile = cacheFileFor(url)
+                    downloadedFile.copyTo(cacheFile, overwrite = true)
+                    cacheFile
+                }
+            } finally {
+                downloadedFile.delete()
+            }
         }
     }
 
-    private suspend fun fetchWithRetry(url: String, maxRetries: Int = 3): ByteArray {
+    private suspend fun fetchWithRetry(url: String, maxRetries: Int = 3): File {
         var lastError: Exception? = null
         repeat(maxRetries) { attempt ->
             try {
@@ -103,8 +109,27 @@ class PDFCache private constructor(private val cacheDir: File) {
                             Exception("HTTP ${connection.responseCode}")
                         )
                     }
-                    return connection.inputStream.use { stream ->
-                        stream.readBytes()
+                    val tmpFile = File.createTempFile("pdf_cache_", ".tmp", cacheDir)
+                    try {
+                        connection.inputStream.use { input ->
+                            tmpFile.outputStream().use { output ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                var totalRead = 0L
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count <= 0) break
+                                    totalRead += count
+                                    if (totalRead > MAX_FILE_SIZE) {
+                                        throw PDFCacheException.FileTooLarge(totalRead)
+                                    }
+                                    output.write(buffer, 0, count)
+                                }
+                            }
+                        }
+                        return tmpFile
+                    } catch (e: Exception) {
+                        tmpFile.delete()
+                        throw e
                     }
                 } finally {
                     connection.disconnect()
@@ -174,7 +199,7 @@ class PDFCache private constructor(private val cacheDir: File) {
 }
 
 sealed class PDFCacheException(message: String) : Exception(message) {
-    class FileTooLarge(size: Int) : PDFCacheException(
+    class FileTooLarge(size: Long) : PDFCacheException(
         "PDF file too large: ${size / 1024 / 1024}MB exceeds 50MB limit"
     )
     class NetworkError(cause: Exception) : PDFCacheException(

@@ -34,8 +34,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.carrel.app.R
 import com.carrel.app.core.auth.AuthManager
 import com.carrel.app.core.auth.OAuthHandler
 import com.carrel.app.core.auth.OAuthProvider
@@ -100,7 +102,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             Text(
-                text = "Carrel",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -109,7 +111,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Clean workflows for research papers",
+                text = stringResource(R.string.login_tagline),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f)
             )
@@ -129,12 +131,12 @@ fun LoginScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     GlassButton(
-                        text = "Sign in with GitHub",
+                        text = stringResource(R.string.login_sign_in_github),
                         onClick = { launchLogin(OAuthProvider.GITHUB) }
                     )
 
                     GlassButton(
-                        text = "Sign in with GitLab",
+                        text = stringResource(R.string.login_sign_in_gitlab),
                         onClick = { launchLogin(OAuthProvider.GITLAB) }
                     )
 
@@ -149,7 +151,7 @@ fun LoginScreen(
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
                         Text(
-                            text = "or",
+                            text = stringResource(R.string.login_or),
                             modifier = Modifier.padding(horizontal = 14.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,7 +163,7 @@ fun LoginScreen(
                     }
 
                     GlassButton(
-                        text = "Sign in with Email",
+                        text = stringResource(R.string.login_sign_in_email),
                         icon = Icons.Default.Email,
                         onClick = { launchLogin(OAuthProvider.EMAIL) }
                     )

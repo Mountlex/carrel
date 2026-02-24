@@ -22,38 +22,52 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.carrel.app.R
 import com.carrel.app.core.auth.AuthManager
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.NetworkMonitor
 import com.carrel.app.core.network.models.Paper
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,22 +79,30 @@ fun GalleryScreen(
     onSettingsClick: () -> Unit,
     onRepositoriesClick: () -> Unit
 ) {
-    val viewModel = remember { GalleryViewModel(convexClient, convexService, authManager) }
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: GalleryViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer { GalleryViewModel(convexClient, convexService, authManager) }
+        }
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var searchText by remember { mutableStateOf("") }
     var showActionsMenu by remember { mutableStateOf(false) }
+    var paperToDelete by remember { mutableStateOf<Paper?>(null) }
+    val hiddenPaperIds = remember { mutableStateListOf<String>() }
+    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
     val networkMonitor = remember { NetworkMonitor.getInstance(context) }
-    val isConnected by networkMonitor.isConnected.collectAsState()
+    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
     val isOffline = !isConnected
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val filteredPapers = remember(uiState.papers, searchText) {
+    val visiblePapers = uiState.papers.filterNot { hiddenPaperIds.contains(it.id) }
+    val filteredPapers = remember(visiblePapers, searchText) {
         if (searchText.isBlank()) {
-            uiState.papers
+            visiblePapers
         } else {
-            uiState.papers.filter { paper ->
+            visiblePapers.filter { paper ->
                 (paper.title ?: "").contains(searchText, ignoreCase = true)
             }
         }
@@ -96,11 +118,15 @@ fun GalleryScreen(
     val subtitle = when {
         uiState.isRefreshingAll -> {
             uiState.refreshProgress?.let { (current, total) ->
-                "Refreshing $current/$total"
-            } ?: "Refreshing papers"
+                context.getString(R.string.gallery_subtitle_refreshing_progress, current, total)
+            } ?: stringResource(R.string.gallery_subtitle_refreshing_papers)
         }
-        uiState.isSyncing -> "Checking repositories"
-        else -> "${filteredPapers.size} papers"
+        uiState.isSyncing -> stringResource(R.string.gallery_subtitle_checking_repositories)
+        else -> pluralStringResource(
+            id = R.plurals.gallery_subtitle_papers_count,
+            count = filteredPapers.size,
+            filteredPapers.size
+        )
     }
 
     Scaffold(
@@ -108,7 +134,7 @@ fun GalleryScreen(
             TopAppBar(
                 title = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Papers", style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.gallery_title), style = MaterialTheme.typography.titleLarge)
                         Text(
                             text = subtitle,
                             style = MaterialTheme.typography.labelMedium,
@@ -126,16 +152,9 @@ fun GalleryScreen(
                         )
                     }
 
-                    IconButton(onClick = onRepositoriesClick) {
-                        Icon(Icons.Default.Folder, contentDescription = "Repositories")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-
                     Box {
                         IconButton(onClick = { showActionsMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.content_desc_more_actions))
                         }
 
                         DropdownMenu(
@@ -143,7 +162,24 @@ fun GalleryScreen(
                             onDismissRequest = { showActionsMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Check repositories") },
+                                text = { Text(stringResource(R.string.gallery_menu_repositories)) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    onRepositoriesClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Folder, contentDescription = stringResource(R.string.content_desc_repositories)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.gallery_menu_settings)) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    onSettingsClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.content_desc_settings)) }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.gallery_menu_check_repositories)) },
                                 onClick = {
                                     showActionsMenu = false
                                     viewModel.checkAllRepositories()
@@ -152,7 +188,7 @@ fun GalleryScreen(
                                 enabled = !uiState.isSyncing
                             )
                             DropdownMenuItem(
-                                text = { Text("Refresh papers") },
+                                text = { Text(stringResource(R.string.gallery_menu_refresh_papers)) },
                                 onClick = {
                                     showActionsMenu = false
                                     viewModel.refreshAllPapers()
@@ -182,7 +218,7 @@ fun GalleryScreen(
                 )
 
                 when {
-                    uiState.papers.isEmpty() && !uiState.isLoading -> EmptyState()
+                    visiblePapers.isEmpty() && !uiState.isLoading -> EmptyState()
                     filteredPapers.isEmpty() && searchText.isNotBlank() -> SearchEmptyState(searchText)
                     else -> {
                         PaperGrid(
@@ -192,7 +228,7 @@ fun GalleryScreen(
                             onPaperClick = onPaperClick,
                             onBuildClick = { viewModel.buildPaper(it) },
                             onForceRebuildClick = { viewModel.buildPaper(it, force = true) },
-                            onDeleteClick = { viewModel.deletePaper(it) }
+                            onDeleteClick = { paperToDelete = it }
                         )
                     }
                 }
@@ -206,6 +242,54 @@ fun GalleryScreen(
             viewModel.clearError()
         }
     }
+
+    paperToDelete?.let { paper ->
+        AlertDialog(
+            onDismissRequest = { paperToDelete = null },
+            title = { Text(stringResource(R.string.delete_paper_dialog_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_paper_dialog_body,
+                        paper.title ?: stringResource(R.string.paper_untitled)
+                    )
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { paperToDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        paperToDelete = null
+                        if (!hiddenPaperIds.contains(paper.id)) {
+                            hiddenPaperIds.add(paper.id)
+                        }
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = context.getString(
+                                    R.string.paper_deleted_snackbar,
+                                    paper.title ?: context.getString(R.string.paper_untitled)
+                                ),
+                                actionLabel = context.getString(R.string.action_undo),
+                                duration = SnackbarDuration.Long
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                hiddenPaperIds.remove(paper.id)
+                            } else {
+                                hiddenPaperIds.remove(paper.id)
+                                viewModel.deletePaper(paper)
+                            }
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -215,10 +299,10 @@ private fun EmptyState() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "No Papers", style = MaterialTheme.typography.headlineSmall)
+            Text(text = stringResource(R.string.gallery_empty_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Add repositories on the web to see your papers here.",
+                text = stringResource(R.string.gallery_empty_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -233,10 +317,10 @@ private fun SearchEmptyState(searchText: String) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "No results", style = MaterialTheme.typography.headlineSmall)
+            Text(text = stringResource(R.string.gallery_search_empty_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "No papers match \"$searchText\"",
+                text = stringResource(R.string.gallery_search_empty_body, searchText),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -260,12 +344,12 @@ private fun SearchField(
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("Search papers") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            placeholder = { Text(stringResource(R.string.gallery_search_placeholder)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_desc_search)) },
             trailingIcon = {
                 if (value.isNotBlank()) {
                     IconButton(onClick = { onValueChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                        Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear_search))
                     }
                 }
             },

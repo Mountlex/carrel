@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,11 +37,16 @@ class NetworkMonitor private constructor(
 
     fun start() {
         if (isStarted) return
-        isStarted = true
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        connectivityManager.registerNetworkCallback(request, callback)
+        try {
+            isStarted = true
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, callback)
+        } catch (e: Exception) {
+            isStarted = false
+            Log.e(TAG, "Failed to start NetworkMonitor", e)
+        }
     }
 
     private fun isCurrentlyConnected(): Boolean {
@@ -50,6 +56,8 @@ class NetworkMonitor private constructor(
     }
 
     companion object {
+        private const val TAG = "NetworkMonitor"
+
         @Volatile
         private var instance: NetworkMonitor? = null
 

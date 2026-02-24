@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.webkit.WebSettings
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -19,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.carrel.app.core.network.ConvexClient
@@ -94,6 +96,18 @@ private fun WebViewLoginScreen(
     onCancel: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    DisposableEffect(webViewRef) {
+        onDispose {
+            webViewRef?.let { webView ->
+                webView.stopLoading()
+                webView.webViewClient = WebViewClient()
+                webView.destroy()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -113,10 +127,17 @@ private fun WebViewLoginScreen(
                 .padding(padding)
         ) {
             AndroidView(
-                factory = { context ->
+                factory = {
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.javaScriptCanOpenWindowsAutomatically = false
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        settings.allowFileAccessFromFileURLs = false
+                        settings.allowUniversalAccessFromFileURLs = false
+                        settings.safeBrowsingEnabled = true
 
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(
@@ -148,6 +169,7 @@ private fun WebViewLoginScreen(
                         }
 
                         loadUrl(url)
+                        webViewRef = this
                     }
                 },
                 modifier = Modifier.fillMaxSize()

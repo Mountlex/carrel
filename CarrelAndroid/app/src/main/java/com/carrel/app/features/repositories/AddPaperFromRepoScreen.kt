@@ -21,6 +21,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.carrel.app.core.network.ConvexService
 import com.carrel.app.core.network.models.Repository
 import com.carrel.app.core.network.models.RepositoryFile
@@ -33,8 +37,13 @@ fun AddPaperFromRepoScreen(
     onBackClick: () -> Unit,
     onPaperAdded: () -> Unit
 ) {
-    val viewModel = remember { AddPaperFromRepoViewModel(repository, convexService) }
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: AddPaperFromRepoViewModel = viewModel(
+        key = "add-paper-${repository.id}",
+        factory = viewModelFactory {
+            initializer { AddPaperFromRepoViewModel(repository, convexService) }
+        }
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var selectedFilePath by remember { mutableStateOf<String?>(null) }
 

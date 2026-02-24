@@ -57,7 +57,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +69,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
 import com.carrel.app.BuildConfig
 import com.carrel.app.core.auth.AuthManager
@@ -89,8 +92,12 @@ fun SettingsScreen(
     pushNotificationManager: PushNotificationManager,
     onBackClick: () -> Unit
 ) {
-    val viewModel = remember { SettingsViewModel(convexService, authManager) }
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: SettingsViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer { SettingsViewModel(convexService, authManager) }
+        }
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

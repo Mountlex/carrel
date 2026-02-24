@@ -16,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.carrel.app.R
 import com.carrel.app.core.network.models.PaperStatus
 import com.carrel.app.ui.theme.*
 
@@ -26,12 +28,12 @@ fun StatusBadge(
     modifier: Modifier = Modifier
 ) {
     val (color, text) = when (status) {
-        PaperStatus.SYNCED -> StatusSynced to "Synced"
-        PaperStatus.PENDING -> StatusPending to "Pending"
-        PaperStatus.BUILDING -> StatusBuilding to "Building"
-        PaperStatus.ERROR -> StatusError to "Error"
-        PaperStatus.UPLOADED -> StatusUnknown to "Uploaded"
-        PaperStatus.UNKNOWN -> StatusUnknown to "Unknown"
+        PaperStatus.SYNCED -> StatusSynced to stringResource(R.string.status_synced)
+        PaperStatus.PENDING -> StatusPending to stringResource(R.string.status_pending)
+        PaperStatus.BUILDING -> StatusBuilding to stringResource(R.string.status_building)
+        PaperStatus.ERROR -> StatusError to stringResource(R.string.status_error)
+        PaperStatus.UPLOADED -> StatusUnknown to stringResource(R.string.status_uploaded)
+        PaperStatus.UNKNOWN -> StatusUnknown to stringResource(R.string.status_unknown)
     }
 
     Row(
@@ -59,7 +61,7 @@ fun StatusBadge(
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = color
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

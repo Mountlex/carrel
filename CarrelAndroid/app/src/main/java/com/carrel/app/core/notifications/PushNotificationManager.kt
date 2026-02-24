@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.carrel.app.BuildConfig
@@ -21,7 +20,8 @@ import kotlin.coroutines.resumeWithException
 
 class PushNotificationManager(
     private val context: Context,
-    private val convexService: ConvexService
+    private val convexService: ConvexService,
+    private val deviceId: String
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var isAuthenticated = false
@@ -82,7 +82,6 @@ class PushNotificationManager(
             if (token == lastRegisteredToken) return@runCatching
 
             val environment = if (BuildConfig.DEBUG) "sandbox" else "production"
-            val deviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
             convexService.registerDeviceToken(
                 token = token,
                 platform = "android",
@@ -122,7 +121,6 @@ class PushNotificationManager(
         if (token == lastRegisteredToken) return
 
         val environment = if (BuildConfig.DEBUG) "sandbox" else "production"
-        val deviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
 
         scope.launch {
             convexService.registerDeviceToken(

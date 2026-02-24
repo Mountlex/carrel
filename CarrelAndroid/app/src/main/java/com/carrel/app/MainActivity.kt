@@ -38,25 +38,29 @@ class MainActivity : ComponentActivity() {
 
             // Load stored tokens and restore auth on startup
             LaunchedEffect(Unit) {
-                val convexToken = container.authManager.loadStoredTokens()
-                if (convexToken != null) {
-                    // Restore Convex Auth session
-                    Log.d(TAG, "Restoring Convex Auth session")
-                    val success = container.convexService.restoreAuthFromCache(convexToken)
-                    if (!success) {
-                        Log.w(TAG, "Failed to restore Convex Auth session, token may be invalid")
-                        // Try silent refresh
-                        val refreshed = container.authManager.refreshTokenSilently()
-                        if (refreshed) {
-                            // Try again with new token
-                            container.authManager.getConvexAuthToken()?.let { newToken ->
-                                container.convexService.restoreAuthFromCache(newToken)
+                runCatching {
+                    val convexToken = container.authManager.loadStoredTokens()
+                    if (convexToken != null) {
+                        // Restore Convex Auth session
+                        Log.d(TAG, "Restoring Convex Auth session")
+                        val success = container.convexService.restoreAuthFromCache(convexToken)
+                        if (!success) {
+                            Log.w(TAG, "Failed to restore Convex Auth session, token may be invalid")
+                            // Try silent refresh
+                            val refreshed = container.authManager.refreshTokenSilently()
+                            if (refreshed) {
+                                // Try again with new token
+                                container.authManager.getConvexAuthToken()?.let { newToken ->
+                                    container.convexService.restoreAuthFromCache(newToken)
+                                }
+                            } else {
+                                // Token is invalid - will require re-login
+                                container.authManager.logout()
                             }
-                        } else {
-                            // Token is invalid - will require re-login
-                            container.authManager.logout()
                         }
                     }
+                }.onFailure { error ->
+                    Log.e(TAG, "Startup auth restore failed", error)
                 }
             }
 
@@ -96,17 +100,21 @@ class MainActivity : ComponentActivity() {
                 // Handle OAuth login (GitHub/GitLab)
                 // Exchange token and set up ConvexService with the exchanged token
                 lifecycleScope.launch {
-                    container.authManager.handleConvexAuthCallback(result.token)
+                    runCatching {
+                        container.authManager.handleConvexAuthCallback(result.token)
 
-                    // Use the exchanged token (or original if exchange failed)
-                    val tokenToUse = container.authManager.getConvexAuthToken()
-                    if (tokenToUse != null) {
-                        val success = container.convexService.setAuthToken(tokenToUse)
-                        if (success) {
-                            Log.d(TAG, "Convex Auth setup successful")
-                        } else {
-                            Log.e(TAG, "Convex Auth setup failed")
+                        // Use the exchanged token (or original if exchange failed)
+                        val tokenToUse = container.authManager.getConvexAuthToken()
+                        if (tokenToUse != null) {
+                            val success = container.convexService.setAuthToken(tokenToUse)
+                            if (success) {
+                                Log.d(TAG, "Convex Auth setup successful")
+                            } else {
+                                Log.e(TAG, "Convex Auth setup failed")
+                            }
                         }
+                    }.onFailure { error ->
+                        Log.e(TAG, "OAuth callback handling failed", error)
                     }
                 }
             }
