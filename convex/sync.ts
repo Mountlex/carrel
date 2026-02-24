@@ -908,12 +908,8 @@ export const updatePaperCommitOnly = internalMutation({
       cachedCommitHash: args.cachedCommitHash,
       needsSync: false,
       needsSyncSetAt: undefined, // Clear the timestamp when sync completes
-      lastUpdateNotificationAt: undefined,
       lastSyncError: undefined,
       updatedAt: Date.now(),
-    });
-    await ctx.scheduler.runAfter(0, internal.notifications.notifyPaperUpdated, {
-      paperId: args.id,
     });
   },
 });
