@@ -102,8 +102,8 @@ class CompilationQueue {
 
 // Singleton instance for compilation jobs
 const compilationQueue = new CompilationQueue({
-  maxConcurrent: 2,  // Max 2 compilations at once (2 CPUs, 2GB RAM)
-  maxQueued: 20,     // Max 20 waiting in queue
+  maxConcurrent: 1,  // Max 1 compilation at once (1 CPU, 1GB RAM)
+  maxQueued: 10,     // Max 10 waiting in queue
 });
 
 module.exports = {

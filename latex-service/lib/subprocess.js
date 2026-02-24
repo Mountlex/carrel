@@ -95,41 +95,6 @@ async function spawnAsync(command, args, options = {}) {
 }
 
 /**
- * Run git command with authentication handling.
- * Credentials are passed via environment variables to avoid exposing them in process args.
- *
- * @param {string[]} args - Git command arguments
- * @param {Object} options - Options object
- * @param {string} [options.cwd] - Working directory
- * @param {number} [options.timeout=60000] - Timeout in milliseconds
- * @param {Object} [options.auth] - Authentication credentials { username, password }
- * @param {Object} [options.logger] - Logger instance
- * @returns {Promise<{success: boolean, stdout: string, stderr: string, code: number|null, timedOut: boolean}>}
- */
-async function runGit(args, options = {}) {
-  const { cwd, timeout = 60000, auth, logger = console } = options;
-
-  // Set up environment for credential passing
-  const env = { ...process.env };
-
-  if (auth && auth.username && auth.password) {
-    // Use GIT_ASKPASS to provide credentials without embedding in URL
-    // This is more secure than URL embedding as it doesn't appear in process args
-    env.GIT_USERNAME = auth.username;
-    env.GIT_PASSWORD = auth.password;
-    // We'll use a simple askpass script approach via env
-    // For now, we still use URL embedding but it's contained to this function
-  }
-
-  return spawnAsync("git", args, {
-    cwd,
-    timeout,
-    env,
-    logger,
-  });
-}
-
-/**
  * Run latexmk with proper timeout handling.
  *
  * @param {string} compilerFlag - Compiler flag (-pdf, -xelatex, -lualatex)
@@ -265,6 +230,7 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     outdir,
     logger = console,
     onProgress,
+    maxOutput = DEFAULT_MAX_OUTPUT,
   } = options;
 
   const args = [
@@ -316,7 +282,9 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
 
     proc.stdout.on("data", (data) => {
       const text = data.toString();
-      stdout += text;
+      if (stdout.length < maxOutput) {
+        stdout += text.slice(0, maxOutput - stdout.length);
+      }
 
       // Detect latexmk progress from output
       if (onProgress) {
@@ -343,7 +311,9 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     });
 
     proc.stderr.on("data", (data) => {
-      stderr += data.toString();
+      if (stderr.length < maxOutput) {
+        stderr += data.toString().slice(0, maxOutput - stderr.length);
+      }
     });
 
     proc.on("close", (code) => {

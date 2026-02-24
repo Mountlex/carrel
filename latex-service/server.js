@@ -39,9 +39,9 @@ const PERSIST_LOCK_STALE_MS = Number.parseInt(process.env.LATEX_PERSIST_LOCK_STA
 const PERSIST_LOCK_WAIT_MS = Number.parseInt(process.env.LATEX_PERSIST_LOCK_WAIT_MS || "60000", 10);
 
 // Cache for git refs to speed up repeated "Check All" requests
-// Key: `${gitUrl}:${branch || 'default'}`, Value: { sha, defaultBranch, details, timestamp }
-const refsCache = new Map();
+const { LRUCache } = require("lru-cache");
 const REFS_CACHE_TTL = 10000; // 10 seconds (matches MIN_SYNC_INTERVAL)
+const refsCache = new LRUCache({ max: 200, ttl: REFS_CACHE_TTL });
 
 // Request tracking for graceful shutdown
 let activeRequests = 0;
@@ -259,14 +259,23 @@ async function readCacheMeta(metaPath) {
 
 async function getDirSize(dir) {
   let total = 0;
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      total += await getDirSize(fullPath);
-    } else if (entry.isFile()) {
-      const stat = await fs.stat(fullPath);
-      total += stat.size;
+    try {
+      if (entry.isDirectory()) {
+        total += await getDirSize(fullPath);
+      } else if (entry.isFile()) {
+        const stat = await fs.stat(fullPath);
+        total += stat.size;
+      }
+    } catch {
+      // File/dir disappeared between readdir and stat, skip
     }
   }
   return total;
@@ -1335,7 +1344,11 @@ app.post("/cache/clear", rateLimit, async (req, res) => {
     }
     try {
       const persistPaths = getPersistentRepoPaths(id);
-      await fs.rm(persistPaths.paperDir, { recursive: true, force: true });
+      if (await pathExists(persistPaths.lockPath)) {
+        req.log.warn(`Skipping locked persistent repo for paper ${id}`);
+      } else {
+        await fs.rm(persistPaths.paperDir, { recursive: true, force: true });
+      }
     } catch (err) {
       logger.warn({ err }, `Failed to clear persistent repo for paper ${id}`);
     }
@@ -1353,15 +1366,13 @@ app.post("/git/refs", rateLimit, async (req, res) => {
     return res.status(400).json({ error: gitUrlValidation.error });
   }
 
-  // Check cache first
+  // Check cache first (LRU cache handles TTL automatically)
   const cacheKey = `${gitUrl}:${branch || "default"}`;
   const cached = refsCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < REFS_CACHE_TTL) {
-    // If knownSha provided and matches cached SHA, return unchanged
+  if (cached) {
     if (knownSha && cached.sha === knownSha) {
       return res.json({ sha: cached.sha, defaultBranch: cached.defaultBranch, unchanged: true });
     }
-    // Return cached result with full details
     return res.json({
       sha: cached.sha,
       defaultBranch: cached.defaultBranch,
@@ -1536,7 +1547,6 @@ app.post("/git/refs", rateLimit, async (req, res) => {
         authorName,
         authorEmail,
       },
-      timestamp: Date.now(),
     });
 
     res.json(responseData);
