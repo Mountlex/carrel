@@ -25,8 +25,8 @@ android {
         applicationId = "com.carrel.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.1"
+        versionCode = 8
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -61,7 +61,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             // Use release signing if configured, otherwise use debug
             signingConfig = if (signingConfigs.getByName("release").storeFile?.exists() == true) {
                 signingConfigs.getByName("release")

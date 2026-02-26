@@ -90,7 +90,8 @@ fun NavGraph(
                 LoginScreen(
                     oAuthHandler = container.oAuthHandler,
                     authManager = container.authManager,
-                    convexService = container.convexService
+                    convexService = container.convexService,
+                    useWebView = false
                 )
             }
 

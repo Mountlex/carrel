@@ -31,6 +31,12 @@ final class PushNotificationManager {
         }
     }
 
+    func currentAuthorizationStatus() async -> UNAuthorizationStatus {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        authorizationStatus = settings.authorizationStatus
+        return settings.authorizationStatus
+    }
+
     func requestAuthorization() async -> Bool {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus

@@ -30,6 +30,7 @@ final class AddPaperFromRepoViewModel {
 
     // Tracked files (already added)
     private(set) var trackedFilePaths: Set<String> = []
+    private var hasLoadedTrackedFiles = false
     private var loadRequestID = 0
 
     // Toast
@@ -63,21 +64,27 @@ final class AddPaperFromRepoViewModel {
         loadError = nil
 
         do {
-            // Fetch files and tracked files in parallel
+            // Fetch files on every navigation.
             async let filesTask = ConvexService.shared.listRepositoryFiles(
                 gitUrl: repository.gitUrl,
                 path: loadPath.isEmpty ? nil : loadPath,
                 branch: repository.defaultBranch
             )
-            async let trackedTask = ConvexService.shared.listTrackedFiles(repositoryId: repository.id)
-
-            let (fetchedFiles, trackedFiles) = try await (filesTask, trackedTask)
+            let trackedFiles: [TrackedFileInfo]?
+            if hasLoadedTrackedFiles {
+                trackedFiles = nil
+            } else {
+                trackedFiles = try await ConvexService.shared.listTrackedFiles(repositoryId: repository.id)
+            }
+            let fetchedFiles = try await filesTask
 
             // Ignore stale responses from older requests (rapid folder navigation).
             guard requestID == loadRequestID else { return }
 
-            // Update tracked file paths
-            trackedFilePaths = Set(trackedFiles.map { $0.filePath })
+            if let trackedFiles {
+                trackedFilePaths = Set(trackedFiles.map { $0.filePath })
+                hasLoadedTrackedFiles = true
+            }
 
             // Sort: directories first, then files, alphabetically within each group
             let sorted = fetchedFiles.sorted { lhs, rhs in

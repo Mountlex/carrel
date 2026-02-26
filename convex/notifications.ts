@@ -395,7 +395,7 @@ async function sendPushToUser(
       configuredProviderFound = true;
       attempted += 1;
 
-      const jwt = await createApnsJwt(apnsConfig);
+      const jwt = await getApnsJwt(apnsConfig);
       const result = await sendApnsRequest({
         jwt,
         token: token.token,
@@ -475,11 +475,22 @@ type ApnsConfig = {
   env: "production" | "sandbox";
 };
 
+type CachedApnsJwt = {
+  jwt: string;
+  issuedAtMs: number;
+  keyId: string;
+  teamId: string;
+  privateKey: string;
+};
+
 type FcmConfig = {
   projectId: string;
   clientEmail: string;
   privateKey: string;
 };
+
+const APNS_JWT_MAX_AGE_MS = 50 * 60 * 1000;
+let cachedApnsJwt: CachedApnsJwt | null = null;
 
 function getApnsConfig(overrideEnv?: "production" | "sandbox" | null): ApnsConfig | null {
   const keyId = process.env.APNS_KEY_ID;
@@ -491,6 +502,29 @@ function getApnsConfig(overrideEnv?: "production" | "sandbox" | null): ApnsConfi
   }
   const env = overrideEnv ?? (process.env.APNS_ENV === "sandbox" ? "sandbox" : "production");
   return { keyId, teamId, topic, privateKey, env };
+}
+
+async function getApnsJwt(config: ApnsConfig): Promise<string> {
+  const now = Date.now();
+  if (
+    cachedApnsJwt &&
+    now - cachedApnsJwt.issuedAtMs < APNS_JWT_MAX_AGE_MS &&
+    cachedApnsJwt.keyId === config.keyId &&
+    cachedApnsJwt.teamId === config.teamId &&
+    cachedApnsJwt.privateKey === config.privateKey
+  ) {
+    return cachedApnsJwt.jwt;
+  }
+
+  const jwt = await createApnsJwt(config);
+  cachedApnsJwt = {
+    jwt,
+    issuedAtMs: now,
+    keyId: config.keyId,
+    teamId: config.teamId,
+    privateKey: config.privateKey,
+  };
+  return jwt;
 }
 
 function getFcmConfig(): FcmConfig | null {
@@ -581,12 +615,22 @@ async function sendApnsRequest(args: ApnsRequestArgs): Promise<{ status: number;
     body,
   });
 
+  let reason: string | undefined;
   if (response.status !== 200) {
     const text = await response.text();
+    try {
+      const parsed = JSON.parse(text) as { reason?: string };
+      reason = parsed.reason;
+    } catch {
+      // Keep raw APNs body logging below for troubleshooting.
+    }
     console.log(`APNs error (${response.status}): ${text}`);
   }
 
-  return { status: response.status, unregisterToken: response.status === 410 };
+  const unregisterToken = response.status === 410
+    || reason === "BadDeviceToken"
+    || reason === "DeviceTokenNotForTopic";
+  return { status: response.status, unregisterToken };
 }
 
 type FcmRequestArgs = {

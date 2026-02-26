@@ -1,5 +1,6 @@
 import Foundation
 import PDFKit
+import CryptoKit
 
 enum PDFCacheError: Error, LocalizedError {
     case invalidURL
@@ -152,12 +153,10 @@ actor PDFCache {
     }
 
     private func cacheFileURL(for url: URL) -> URL {
-        // Use URL hash as filename to avoid path issues
-        // UTF-8 encoding of a string should always succeed, but use fallback for safety
-        let urlString = url.absoluteString
-        let hash = (urlString.data(using: .utf8) ?? Data(urlString.utf8)).base64EncodedString()
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "+", with: "-")
+        let hash = SHA256
+            .hash(data: Data(url.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
         return cacheDirectory.appendingPathComponent("\(hash).pdf")
     }
 

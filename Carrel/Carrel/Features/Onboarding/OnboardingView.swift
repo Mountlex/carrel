@@ -32,59 +32,59 @@ struct OnboardingView: View {
     var body: some View {
         ZStack {
             GlassBackdrop()
-            VStack(spacing: 24) {
-                // Page content
-                TabView(selection: $currentPage) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-                        OnboardingPageView(page: page)
-                            .tag(index)
-                    }
+            TabView(selection: $currentPage) {
+                ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                    OnboardingPageView(page: page)
+                        .tag(index)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-
-                // Page indicator and button
-                VStack(spacing: 24) {
-                    // Page dots
-                    HStack(spacing: 8) {
-                        ForEach(0..<pages.count, id: \.self) { index in
-                            Circle()
-                                .fill(index == currentPage ? Color.primary.opacity(0.8) : Color.primary.opacity(0.2))
-                                .frame(width: 8, height: 8)
-                                .animation(.easeInOut(duration: 0.2), value: currentPage)
-                        }
-                    }
-
-                    // Action button
-                    Button {
-                        if currentPage < pages.count - 1 {
-                            withAnimation {
-                                currentPage += 1
-                            }
-                        } else {
-                            hasCompletedOnboarding = true
-                        }
-                    } label: {
-                        Text(currentPage < pages.count - 1 ? "Continue" : "Get Started")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                    }
-                    .buttonStyle(.liquidGlass)
-                    .padding(.horizontal, 24)
-
-                    // Skip button (only on non-last pages)
-                    if currentPage < pages.count - 1 {
-                        Button("Skip") {
-                            hasCompletedOnboarding = true
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.bottom, 32)
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .padding(.bottom, 176)
+        }
+        .safeAreaInset(edge: .bottom) {
+            controls
+                .padding(.bottom, 20)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        VStack(spacing: 24) {
+            HStack(spacing: 8) {
+                ForEach(0..<pages.count, id: \.self) { index in
+                    Circle()
+                        .fill(index == currentPage ? Color.primary.opacity(0.8) : Color.primary.opacity(0.2))
+                        .frame(width: 8, height: 8)
+                        .animation(.easeInOut(duration: 0.2), value: currentPage)
+                }
+            }
+
+            Button {
+                if currentPage < pages.count - 1 {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        currentPage += 1
+                    }
+                } else {
+                    hasCompletedOnboarding = true
+                }
+            } label: {
+                Text(currentPage < pages.count - 1 ? "Continue" : "Get Started")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(.liquidGlass)
+            .padding(.horizontal, 24)
+
+            if currentPage < pages.count - 1 {
+                Button("Skip") {
+                    hasCompletedOnboarding = true
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

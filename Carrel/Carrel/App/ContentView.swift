@@ -2,17 +2,27 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AuthManager.self) private var authManager
+    @State private var hasCheckedStoredTokens = false
 
     var body: some View {
         Group {
-            if authManager.isAuthenticated {
+            if !hasCheckedStoredTokens {
+                ZStack {
+                    Color(uiColor: .systemBackground)
+                        .ignoresSafeArea()
+                    ProgressView()
+                }
+            } else if authManager.isAuthenticated {
                 MainTabView()
             } else {
                 LoginView()
             }
         }
         .task {
+            guard !hasCheckedStoredTokens else { return }
             await authManager.loadStoredTokens()
+            PushNotificationManager.shared.setAuthenticated(authManager.isAuthenticated)
+            hasCheckedStoredTokens = true
         }
         .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
             PushNotificationManager.shared.setAuthenticated(isAuthenticated)

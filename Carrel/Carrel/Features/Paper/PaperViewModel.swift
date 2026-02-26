@@ -73,15 +73,17 @@ final class PaperViewModel {
         }
     }
 
-    func updateMetadata(title: String?) async {
+    func updateMetadata(title: String?) async -> Bool {
         isLoading = true
         defer { isLoading = false }
 
         do {
             try await ConvexService.shared.updatePaper(id: paper.id, title: title)
             await refresh()
+            return true
         } catch {
             self.error = error.localizedDescription
+            return false
         }
     }
 

@@ -5,6 +5,7 @@ struct RepositoryListView: View {
     @State private var repositoryToDelete: Repository?
     @State private var selectedRepository: Repository?
     @State private var repositoryForSettings: Repository?
+    @State private var hasLoadedAuxiliaryData = false
 
     var body: some View {
         repositoryListContent(viewModel: viewModel)
@@ -24,11 +25,12 @@ struct RepositoryListView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
             }
-            .onAppear {
-                Task {
-                    await viewModel.loadNotificationPreferences()
-                    await viewModel.loadUserCacheMode()
-                }
+            .task {
+                guard !hasLoadedAuxiliaryData else { return }
+                hasLoadedAuxiliaryData = true
+                async let notificationTask: Void = viewModel.loadNotificationPreferences()
+                async let userTask: Void = viewModel.loadUserCacheMode()
+                _ = await (notificationTask, userTask)
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

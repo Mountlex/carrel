@@ -7,8 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.carrel.app.core.network.ConvexClient
 import com.carrel.app.ui.theme.CarrelTheme
+import kotlinx.coroutines.delay
 
 /**
  * WebView-based login activity that handles OAuth redirects internally.
@@ -96,8 +99,17 @@ private fun WebViewLoginScreen(
     onCancel: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    LaunchedEffect(url, isLoading, errorMessage) {
+        if (!isLoading || errorMessage != null) return@LaunchedEffect
+        delay(15_000)
+        if (isLoading && errorMessage == null) {
+            errorMessage = "Sign-in page is taking too long to load."
+        }
+    }
 
     DisposableEffect(webViewRef) {
         onDispose {
@@ -140,31 +152,66 @@ private fun WebViewLoginScreen(
                         settings.safeBrowsingEnabled = true
 
                         webViewClient = object : WebViewClient() {
+                            private fun handleCallback(uri: Uri): Boolean {
+                                if (uri.scheme != "carrel" || uri.host != "auth") return false
+                                val token = uri.getQueryParameter("token")
+                                val error = uri.getQueryParameter("error")
+                                when {
+                                    token != null -> onTokenReceived(token)
+                                    error != null -> onError(error)
+                                    else -> onError("Unknown callback format")
+                                }
+                                return true
+                            }
+
+                            @Deprecated("Deprecated in Java")
+                            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                val uri = url?.let(Uri::parse) ?: return false
+                                return handleCallback(uri)
+                            }
+
                             override fun shouldOverrideUrlLoading(
                                 view: WebView?,
                                 request: WebResourceRequest?
                             ): Boolean {
                                 val uri = request?.url ?: return false
+                                return handleCallback(uri)
+                            }
 
-                                // Intercept carrel:// callback
-                                if (uri.scheme == "carrel" && uri.host == "auth") {
-                                    val token = uri.getQueryParameter("token")
-                                    val error = uri.getQueryParameter("error")
-
-                                    when {
-                                        token != null -> onTokenReceived(token)
-                                        error != null -> onError(error)
-                                        else -> onError("Unknown callback format")
-                                    }
-                                    return true
-                                }
-
-                                return false
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                super.onPageStarted(view, url, favicon)
+                                isLoading = true
+                                errorMessage = null
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 isLoading = false
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?
+                            ) {
+                                super.onReceivedError(view, request, error)
+                                if (request?.isForMainFrame == true) {
+                                    isLoading = false
+                                    errorMessage = error?.description?.toString()
+                                        ?: "Failed to load sign-in page."
+                                }
+                            }
+
+                            override fun onReceivedHttpError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                errorResponse: WebResourceResponse?
+                            ) {
+                                super.onReceivedHttpError(view, request, errorResponse)
+                                if (request?.isForMainFrame == true && errorResponse != null) {
+                                    isLoading = false
+                                    errorMessage = "Sign-in page error (${errorResponse.statusCode})."
+                                }
                             }
                         }
 
@@ -179,6 +226,47 @@ private fun WebViewLoginScreen(
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center)
                 )
+            }
+
+            errorMessage?.let { message ->
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(20.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Sign-in failed")
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    errorMessage = null
+                                    isLoading = true
+                                    webViewRef?.reload()
+                                }
+                            ) {
+                                Text("Retry")
+                            }
+                            Button(
+                                onClick = {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(browserIntent)
+                                    onCancel()
+                                }
+                            ) {
+                                Text("Open in Browser")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

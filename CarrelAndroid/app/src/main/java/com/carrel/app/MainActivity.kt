@@ -7,13 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.carrel.app.core.auth.OAuthCallbackResult
 import com.carrel.app.core.auth.OAuthHandler
@@ -22,8 +28,6 @@ import com.carrel.app.ui.theme.CarrelTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val container by lazy { (application as CarrelApplication).container }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -31,6 +35,42 @@ class MainActivity : ComponentActivity() {
 
         // Handle OAuth callback from deep link
         handleIntent(intent)
+
+        val app = application as CarrelApplication
+        val container = app.container
+        if (container == null) {
+            Log.e(TAG, "App started without initialized container", app.startupError)
+            setContent {
+                CarrelTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Carrel failed to initialize.",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            app.startupError?.localizedMessage?.let { message ->
+                                Text(
+                                    text = message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            return
+        }
 
         setContent {
             val isAuthenticated by container.authManager.isAuthenticated.collectAsState()
@@ -91,6 +131,10 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "carrel" || uri.host != "auth") return
+        val container = (application as? CarrelApplication)?.container ?: run {
+            Log.w(TAG, "Ignoring OAuth callback because container is unavailable")
+            return
+        }
 
         Log.d(TAG, "Handling OAuth callback")
 

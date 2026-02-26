@@ -25,6 +25,9 @@ struct SettingsView: View {
             }
             await viewModel?.loadUser()
             await viewModel?.loadNotificationPreferences()
+            if let viewModel {
+                await syncSystemNotificationAuthorizationIfNeeded(viewModel: viewModel)
+            }
             pdfCacheSize = await PDFCache.shared.cacheSize()
             thumbnailCacheSize = await ThumbnailCache.shared.cacheSize()
         }
@@ -67,7 +70,7 @@ struct SettingsView: View {
                             .foregroundStyle(GlassTheme.error)
                         Spacer()
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
                 }
                 .buttonStyle(.liquidGlass)
                 .accessibilityHint("Sign out of your account")
@@ -339,6 +342,19 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .tint(GlassTheme.accent)
+    }
+
+    @MainActor
+    private func syncSystemNotificationAuthorizationIfNeeded(viewModel: SettingsViewModel) async {
+        guard viewModel.notificationPreferences.enabled else { return }
+        let status = await PushNotificationManager.shared.currentAuthorizationStatus()
+        guard status == .notDetermined else { return }
+
+        let granted = await PushNotificationManager.shared.requestAuthorization()
+        if !granted {
+            viewModel.notificationPreferences.enabled = false
+            viewModel.queueNotificationPreferencesUpdate()
+        }
     }
 
     private func preferenceBinding(

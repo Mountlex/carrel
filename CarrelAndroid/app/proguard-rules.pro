@@ -28,3 +28,11 @@
 # Java management classes not available on Android (used by Ktor debug detection)
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
+
+# JNA (used transitively by Convex SDK)
+# Native init reflects on fields/methods (e.g. Pointer.peer); keep them intact.
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class com.sun.jna.Pointer {
+    long peer;
+}
+-dontwarn com.sun.jna.**

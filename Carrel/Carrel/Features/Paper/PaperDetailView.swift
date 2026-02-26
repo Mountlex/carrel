@@ -191,6 +191,7 @@ struct PaperDetailView: View {
     }
 
     private func startSubscription() async {
+        guard subscriptionTask == nil else { return }
         let paperId = viewModel.paper.id
         subscriptionTask = Task {
             do {
@@ -491,10 +492,12 @@ struct EditPaperSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
-                            await viewModel.updateMetadata(
+                            let saved = await viewModel.updateMetadata(
                                 title: title.isEmpty ? nil : title
                             )
-                            dismiss()
+                            if saved {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(viewModel.isLoading)
@@ -502,6 +505,16 @@ struct EditPaperSheet: View {
             }
             .onAppear {
                 title = viewModel.paper.title ?? ""
+            }
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            )) {
+                Button("OK") {
+                    viewModel.clearError()
+                }
+            } message: {
+                Text(viewModel.error ?? "Unknown error")
             }
         }
     }

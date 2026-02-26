@@ -49,7 +49,7 @@ fun LoginScreen(
     oAuthHandler: OAuthHandler,
     authManager: AuthManager? = null,
     convexService: ConvexService? = null,
-    useWebView: Boolean = true
+    useWebView: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

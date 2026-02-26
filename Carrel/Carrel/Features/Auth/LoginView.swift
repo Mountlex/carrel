@@ -5,6 +5,8 @@ struct LoginView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var authSession: ASWebAuthenticationSession?
     @State private var error: String?
+    @State private var isStartingSignIn = false
+    @State private var activeProvider: OAuthProvider?
 
     var body: some View {
         ZStack {
@@ -33,11 +35,15 @@ struct LoginView: View {
                     VStack(spacing: 16) {
                         SignInButton(
                             provider: .github,
+                            isLoading: isStartingSignIn && activeProvider == .github,
+                            isDisabled: isStartingSignIn,
                             action: { signIn(with: .github) }
                         )
 
                         SignInButton(
                             provider: .gitlab,
+                            isLoading: isStartingSignIn && activeProvider == .gitlab,
+                            isDisabled: isStartingSignIn,
                             action: { signIn(with: .gitlab) }
                         )
 
@@ -56,6 +62,8 @@ struct LoginView: View {
 
                         SignInButton(
                             provider: .email,
+                            isLoading: isStartingSignIn && activeProvider == .email,
+                            isDisabled: isStartingSignIn,
                             action: { signIn(with: .email) }
                         )
                     }
@@ -77,11 +85,17 @@ struct LoginView: View {
     }
 
     private func signIn(with provider: OAuthProvider) {
+        guard !isStartingSignIn else { return }
+        isStartingSignIn = true
+        activeProvider = provider
+
         guard var components = URLComponents(
             url: AuthManager.siteURL.appendingPathComponent("mobile-auth"),
             resolvingAgainstBaseURL: true
         ) else {
             error = "Failed to build authentication URL"
+            isStartingSignIn = false
+            activeProvider = nil
             return
         }
         components.queryItems = [
@@ -90,6 +104,8 @@ struct LoginView: View {
 
         guard let url = components.url else {
             error = "Failed to build authentication URL"
+            isStartingSignIn = false
+            activeProvider = nil
             return
         }
 
@@ -97,35 +113,41 @@ struct LoginView: View {
             url: url,
             callbackURLScheme: "carrel"
         ) { callbackURL, error in
-            self.authSession = nil
+            Task { @MainActor in
+                self.authSession = nil
+                defer {
+                    self.isStartingSignIn = false
+                    self.activeProvider = nil
+                }
 
-            if let error = error as? ASWebAuthenticationSessionError,
-               error.code == .canceledLogin {
-                return
-            }
+                if let error = error as? ASWebAuthenticationSessionError,
+                   error.code == .canceledLogin {
+                    return
+                }
 
-            if let error = error {
-                self.error = error.localizedDescription
-                return
-            }
+                if let error = error {
+                    self.error = error.localizedDescription
+                    return
+                }
 
-            guard let callbackURL = callbackURL,
-                  let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                  let queryItems = components.queryItems else {
-                self.error = "Invalid callback"
-                return
-            }
+                guard let callbackURL = callbackURL,
+                      let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+                      let queryItems = components.queryItems else {
+                    self.error = "Invalid callback"
+                    return
+                }
 
-            if let errorItem = queryItems.first(where: { $0.name == "error" }),
-               let errorMessage = errorItem.value {
-                self.error = errorMessage
-                return
-            }
+                if let errorItem = queryItems.first(where: { $0.name == "error" }),
+                   let errorMessage = errorItem.value {
+                    self.error = errorMessage
+                    return
+                }
 
-            if let tokenItem = queryItems.first(where: { $0.name == "token" }),
-               let token = tokenItem.value {
-                Task {
+                if let tokenItem = queryItems.first(where: { $0.name == "token" }),
+                   let token = tokenItem.value {
                     await authManager.handleOAuthCallback(token: token)
+                } else {
+                    self.error = "Invalid callback"
                 }
             }
         }
@@ -133,19 +155,32 @@ struct LoginView: View {
         session.prefersEphemeralWebBrowserSession = false
         session.presentationContextProvider = WebAuthContextProvider.shared
         authSession = session
-        session.start()
+        guard session.start() else {
+            authSession = nil
+            isStartingSignIn = false
+            activeProvider = nil
+            error = "Failed to start sign in"
+            return
+        }
     }
 }
 
 struct SignInButton: View {
     let provider: OAuthProvider
+    let isLoading: Bool
+    let isDisabled: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
                 // Only show icon for email
-                if provider == .email {
+                if provider == .email && !isLoading {
                     Image(systemName: provider.iconName)
                         .font(.title3)
                 }
@@ -158,6 +193,7 @@ struct SignInButton: View {
         }
         .buttonStyle(.liquidGlass)
         .foregroundStyle(.primary)
+        .disabled(isDisabled)
     }
 }
 
