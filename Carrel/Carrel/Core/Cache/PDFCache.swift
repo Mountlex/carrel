@@ -39,19 +39,22 @@ enum PDFCacheError: Error, LocalizedError {
 actor PDFCache {
     static let shared = PDFCache()
 
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
     private let cacheDirectory: URL
     private let maxFileSize = 50 * 1024 * 1024 // 50MB per file
     private let maxTotalSize: Int64 = 500 * 1024 * 1024 // 500MB total cache limit
 
     private init() {
+        let fileManager = FileManager.default
+        self.fileManager = fileManager
+
         // Get caches directory, fallback to temp directory if unavailable (extremely rare on iOS)
         let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        cacheDirectory = caches.appendingPathComponent("PDFCache", isDirectory: true)
+        self.cacheDirectory = caches.appendingPathComponent("PDFCache", isDirectory: true)
 
         // Create cache directory if needed
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
     }
 
     // Check if a PDF is cached without loading it

@@ -378,8 +378,8 @@ final class AuthManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let deviceId = await UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
-        let deviceName = await UIDevice.current.name
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
+        let deviceName = UIDevice.current.name
         let body: [String: Any] = [
             "convexToken": token,
             "deviceId": deviceId,

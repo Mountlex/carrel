@@ -5,21 +5,26 @@ import CryptoKit
 actor ThumbnailCache {
     static let shared = ThumbnailCache()
 
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
     private let cacheDirectory: URL
-    private let memoryCache = NSCache<NSString, UIImage>()
+    private let memoryCache: NSCache<NSString, UIImage>
     private let maxTotalDiskSize: Int64 = 100 * 1024 * 1024 // 100MB disk cache limit
 
     private init() {
+        let fileManager = FileManager.default
+        self.fileManager = fileManager
+
         // Get caches directory, fallback to temp directory if unavailable (extremely rare on iOS)
         let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        cacheDirectory = caches.appendingPathComponent("ThumbnailCache", isDirectory: true)
+        self.cacheDirectory = caches.appendingPathComponent("ThumbnailCache", isDirectory: true)
 
         // Create cache directory if needed
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
 
+        let memoryCache = NSCache<NSString, UIImage>()
         memoryCache.countLimit = 50 // Keep ~50 thumbnails in memory
+        self.memoryCache = memoryCache
     }
 
     func fetchThumbnail(from url: URL) async throws -> UIImage {

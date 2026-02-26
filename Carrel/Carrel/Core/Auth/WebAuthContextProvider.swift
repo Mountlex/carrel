@@ -6,10 +6,22 @@ final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationCon
     static let shared = WebAuthContextProvider()
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            return ASPresentationAnchor()
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+
+        if let keyWindow = scenes
+            .first(where: { $0.activationState == .foregroundActive })?
+            .windows
+            .first(where: \.isKeyWindow) {
+            return keyWindow
         }
-        return window
+
+        if let anyWindow = scenes.lazy.flatMap(\.windows).first {
+            return anyWindow
+        }
+
+        guard let scene = scenes.first else {
+            preconditionFailure("No UIWindowScene available for ASWebAuthenticationSession")
+        }
+        return ASPresentationAnchor(windowScene: scene)
     }
 }
