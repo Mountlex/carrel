@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require("uuid");
 const { logger, createRequestLogger } = require("./lib/logger");
 const { spawnAsync, runLatexmk, runLatexmkWithProgress, runPdftoppm } = require("./lib/subprocess");
 const { cloneRepository, cloneRepositorySparse, BINARY_EXTENSIONS } = require("./lib/gitOperations");
+const { extractMissingFiles } = require("./lib/latexDependencies");
 const { withCleanup, cleanupAllPendingWorkDirs } = require("./lib/cleanup");
 const { rateLimit } = require("./lib/rateLimit");
 const { compilationQueue } = require("./lib/queue");
@@ -83,19 +84,85 @@ function buildSparsePaths(target, dependencies) {
   return unique;
 }
 
-function extractMissingFile(logText) {
-  if (!logText) return null;
-  const patterns = [
-    /! LaTeX Error: File [`']([^`']+)[`'] not found\./,
-    /! I can't find file [`']([^`']+)[`']\./,
-  ];
-  for (const pattern of patterns) {
-    const match = logText.match(pattern);
-    if (match && match[1]) {
-      return match[1];
+async function readSparseCheckoutEntries(workDir) {
+  const sparseFile = path.join(workDir, ".git", "info", "sparse-checkout");
+  const existing = await fs.readFile(sparseFile, "utf-8").catch(() => "");
+  const entries = existing
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return { sparseFile, entries };
+}
+
+async function resolveMissingRepoPath(workDir, missingFile, logger) {
+  const normalizedMissing = normalizeRepoPath(missingFile);
+  if (normalizedMissing) {
+    const exactResult = await spawnAsync(
+      "git",
+      ["-C", workDir, "ls-tree", "-r", "--name-only", "HEAD", normalizedMissing],
+      { timeout: 10000, logger }
+    );
+    if (exactResult.success && exactResult.stdout.trim()) {
+      return normalizedMissing;
     }
   }
-  return null;
+
+  const basename = missingFile.split("/").pop();
+  if (!basename) return null;
+
+  const listResult = await spawnAsync(
+    "git",
+    ["-C", workDir, "ls-tree", "-r", "--name-only", "HEAD"],
+    { timeout: 20000, logger }
+  );
+  if (!listResult.success) {
+    return null;
+  }
+
+  const matches = listResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && (line === basename || line.endsWith(`/${basename}`)));
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function addMissingFilesToSparseCheckout(workDir, missingFiles, logger) {
+  if (!Array.isArray(missingFiles) || missingFiles.length === 0) {
+    return [];
+  }
+
+  const { sparseFile, entries } = await readSparseCheckoutEntries(workDir);
+  const existingEntries = new Set(entries);
+  const addedPaths = [];
+
+  for (const missingFile of missingFiles) {
+    const resolvedPath = await resolveMissingRepoPath(workDir, missingFile, logger);
+    if (!resolvedPath || existingEntries.has(resolvedPath)) {
+      continue;
+    }
+    existingEntries.add(resolvedPath);
+    addedPaths.push(resolvedPath);
+  }
+
+  if (addedPaths.length === 0) {
+    return [];
+  }
+
+  await fs.mkdir(path.dirname(sparseFile), { recursive: true });
+  await fs.writeFile(sparseFile, `${Array.from(existingEntries).join("\n")}\n`);
+
+  const reapplyResult = await spawnAsync(
+    "git",
+    ["-C", workDir, "sparse-checkout", "reapply"],
+    { timeout: 20000, logger }
+  );
+  if (!reapplyResult.success) {
+    logger?.warn?.("Failed to reapply sparse checkout after adding missing files");
+    return [];
+  }
+
+  return addedPaths;
 }
 
 function getCacheEntryPaths({ paperId, compiler, target }) {
@@ -1028,70 +1095,23 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
 
         let compileResult = await runCompile();
 
-        if (!compileResult.success && sparsePaths.length > 0) {
-          const missingFile = extractMissingFile(compileResult.log);
-          if (missingFile) {
-            req.log.warn(`Missing file detected: ${missingFile}`);
-            const normalizedMissing = normalizeRepoPath(missingFile) || normalizeRepoPath(`${missingFile}`);
-            let sparseAdded = false;
-            let addedPath = null;
-
-            if (normalizedMissing) {
-              const lsResult = await spawnAsync(
-                "git",
-                ["-C", workDir, "ls-tree", "-r", "--name-only", "HEAD", normalizedMissing],
-                { timeout: 10000, logger: req.log }
-              );
-              if (lsResult.success && lsResult.stdout.trim()) {
-                const sparseFile = path.join(workDir, ".git", "info", "sparse-checkout");
-                const existing = await fs.readFile(sparseFile, "utf-8").catch(() => "");
-                if (!existing.split("\n").includes(normalizedMissing)) {
-                  await fs.writeFile(sparseFile, existing + normalizedMissing + "\n");
-                  addedPath = normalizedMissing;
-                }
-                await spawnAsync("git", ["-C", workDir, "sparse-checkout", "reapply"], {
-                  timeout: 20000,
-                  logger: req.log,
-                });
-                sparseAdded = true;
-              }
+        if (sparsePaths.length > 0) {
+          const MAX_SPARSE_RECOVERY_ATTEMPTS = 5;
+          for (let attempt = 0; attempt < MAX_SPARSE_RECOVERY_ATTEMPTS; attempt += 1) {
+            const missingFiles = extractMissingFiles(compileResult.log);
+            if (missingFiles.length === 0) {
+              break;
             }
 
-            if (!sparseAdded) {
-              const basename = missingFile.split("/").pop();
-              const listResult = await spawnAsync(
-                "git",
-                ["-C", workDir, "ls-tree", "-r", "--name-only", "HEAD"],
-                { timeout: 20000, logger: req.log }
-              );
-              if (listResult.success && basename) {
-                const matches = listResult.stdout
-                  .split("\n")
-                  .map((line) => line.trim())
-                  .filter((line) => line && (line === basename || line.endsWith(`/${basename}`)));
-                if (matches.length === 1) {
-                  const sparseFile = path.join(workDir, ".git", "info", "sparse-checkout");
-                  const existing = await fs.readFile(sparseFile, "utf-8").catch(() => "");
-                  if (!existing.split("\n").includes(matches[0])) {
-                    await fs.writeFile(sparseFile, existing + matches[0] + "\n");
-                    addedPath = matches[0];
-                  }
-                  await spawnAsync("git", ["-C", workDir, "sparse-checkout", "reapply"], {
-                    timeout: 20000,
-                    logger: req.log,
-                  });
-                  sparseAdded = true;
-                }
-              }
+            req.log.warn(`Missing repo files detected in LaTeX log: ${missingFiles.join(", ")}`);
+            const addedPaths = await addMissingFilesToSparseCheckout(workDir, missingFiles, req.log);
+            if (addedPaths.length === 0) {
+              break;
             }
 
-            if (sparseAdded) {
-              if (addedPath) {
-                effectiveSparsePaths = Array.from(new Set([...(effectiveSparsePaths || []), addedPath]));
-              }
-              req.log.info("Sparse checkout updated with missing file, retrying compile");
-              compileResult = await runCompile();
-            }
+            effectiveSparsePaths = Array.from(new Set([...(effectiveSparsePaths || []), ...addedPaths]));
+            req.log.info(`Sparse checkout updated with ${addedPaths.length} file(s), retrying compile`);
+            compileResult = await runCompile();
           }
         }
 
