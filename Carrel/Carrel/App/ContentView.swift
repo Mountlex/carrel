@@ -27,15 +27,28 @@ struct ContentView: View {
         .onChange(of: authManager.isAuthenticated) { _, isAuthenticated in
             PushNotificationManager.shared.setAuthenticated(isAuthenticated)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { notification in
+            guard let isConnected = notification.object as? Bool, isConnected else { return }
+            guard authManager.isAuthenticated else { return }
+            Task {
+                await authManager.refreshSessionIfNeededOnAppActive()
+            }
+        }
     }
 }
 
 struct MainTabView: View {
+    @Environment(AppNavigationCoordinator.self) private var appNavigation
+
     var body: some View {
-        TabView {
+        TabView(selection: Binding(
+            get: { appNavigation.selectedTab },
+            set: { appNavigation.selectedTab = $0 }
+        )) {
             NavigationStack {
                 GalleryView()
             }
+            .tag(AppNavigationCoordinator.Tab.papers)
             .tabItem {
                 Label("Papers", systemImage: "doc.text.fill")
             }
@@ -43,6 +56,7 @@ struct MainTabView: View {
             NavigationStack {
                 RepositoryListView()
             }
+            .tag(AppNavigationCoordinator.Tab.repositories)
             .tabItem {
                 Label("Repositories", systemImage: "folder.fill")
             }
@@ -50,6 +64,7 @@ struct MainTabView: View {
             NavigationStack {
                 SettingsView()
             }
+            .tag(AppNavigationCoordinator.Tab.settings)
             .tabItem {
                 Label("Settings", systemImage: "gear")
             }

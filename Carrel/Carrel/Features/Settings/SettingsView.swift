@@ -26,7 +26,7 @@ struct SettingsView: View {
             await viewModel?.loadUser()
             await viewModel?.loadNotificationPreferences()
             if let viewModel {
-                await syncSystemNotificationAuthorizationIfNeeded(viewModel: viewModel)
+                syncNotificationPreference(viewModel: viewModel)
             }
             pdfCacheSize = await PDFCache.shared.cacheSize()
             thumbnailCacheSize = await ThumbnailCache.shared.cacheSize()
@@ -238,14 +238,16 @@ struct SettingsView: View {
                 .onChange(of: viewModel.notificationPreferences.enabled) { _, enabled in
                     Task { @MainActor in
                         if enabled {
+                            PushNotificationManager.shared.setNotificationsEnabled(true)
                             let granted = await PushNotificationManager.shared.requestAuthorization()
                             if !granted {
+                                PushNotificationManager.shared.setNotificationsEnabled(false)
                                 viewModel.notificationPreferences.enabled = false
                                 viewModel.queueNotificationPreferencesUpdate()
                                 return
                             }
                         } else {
-                            await PushNotificationManager.shared.unregisterDeviceToken()
+                            PushNotificationManager.shared.setNotificationsEnabled(false)
                         }
                         viewModel.queueNotificationPreferencesUpdate()
                     }
@@ -344,17 +346,8 @@ struct SettingsView: View {
         .tint(GlassTheme.accent)
     }
 
-    @MainActor
-    private func syncSystemNotificationAuthorizationIfNeeded(viewModel: SettingsViewModel) async {
-        guard viewModel.notificationPreferences.enabled else { return }
-        let status = await PushNotificationManager.shared.currentAuthorizationStatus()
-        guard status == .notDetermined else { return }
-
-        let granted = await PushNotificationManager.shared.requestAuthorization()
-        if !granted {
-            viewModel.notificationPreferences.enabled = false
-            viewModel.queueNotificationPreferencesUpdate()
-        }
+    private func syncNotificationPreference(viewModel: SettingsViewModel) {
+        PushNotificationManager.shared.setNotificationsEnabled(viewModel.notificationPreferences.enabled)
     }
 
     private func preferenceBinding(

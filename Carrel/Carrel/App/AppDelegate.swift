@@ -44,4 +44,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         completionHandler([.banner, .sound, .badge])
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        await PushNotificationManager.shared.handleNotificationResponse(
+            userInfo: response.notification.request.content.userInfo
+        )
+    }
 }

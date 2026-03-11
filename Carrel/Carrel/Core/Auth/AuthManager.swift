@@ -98,9 +98,7 @@ final class AuthManager {
         let success = await ConvexService.shared.setAuthToken(token)
 
         if success {
-            accessToken = token
-            isAuthenticated = true
-            startTokenMonitor()
+            markSessionAuthenticated(with: token)
             #if DEBUG
             print("AuthManager: Restored session, isAuthenticated = true")
             #endif
@@ -110,7 +108,12 @@ final class AuthManager {
             #endif
             let refreshed = await refreshTokenSilently()
             if !refreshed {
-                await handleFailedStartupRefresh()
+                let hasRefreshToken = await keychain.loadRefreshToken() != nil
+                if !NetworkMonitor.shared.isConnected || hasRefreshToken {
+                    preserveLocalSessionForRetry(token)
+                } else {
+                    await handleFailedStartupRefresh()
+                }
             }
         }
     }
@@ -118,6 +121,7 @@ final class AuthManager {
     /// Re-check token freshness when app becomes active.
     func refreshSessionIfNeededOnAppActive() async {
         if isAuthenticated {
+            await reconnectRealtimeSessionIfNeeded()
             await ensureTokenFreshness()
             return
         }
@@ -190,9 +194,7 @@ final class AuthManager {
                 // Configure ConvexService with new token
                 let success = await ConvexService.shared.setAuthToken(result.accessToken)
                 if success {
-                    accessToken = result.accessToken
-                    isAuthenticated = true
-                    startTokenMonitor()
+                    markSessionAuthenticated(with: result.accessToken)
 
                     #if DEBUG
                     let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
@@ -203,6 +205,7 @@ final class AuthManager {
                     #if DEBUG
                     print("AuthManager: Convex rejected the refreshed token")
                     #endif
+                    preserveLocalSessionForRetry(result.accessToken)
                     return false
                 }
             } else {
@@ -313,6 +316,35 @@ final class AuthManager {
         }
     }
 
+    private func markSessionAuthenticated(with token: String) {
+        accessToken = token
+        isAuthenticated = true
+        startTokenMonitor()
+    }
+
+    private func preserveLocalSessionForRetry(_ token: String) {
+        guard !isTokenExpired(token) else { return }
+        markSessionAuthenticated(with: token)
+        #if DEBUG
+        print("AuthManager: Preserving local session until realtime reconnect succeeds")
+        #endif
+    }
+
+    private func reconnectRealtimeSessionIfNeeded() async {
+        guard !ConvexService.shared.isAuthenticated else { return }
+
+        var candidateToken = accessToken
+        if candidateToken == nil {
+            candidateToken = await keychain.loadConvexAuthToken()
+        }
+        guard let token = candidateToken, !isTokenExpired(token) else { return }
+
+        let success = await ConvexService.shared.setAuthToken(token)
+        if success {
+            accessToken = token
+        }
+    }
+
     // MARK: - Token Validation
 
     /// Check if a JWT token is expired
@@ -378,14 +410,14 @@ final class AuthManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
-        let deviceName = UIDevice.current.name
-        let body: [String: Any] = [
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString
+        var body: [String: Any] = [
             "convexToken": token,
-            "deviceId": deviceId,
-            "deviceName": deviceName,
             "platform": "ios"
         ]
+        if let deviceId {
+            body["deviceId"] = deviceId
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
@@ -421,9 +453,7 @@ final class AuthManager {
             // Configure ConvexService with the 90-day token
             let success = await ConvexService.shared.setAuthToken(result.accessToken)
             if success {
-                accessToken = result.accessToken
-                isAuthenticated = true
-                startTokenMonitor()
+                markSessionAuthenticated(with: result.accessToken)
 
                 #if DEBUG
                 let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
@@ -455,9 +485,7 @@ final class AuthManager {
 
         let success = await ConvexService.shared.setAuthToken(token)
         if success {
-            accessToken = token
-            isAuthenticated = true
-            startTokenMonitor()
+            markSessionAuthenticated(with: token)
             #if DEBUG
             print("AuthManager: Using original Convex Auth token (expires in ~1 hour)")
             #endif
@@ -468,6 +496,7 @@ final class AuthManager {
     func logout() async {
         stopTokenMonitor()
         await PushNotificationManager.shared.unregisterDeviceToken()
+        await revokeStoredRefreshToken()
         accessToken = nil
         await ConvexService.shared.clearAuth()
         await keychain.clearAllTokens()
@@ -525,6 +554,24 @@ final class AuthManager {
             await keychain.clearConvexAuthToken()
             await ConvexService.shared.clearAuth()
             isAuthenticated = false
+        }
+    }
+
+    private func revokeStoredRefreshToken() async {
+        guard let refreshToken = await keychain.loadRefreshToken() else { return }
+
+        let url = Self.convexHTTPURL.appendingPathComponent("api/mobile/revoke")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["refreshToken": refreshToken])
+
+        do {
+            _ = try await URLSession.shared.data(for: request)
+        } catch {
+            #if DEBUG
+            print("AuthManager: Failed to revoke refresh token on logout: \(error)")
+            #endif
         }
     }
 }

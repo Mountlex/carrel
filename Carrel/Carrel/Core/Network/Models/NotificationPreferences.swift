@@ -18,7 +18,7 @@ struct NotificationPreferences: Codable, Equatable {
     }
 
     static let `default` = NotificationPreferences(
-        enabled: true,
+        enabled: false,
         buildSuccess: true,
         buildFailure: true,
         paperUpdated: true,

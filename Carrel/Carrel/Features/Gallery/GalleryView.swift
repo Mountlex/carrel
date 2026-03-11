@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct GalleryView: View {
+    @Environment(AppNavigationCoordinator.self) private var appNavigation
     @State private var viewModel = GalleryViewModel()
     @State private var selectedPaper: Paper?
     @State private var openingPaperId: String?
+    @State private var pendingPaperLookupID: String?
     @State private var searchText = ""
     @State private var isOffline = false
     private let searchBarTopInset: CGFloat = 8
@@ -115,6 +117,17 @@ struct GalleryView: View {
             }
             .onAppear {
                 isOffline = !NetworkMonitor.shared.isConnected
+                handlePendingPaperNavigation()
+            }
+            .onChange(of: appNavigation.pendingPaperID) { _, _ in
+                handlePendingPaperNavigation()
+            }
+            .onChange(of: viewModel.papers) { _, _ in
+                handlePendingPaperNavigation()
+            }
+            .onChange(of: viewModel.isLoading) { _, isLoading in
+                guard !isLoading else { return }
+                handlePendingPaperNavigation()
             }
     }
 
@@ -226,6 +239,47 @@ struct GalleryView: View {
             selectedPaper = paper
             withAnimation(GlassTheme.quickMotion) {
                 openingPaperId = nil
+            }
+        }
+    }
+
+    private func handlePendingPaperNavigation() {
+        guard let pendingPaperID = appNavigation.pendingPaperID else {
+            pendingPaperLookupID = nil
+            return
+        }
+
+        if selectedPaper?.id == pendingPaperID {
+            appNavigation.consumePendingPaper(id: pendingPaperID)
+            return
+        }
+
+        if let paper = viewModel.papers.first(where: { $0.id == pendingPaperID }) {
+            pendingPaperLookupID = nil
+            appNavigation.consumePendingPaper(id: pendingPaperID)
+            openPaper(paper)
+            return
+        }
+
+        guard !viewModel.isLoading, pendingPaperLookupID != pendingPaperID else { return }
+        pendingPaperLookupID = pendingPaperID
+
+        Task { @MainActor in
+            defer {
+                if pendingPaperLookupID == pendingPaperID {
+                    pendingPaperLookupID = nil
+                }
+            }
+
+            do {
+                let paper = try await ConvexService.shared.getPaper(id: pendingPaperID)
+                guard appNavigation.pendingPaperID == pendingPaperID else { return }
+                appNavigation.consumePendingPaper(id: pendingPaperID)
+                openPaper(paper)
+            } catch {
+                #if DEBUG
+                print("GalleryView: Failed to resolve notification paper \(pendingPaperID): \(error)")
+                #endif
             }
         }
     }

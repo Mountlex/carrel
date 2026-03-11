@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct CarrelApp: App {
     @State private var authManager = AuthManager()
+    @State private var appNavigation = AppNavigationCoordinator.shared
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.scenePhase) private var scenePhase
@@ -17,6 +18,7 @@ struct CarrelApp: App {
                 }
             }
             .environment(authManager)
+            .environment(appNavigation)
             .task {
                 // Start network monitoring
                 NetworkMonitor.shared.start()
