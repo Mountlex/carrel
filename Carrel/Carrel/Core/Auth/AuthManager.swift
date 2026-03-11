@@ -409,6 +409,7 @@ final class AuthManager {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         let deviceId = UIDevice.current.identifierForVendor?.uuidString
         var body: [String: Any] = [

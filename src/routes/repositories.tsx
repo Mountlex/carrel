@@ -87,6 +87,25 @@ function RepositoriesPage() {
   const [githubLoadError, setGithubLoadError] = useState<string | null>(null);
   const [gitlabLoadError, setGitlabLoadError] = useState<string | null>(null);
 
+  const resetAddModalState = useCallback(() => {
+    setUserRepos(null);
+    setGitlabRepos(null);
+    setGithubLoadError(null);
+    setGitlabLoadError(null);
+    setIsLoadingRepos(false);
+    setIsLoadingGitLabRepos(false);
+  }, []);
+
+  const openAddModal = useCallback(() => {
+    resetAddModalState();
+    setIsAddModalOpen(true);
+  }, [resetAddModalState]);
+
+  const closeAddModal = useCallback(() => {
+    setIsAddModalOpen(false);
+    resetAddModalState();
+  }, [resetAddModalState]);
+
   // Sync state
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   const [isCheckingAll, setIsCheckingAll] = useState(false);
@@ -223,7 +242,7 @@ function RepositoriesPage() {
         name: repoInfo.name,
         defaultBranch: repoInfo.defaultBranch,
       });
-      setIsAddModalOpen(false);
+      closeAddModal();
     } catch (error) {
       if (!handleGitLabAuthError(error)) {
         showError(error, "Failed to add repository");
@@ -240,7 +259,7 @@ function RepositoriesPage() {
         name: repo.name,
         defaultBranch: repo.defaultBranch,
       });
-      setIsAddModalOpen(false);
+      closeAddModal();
     } catch (error) {
       if (!handleGitLabAuthError(error)) {
         showError(error, "Failed to add repository");
@@ -258,7 +277,7 @@ function RepositoriesPage() {
         name: repoInfo.name,
         defaultBranch: repoInfo.defaultBranch,
       });
-      setIsAddModalOpen(false);
+      closeAddModal();
     } catch (error) {
       if (!handleGitLabAuthError(error)) {
         showError(error, "Failed to add repository");
@@ -276,7 +295,7 @@ function RepositoriesPage() {
         name: repoInfo.name,
         defaultBranch: repoInfo.defaultBranch,
       });
-      setIsAddModalOpen(false);
+      closeAddModal();
     } catch (error) {
       if (!handleGitLabAuthError(error)) {
         showError(error, "Failed to add repository");
@@ -549,7 +568,7 @@ function RepositoriesPage() {
           </button>
           {/* Add Repository - icon only on mobile */}
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openAddModal}
             className="inline-flex items-center rounded-md bg-primary-600 p-2 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700 md:px-4 md:py-2"
             title="Add repository"
           >
@@ -579,7 +598,7 @@ function RepositoriesPage() {
           </p>
           <button
             onClick={() => {
-              setIsAddModalOpen(true);
+              openAddModal();
                           }}
             className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-normal text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-600 dark:hover:bg-primary-700"
           >
@@ -618,7 +637,7 @@ function RepositoriesPage() {
           isLoadingGitLabRepos={isLoadingGitLabRepos}
           githubLoadError={githubLoadError}
           gitlabLoadError={gitlabLoadError}
-          onClose={() => setIsAddModalOpen(false)}
+          onClose={closeAddModal}
           onAddFromUrl={handleAddFromUrl}
           onAddFromList={handleAddFromList}
           onAddOverleafRepo={handleAddOverleafRepo}

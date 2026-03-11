@@ -338,24 +338,18 @@ http.route({
 
     try {
       const body = await request.json();
-      const { convexToken, deviceId, deviceName, platform } = body;
+      const { deviceId, deviceName, platform } = body;
 
-      if (!convexToken) {
-        return jsonResponse({ error: "Missing convexToken" }, 400, origin);
-      }
-
-      // Validate the Convex Auth session token by querying the user
-      const identity = await ctx.runQuery(internal.mobileAuth.validateConvexToken, {
-        token: convexToken,
-      });
-
-      if (!identity || !identity.userId) {
+      // The short-lived Convex Auth token must be presented as a bearer token so
+      // the platform can validate it through the normal auth pipeline.
+      const userId = await auth.getUserId(ctx);
+      if (!userId) {
         return jsonResponse({ error: "Invalid or expired session token" }, 401, origin);
       }
 
       // Get user details
       const user = await ctx.runQuery(internal.mobileAuth.getUserById, {
-        userId: identity.userId,
+        userId,
       });
 
       if (!user) {
@@ -370,14 +364,14 @@ http.route({
 
       // Create Convex Auth-compatible JWT (RS256, works with real-time subscriptions)
       const accessToken = await createConvexAuthJwt(
-        identity.userId,
+        userId,
         CONVEX_AUTH_TOKEN_EXPIRY_MS
       );
 
       // Store refresh token hash
       const refreshTokenHash = await hashToken(refreshToken);
       await ctx.runMutation(internal.mobileAuth.createMobileTokenRecord, {
-        userId: identity.userId,
+        userId,
         refreshTokenHash,
         deviceId: deviceId || "unknown",
         deviceName: deviceName || "iOS Device",
@@ -385,7 +379,7 @@ http.route({
         expiresAt: refreshTokenExpiry,
       });
 
-      console.log(`[exchange] Created Convex Auth JWT for user ${identity.userId}, expires in 90 days`);
+      console.log(`[exchange] Created Convex Auth JWT for user ${userId}, expires in 90 days`);
 
       return jsonResponse(
         {
@@ -411,7 +405,14 @@ http.route({
 
 // Helper to verify mobile JWT and get user ID
 async function verifyMobileAuth(
-  ctx: { runQuery: (query: typeof internal.mobileAuth.getJwtSecret, args: Record<string, never>) => Promise<string> },
+  ctx: Parameters<typeof auth.getUserId>[0] & {
+    runQuery: typeof http extends never
+      ? never
+      : <TArgs extends Record<string, unknown>, TResult>(
+          query: (typeof internal.mobileAuth.getJwtSecret) | (typeof internal.mobileAuth.getUserById),
+          args: TArgs
+        ) => Promise<TResult>;
+  },
   request: Request
 ): Promise<{ userId: string; email: string; name?: string } | null> {
   const authHeader = request.headers.get("Authorization");
@@ -424,16 +425,35 @@ async function verifyMobileAuth(
   const jwtSecret = await ctx.runQuery(internal.mobileAuth.getJwtSecret, {});
   const payload = await verifyJwt(accessToken, jwtSecret);
 
-  if (!payload) {
+  if (payload) {
+    console.log("[verifyMobileAuth] Success with legacy JWT - userId:", payload.sub);
+    return {
+      userId: payload.sub as string,
+      email: payload.email as string,
+      name: payload.name as string | undefined,
+    };
+  }
+
+  const convexUserId = await auth.getUserId(ctx);
+  if (!convexUserId) {
     console.log("[verifyMobileAuth] JWT verification failed - token:", accessToken.substring(0, 20) + "...");
     return null;
   }
 
-  console.log("[verifyMobileAuth] Success - userId:", payload.sub);
+  const user = await ctx.runQuery(internal.mobileAuth.getUserById, {
+    userId: convexUserId,
+  });
+
+  if (!user) {
+    console.log("[verifyMobileAuth] Convex token resolved to missing user:", convexUserId);
+    return null;
+  }
+
+  console.log("[verifyMobileAuth] Success with Convex Auth token - userId:", convexUserId);
   return {
-    userId: payload.sub as string,
-    email: payload.email as string,
-    name: payload.name as string | undefined,
+    userId: convexUserId,
+    email: user.email ?? "",
+    name: user.name ?? undefined,
   };
 }
 

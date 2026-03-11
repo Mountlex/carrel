@@ -260,6 +260,7 @@ class AuthManager(
         try {
             val response = httpClient.post("${ConvexClient.BASE_URL}/api/mobile/exchange") {
                 contentType(ContentType.Application.Json)
+                header("Authorization", "Bearer $token")
                 setBody(mapOf(
                     "convexToken" to token,
                     "deviceId" to deviceId,

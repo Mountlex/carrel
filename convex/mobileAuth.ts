@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 
 // Token configuration
@@ -187,71 +186,6 @@ export const getJwtSecret = internalQuery({
       throw new Error("JWT_SECRET environment variable is not set");
     }
     return secret;
-  },
-});
-
-// Internal query to validate a Convex Auth session token and get user ID
-// The Convex Auth token is a JWT signed with RSA - we decode it to get the subject (user ID)
-export const validateConvexToken = internalQuery({
-  args: {
-    token: v.string(),
-  },
-  handler: async (ctx, args): Promise<{ userId: string } | null> => {
-    try {
-      // Decode the JWT payload (Convex Auth tokens are standard JWTs)
-      const parts = args.token.split(".");
-      if (parts.length !== 3) {
-        console.log("validateConvexToken: Invalid JWT format");
-        return null;
-      }
-
-      // Decode the payload (base64url encoded)
-      let base64 = parts[1]
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
-
-      // Add padding if needed
-      while (base64.length % 4 !== 0) {
-        base64 += "=";
-      }
-
-      const payloadJson = atob(base64);
-      const payload = JSON.parse(payloadJson);
-
-      // Check expiration
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        console.log("validateConvexToken: Token expired");
-        return null;
-      }
-
-      // Get the subject (user ID) - Convex Auth uses 'sub' claim
-      const subject = payload.sub;
-      if (!subject) {
-        console.log("validateConvexToken: No subject in token");
-        return null;
-      }
-
-      // The subject format in Convex Auth is typically the user ID or a compound ID
-      // Try to extract the user ID and verify the user exists
-      // Format might be "userId" or "userId|sessionId"
-      const userId = subject.includes("|") ? subject.split("|")[0] : subject;
-
-      // Verify the user exists in our database
-      try {
-        const user = await ctx.db.get(userId as Id<"users">);
-        if (!user) {
-          console.log("validateConvexToken: User not found:", userId);
-          return null;
-        }
-        return { userId };
-      } catch {
-        console.log("validateConvexToken: Invalid user ID format:", userId);
-        return null;
-      }
-    } catch (error) {
-      console.error("validateConvexToken: Error decoding token:", error);
-      return null;
-    }
   },
 });
 

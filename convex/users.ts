@@ -634,6 +634,8 @@ export const clearGitLabCredentials = mutation({
     // Clear the token from user record
     await ctx.db.patch(userId, {
       gitlabAccessToken: undefined,
+      gitlabRefreshToken: undefined,
+      gitlabTokenExpiresAt: undefined,
     });
 
     return { cleared: true, ...deletedCounts };
@@ -774,6 +776,8 @@ export const mergeAccountsByEmail = mutation({
     const tokenUpdates: Partial<{
       githubAccessToken: string;
       gitlabAccessToken: string;
+      gitlabRefreshToken: string;
+      gitlabTokenExpiresAt: number;
       overleafEmail: string;
       overleafToken: string;
     }> = {};
@@ -783,6 +787,12 @@ export const mergeAccountsByEmail = mutation({
     }
     if (!primary.gitlabAccessToken && secondary.gitlabAccessToken) {
       tokenUpdates.gitlabAccessToken = secondary.gitlabAccessToken;
+      if (secondary.gitlabRefreshToken) {
+        tokenUpdates.gitlabRefreshToken = secondary.gitlabRefreshToken;
+      }
+      if (secondary.gitlabTokenExpiresAt) {
+        tokenUpdates.gitlabTokenExpiresAt = secondary.gitlabTokenExpiresAt;
+      }
     }
     if (!primary.overleafEmail && secondary.overleafEmail) {
       tokenUpdates.overleafEmail = secondary.overleafEmail;
@@ -949,6 +959,8 @@ export const linkProviderToAccount = mutation({
     const tokenUpdates: Partial<{
       githubAccessToken: string;
       gitlabAccessToken: string;
+      gitlabRefreshToken: string;
+      gitlabTokenExpiresAt: number;
       overleafEmail: string;
       overleafToken: string;
     }> = {};
@@ -958,6 +970,12 @@ export const linkProviderToAccount = mutation({
     }
     if (currentUser.gitlabAccessToken) {
       tokenUpdates.gitlabAccessToken = currentUser.gitlabAccessToken;
+      if (currentUser.gitlabRefreshToken) {
+        tokenUpdates.gitlabRefreshToken = currentUser.gitlabRefreshToken;
+      }
+      if (currentUser.gitlabTokenExpiresAt) {
+        tokenUpdates.gitlabTokenExpiresAt = currentUser.gitlabTokenExpiresAt;
+      }
     }
     if (currentUser.overleafEmail) {
       tokenUpdates.overleafEmail = currentUser.overleafEmail;
@@ -1075,7 +1093,11 @@ export const adminClearAllGitLabData = mutation({
     const users = await ctx.db.query("users").collect();
     for (const user of users) {
       if (user.gitlabAccessToken) {
-        await ctx.db.patch(user._id, { gitlabAccessToken: undefined });
+        await ctx.db.patch(user._id, {
+          gitlabAccessToken: undefined,
+          gitlabRefreshToken: undefined,
+          gitlabTokenExpiresAt: undefined,
+        });
       }
     }
 
@@ -1102,6 +1124,8 @@ export const adminMergeGitLabIntoGitHub = mutation({
     // Move GitLab token to GitHub user
     await ctx.db.patch(args.githubUserId, {
       gitlabAccessToken: gitlabUser.gitlabAccessToken,
+      gitlabRefreshToken: gitlabUser.gitlabRefreshToken,
+      gitlabTokenExpiresAt: gitlabUser.gitlabTokenExpiresAt,
     });
 
     // Update the GitLab authAccount to point to GitHub user

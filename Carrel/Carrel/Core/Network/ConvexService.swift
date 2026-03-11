@@ -286,7 +286,7 @@ final class ConvexService: ObservableObject {
 
     /// Toggle paper public status
     func togglePaperPublic(id: String) async throws -> TogglePublicResult {
-        try await client.mutation("papers:togglePublic", with: ["paperId": id])
+        try await client.mutation("papers:togglePublic", with: ["id": id])
     }
 
     // MARK: - User

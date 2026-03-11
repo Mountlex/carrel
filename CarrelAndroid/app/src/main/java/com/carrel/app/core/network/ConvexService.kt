@@ -389,7 +389,7 @@ class ConvexService(
      */
     suspend fun togglePaperPublic(id: String): Result<TogglePublicResult> {
         return runCatching {
-            client.mutation<TogglePublicResult>("papers:togglePublic", mapOf("paperId" to id))
+            client.mutation<TogglePublicResult>("papers:togglePublic", mapOf("id" to id))
         }
     }
 
