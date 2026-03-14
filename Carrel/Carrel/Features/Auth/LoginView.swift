@@ -143,8 +143,22 @@ struct LoginView: View {
                     return
                 }
 
-                if let tokenItem = queryItems.first(where: { $0.name == "token" }),
-                   let token = tokenItem.value {
+                if let accessToken = queryItems.first(where: { $0.name == "accessToken" })?.value,
+                   let expiresAt = queryItems.first(where: { $0.name == "expiresAt" })?.value,
+                   let expiresAtValue = Double(expiresAt) {
+                    let refreshToken = queryItems.first(where: { $0.name == "refreshToken" })?.value
+                    let refreshExpiresAt = queryItems
+                        .first(where: { $0.name == "refreshExpiresAt" })?
+                        .value
+                        .flatMap(Double.init)
+                    await authManager.handleOAuthCallback(
+                        accessToken: accessToken,
+                        refreshToken: refreshToken,
+                        expiresAt: expiresAtValue,
+                        refreshExpiresAt: refreshExpiresAt
+                    )
+                } else if let tokenItem = queryItems.first(where: { $0.name == "token" }),
+                          let token = tokenItem.value {
                     await authManager.handleOAuthCallback(token: token)
                 } else {
                     self.error = "Invalid callback"

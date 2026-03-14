@@ -289,8 +289,36 @@ final class AuthManager {
 
                 guard let callbackURL = callbackURL,
                       let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                      let queryItems = components.queryItems,
-                      let tokenItem = queryItems.first(where: { $0.name == "token" }),
+                      let queryItems = components.queryItems else {
+                    continuation.resume(returning: false)
+                    return
+                }
+
+                if let accessToken = queryItems.first(where: { $0.name == "accessToken" })?.value,
+                   let expiresAt = queryItems.first(where: { $0.name == "expiresAt" })?.value,
+                   let expiresAtValue = Double(expiresAt) {
+                    let refreshToken = queryItems.first(where: { $0.name == "refreshToken" })?.value
+                    let refreshExpiresAt = queryItems
+                        .first(where: { $0.name == "refreshExpiresAt" })?
+                        .value
+                        .flatMap(Double.init)
+
+                    Task { @MainActor in
+                        await self.handleOAuthCallback(
+                            accessToken: accessToken,
+                            refreshToken: refreshToken,
+                            expiresAt: expiresAtValue,
+                            refreshExpiresAt: refreshExpiresAt
+                        )
+                        #if DEBUG
+                        print("AuthManager: Interactive refresh successful")
+                        #endif
+                        continuation.resume(returning: true)
+                    }
+                    return
+                }
+
+                guard let tokenItem = queryItems.first(where: { $0.name == "token" }),
                       let token = tokenItem.value else {
                     continuation.resume(returning: false)
                     return
@@ -397,6 +425,23 @@ final class AuthManager {
         return remaining
     }
 
+    func handleOAuthCallback(
+        accessToken: String,
+        refreshToken: String?,
+        expiresAt: Double,
+        refreshExpiresAt: Double?
+    ) async {
+        let result = TokenResponse(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            expiresAt: expiresAt,
+            refreshExpiresAt: refreshExpiresAt,
+            tokenType: "Bearer"
+        )
+
+        await applyTokenResponse(result)
+    }
+
     /// Handle OAuth callback with the Convex Auth token
     /// Exchanges the short-lived Convex Auth token for a 90-day token + refresh token
     func handleOAuthCallback(token: String) async {
@@ -442,30 +487,7 @@ final class AuthManager {
             }
 
             let result = try JSONDecoder().decode(TokenResponse.self, from: data)
-
-            // Save the 90-day access token
-            try await keychain.saveConvexAuthToken(result.accessToken)
-
-            // Save the refresh token
-            if let refreshToken = result.refreshToken {
-                try await keychain.saveRefreshToken(refreshToken)
-            }
-
-            // Configure ConvexService with the 90-day token
-            let success = await ConvexService.shared.setAuthToken(result.accessToken)
-            if success {
-                markSessionAuthenticated(with: result.accessToken)
-
-                #if DEBUG
-                let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
-                print("AuthManager: Token exchange successful, token expires in \(Int(daysRemaining)) days")
-                #endif
-            } else {
-                #if DEBUG
-                print("AuthManager: Convex rejected the exchanged token, using original")
-                #endif
-                await useTokenDirectly(token)
-            }
+            await applyTokenResponse(result, fallbackToken: token)
         } catch {
             #if DEBUG
             print("AuthManager: Token exchange error: \(error), using original token")
@@ -491,6 +513,45 @@ final class AuthManager {
             print("AuthManager: Using original Convex Auth token (expires in ~1 hour)")
             #endif
         }
+    }
+
+    private func applyTokenResponse(
+        _ result: TokenResponse,
+        fallbackToken: String? = nil
+    ) async {
+        do {
+            try await keychain.saveConvexAuthToken(result.accessToken)
+            if let refreshToken = result.refreshToken {
+                try await keychain.saveRefreshToken(refreshToken)
+            } else {
+                await keychain.clearRefreshToken()
+            }
+        } catch {
+            #if DEBUG
+            print("AuthManager: Failed to save exchanged tokens: \(error)")
+            #endif
+        }
+
+        let success = await ConvexService.shared.setAuthToken(result.accessToken)
+        if success {
+            markSessionAuthenticated(with: result.accessToken)
+
+            #if DEBUG
+            let daysRemaining = (result.expiresAt - Date().timeIntervalSince1970 * 1000) / (1000 * 60 * 60 * 24)
+            print("AuthManager: Token exchange successful, token expires in \(Int(daysRemaining)) days")
+            #endif
+            return
+        }
+
+        if let fallbackToken {
+            #if DEBUG
+            print("AuthManager: Convex rejected the exchanged token, using original")
+            #endif
+            await useTokenDirectly(fallbackToken)
+            return
+        }
+
+        preserveLocalSessionForRetry(result.accessToken)
     }
 
     /// Logout and clear all auth state

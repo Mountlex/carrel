@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        await PushNotificationManager.shared.handleNotificationResponse(
+        PushNotificationManager.shared.handleNotificationResponse(
             userInfo: response.notification.request.content.userInfo
         )
     }

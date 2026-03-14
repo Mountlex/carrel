@@ -7,6 +7,53 @@ import { GitHubIcon, GitLabIcon } from "../components/icons";
 
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
+const DEVICE_ID_KEY = "carrel_mobile_device_id";
+
+type MobileExchangeResponse = {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number;
+  refreshExpiresAt?: number;
+};
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const generated = crypto.randomUUID?.() ?? `webview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_ID_KEY, generated);
+    return generated;
+  } catch {
+    return `webview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+
+  return {
+    deviceId: getOrCreateDeviceId(),
+    deviceName: isAndroid ? "Android Device" : isIOS ? "iOS Device" : "Mobile Device",
+    platform: (isAndroid ? "android" : isIOS ? "ios" : "unknown") as "android" | "ios" | "unknown",
+  };
+}
+
+function getConvexHttpOrigin() {
+  const convexUrl = import.meta.env.VITE_CONVEX_URL;
+  if (!convexUrl) {
+    return window.location.origin;
+  }
+
+  try {
+    const url = new URL(convexUrl);
+    url.hostname = url.hostname.replace(".convex.cloud", ".convex.site");
+    return url.origin;
+  } catch {
+    return window.location.origin;
+  }
+}
 
 // Redirect back to mobile app
 function notifyCancel() {
@@ -36,18 +83,49 @@ function MobileAuthPage() {
   const [error] = useState<string | null>(search.error ?? null);
   const [tokenExchangeAttempted, setTokenExchangeAttempted] = useState(false);
 
-  // Get the Convex Auth token and redirect to mobile app
-  const exchangeAndNotify = useCallback(() => {
+  // Exchange the short-lived web token for mobile credentials before redirecting.
+  const exchangeAndNotify = useCallback(async () => {
     if (!authToken) {
       window.location.href = `${MOBILE_CALLBACK_URL}?error=no_token`;
       return;
     }
 
-    // Pass Convex Auth token to iOS - single token that works with Convex SDK
-    const params = new URLSearchParams({
-      token: authToken,
-    });
-    window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
+    try {
+      const response = await fetch(`${getConvexHttpOrigin()}/api/mobile/exchange`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(getDeviceInfo()),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Token exchange failed with status ${response.status}`);
+      }
+
+      const tokens: MobileExchangeResponse = await response.json();
+      const params = new URLSearchParams({
+        accessToken: tokens.accessToken,
+        expiresAt: String(tokens.expiresAt),
+      });
+
+      if (tokens.refreshToken) {
+        params.set("refreshToken", tokens.refreshToken);
+      }
+      if (typeof tokens.refreshExpiresAt === "number") {
+        params.set("refreshExpiresAt", String(tokens.refreshExpiresAt));
+      }
+
+      window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
+    } catch (err) {
+      console.error("[mobile-auth] Token exchange error, falling back to web token:", err);
+
+      const params = new URLSearchParams({
+        token: authToken,
+      });
+      window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
+    }
   }, [authToken]);
 
   // Auto-start OAuth flow if provider is specified
@@ -77,7 +155,7 @@ function MobileAuthPage() {
         setIsRedirecting(true);
         setTokenExchangeAttempted(true);
         // Notify mobile app (via postMessage or redirect)
-        exchangeAndNotify();
+        void exchangeAndNotify();
       }, 500);
 
       return () => clearTimeout(timer);
@@ -102,7 +180,7 @@ function MobileAuthPage() {
           <p className="mt-2 text-sm text-gray-500">
             If you're not redirected automatically,{" "}
             <button
-              onClick={() => exchangeAndNotify()}
+              onClick={() => void exchangeAndNotify()}
               className="text-primary-600 underline"
             >
               tap here
