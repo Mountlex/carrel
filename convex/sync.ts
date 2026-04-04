@@ -8,6 +8,7 @@ import { sleep, type DependencyHash } from "./lib/http";
 import { isFileNotFoundError } from "./lib/providers/types";
 import { checkUserRateLimit, type UserRateLimitAction } from "./lib/rateLimit";
 import { resolveBackgroundRefreshEnabled, resolveCacheMode } from "./lib/settings";
+import { normalizeRepositorySyncError } from "./lib/syncErrors";
 
 // Minimum time between update notifications for the same out-of-sync paper
 const UPDATE_NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000;
@@ -400,6 +401,45 @@ export const updateRepositoryAfterSync = internalMutation({
   },
 });
 
+export const markRepositorySyncFailure = internalMutation({
+  args: {
+    repositoryId: v.id("repositories"),
+    error: v.string(),
+    attemptId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; updatedPapers: number }> => {
+    if (args.attemptId) {
+      const repo = await ctx.db.get(args.repositoryId);
+      if (repo && repo.currentSyncAttemptId !== args.attemptId) {
+        console.log(`Sync attempt ${args.attemptId} superseded, skipping repository error update`);
+        return { success: false, updatedPapers: 0 };
+      }
+    }
+
+    const now = Date.now();
+    const errorMessage = args.error.slice(0, 1000);
+
+    await ctx.db.patch(args.repositoryId, {
+      syncStatus: "error",
+      lastSyncedAt: now,
+    });
+
+    const papers = await ctx.db
+      .query("papers")
+      .withIndex("by_repository", (q) => q.eq("repositoryId", args.repositoryId))
+      .collect();
+
+    for (const paper of papers) {
+      await ctx.db.patch(paper._id, {
+        lastSyncError: errorMessage,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true, updatedPapers: papers.length };
+  },
+});
+
 // Refresh a repository - fetch latest commit and check if papers need updates
 // (renamed from syncRepository for clearer terminology)
 export const refreshRepository = action({
@@ -478,6 +518,9 @@ export const refreshRepository = action({
         if (!result.success) {
           console.log(`Sync attempt ${attemptId} was superseded`);
         }
+        await ctx.runMutation(internal.sync.clearPaperSyncErrors, {
+          repositoryId: args.repositoryId,
+        });
         return { updated: false, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
       }
 
@@ -711,15 +754,18 @@ export const refreshRepository = action({
         return { updated: true, commitHash: latestCommit.sha, superseded: true, dateIsFallback: latestCommit.dateIsFallback };
       }
 
+      await ctx.runMutation(internal.sync.clearPaperSyncErrors, {
+        repositoryId: args.repositoryId,
+      });
       return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
-      // Release lock on failure (paper errors are tracked per paper, not on repository)
-      await ctx.runMutation(internal.sync.releaseSyncLock, {
-        id: args.repositoryId,
-        status: "idle",
+      const normalizedError = normalizeRepositorySyncError(error);
+      await ctx.runMutation(internal.sync.markRepositorySyncFailure, {
+        repositoryId: args.repositoryId,
+        error: normalizedError.message,
         attemptId,
       });
-      throw error;
+      throw new Error(normalizedError.message);
     }
   },
 });
@@ -1905,13 +1951,13 @@ export const refreshRepositoryInternal = internalAction({
 
       return { updated: true, commitHash: latestCommit.sha, dateIsFallback: latestCommit.dateIsFallback };
     } catch (error) {
-      // Release lock on failure
-      await ctx.runMutation(internal.sync.releaseSyncLock, {
-        id: args.repositoryId,
-        status: "idle",
+      const normalizedError = normalizeRepositorySyncError(error);
+      await ctx.runMutation(internal.sync.markRepositorySyncFailure, {
+        repositoryId: args.repositoryId,
+        error: normalizedError.message,
         attemptId,
       });
-      throw error;
+      return { updated: false, failed: true, reason: normalizedError.message };
     }
   },
 });
@@ -1980,6 +2026,8 @@ export const refreshAllRepositories = action({
       if (result.status === "rejected") {
         failed++;
         console.error("Repository refresh failed:", result.reason);
+      } else if (result.value.failed) {
+        failed++;
       } else if (result.value.skipped) {
         skipped++;
       } else {
@@ -2045,6 +2093,8 @@ export const refreshAllRepositoriesForMobile = internalAction({
       if (result.status === "rejected") {
         failed++;
         console.error("Repository refresh failed:", result.reason);
+      } else if (result.value.failed) {
+        failed++;
       } else if (!result.value.skipped && result.value.updated) {
         updated++;
       }
@@ -2151,6 +2201,8 @@ export const backgroundRefreshForUser = internalAction({
       if (result.status === "rejected") {
         failed++;
         console.error("Background refresh failed:", result.reason);
+      } else if (result.value.failed) {
+        failed++;
       } else if (result.value.skipped) {
         skipped++;
       } else if (result.value.updated) {
