@@ -327,8 +327,8 @@ export const revokeToken = mutation({
     tokenId: v.id("mobileTokens"),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
       throw new Error("Not authenticated");
     }
 
@@ -337,13 +337,7 @@ export const revokeToken = mutation({
       throw new Error("Token not found");
     }
 
-    // Verify ownership
-    const user = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("email"), identity.email))
-      .first();
-
-    if (!user || token.userId !== user._id) {
+    if (token.userId !== userId) {
       throw new Error("Unauthorized");
     }
 
@@ -360,23 +354,14 @@ export const revokeToken = mutation({
 export const revokeAllTokens = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
       throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("email"), identity.email))
-      .first();
-
-    if (!user) {
-      throw new Error("User not found");
     }
 
     const tokens = await ctx.db
       .query("mobileTokens")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const now = Date.now();
@@ -488,23 +473,14 @@ export const generateMobileTokens = mutation({
 export const listActiveTokens = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("email"), identity.email))
-      .first();
-
-    if (!user) {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) {
       return [];
     }
 
     const tokens = await ctx.db
       .query("mobileTokens")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const now = Date.now();

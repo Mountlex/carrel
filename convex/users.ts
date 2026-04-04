@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { requireUserId } from "./lib/auth";
 import { logAudit } from "./lib/audit";
 import { encryptTokenIfNeeded } from "./lib/crypto";
 import { deleteRepositoriesAndData, deletePaperAndAssociatedData } from "./lib/cascadeDelete";
+import type { UserRateLimitAction } from "./lib/rateLimit";
 
 async function requireDevAdmin(ctx: Parameters<typeof auth.getUserId>[0] & { db: { get: (id: Id<"users">) => Promise<{ email?: string } | null> } }) {
   const userId = await requireUserId(ctx);
@@ -23,6 +25,136 @@ async function requireDevAdmin(ctx: Parameters<typeof auth.getUserId>[0] & { db:
   }
 
   return userId;
+}
+
+type UserRateLimitRecord = {
+  _id: Id<"userRateLimits">;
+  userId: Id<"users">;
+  action: UserRateLimitAction;
+};
+
+type UserRateLimitLockRecord = {
+  _id: Id<"userRateLimitLocks">;
+  userId: Id<"users">;
+  action: UserRateLimitAction;
+  lockedUntil: number;
+};
+
+async function transferNotificationPreferences(
+  ctx: MutationCtx,
+  fromUserId: Id<"users">,
+  toUserId: Id<"users">
+): Promise<void> {
+  const targetPreferences = await ctx.db
+    .query("notificationPreferences")
+    .withIndex("by_user", (q) => q.eq("userId", toUserId))
+    .collect();
+  const [targetPreferenceToKeep, ...extraTargetPreferences] = targetPreferences;
+  for (const preference of extraTargetPreferences) {
+    await ctx.db.delete(preference._id);
+  }
+
+  const sourcePreferences = await ctx.db
+    .query("notificationPreferences")
+    .withIndex("by_user", (q) => q.eq("userId", fromUserId))
+    .collect();
+  const [sourcePreferenceToKeep, ...extraSourcePreferences] = sourcePreferences;
+
+  if (targetPreferenceToKeep) {
+    if (sourcePreferenceToKeep) {
+      await ctx.db.delete(sourcePreferenceToKeep._id);
+    }
+  } else if (sourcePreferenceToKeep) {
+    await ctx.db.patch(sourcePreferenceToKeep._id, { userId: toUserId });
+  }
+
+  for (const preference of extraSourcePreferences) {
+    await ctx.db.delete(preference._id);
+  }
+}
+
+async function transferPerActionRateLimitRecords(
+  ctx: MutationCtx,
+  fromUserId: Id<"users">,
+  toUserId: Id<"users">
+): Promise<void> {
+  const targetRecords = await ctx.db
+    .query("userRateLimits")
+    .withIndex("by_user_action", (q) => q.eq("userId", toUserId))
+    .collect();
+  const keptTargetRecords = new Map<UserRateLimitAction, UserRateLimitRecord>();
+
+  for (const record of targetRecords) {
+    const existing = keptTargetRecords.get(record.action);
+    if (existing) {
+      await ctx.db.delete(record._id);
+      continue;
+    }
+    keptTargetRecords.set(record.action, record);
+  }
+
+  const sourceRecords = await ctx.db
+    .query("userRateLimits")
+    .withIndex("by_user_action", (q) => q.eq("userId", fromUserId))
+    .collect();
+
+  for (const record of sourceRecords) {
+    if (keptTargetRecords.has(record.action)) {
+      await ctx.db.delete(record._id);
+      continue;
+    }
+
+    await ctx.db.patch(record._id, { userId: toUserId });
+    keptTargetRecords.set(record.action, { ...record, userId: toUserId });
+  }
+}
+
+async function transferUserRateLimitLocks(
+  ctx: MutationCtx,
+  fromUserId: Id<"users">,
+  toUserId: Id<"users">
+): Promise<void> {
+  const targetLocks = await ctx.db
+    .query("userRateLimitLocks")
+    .withIndex("by_user_action", (q) => q.eq("userId", toUserId))
+    .collect();
+  const keptTargetLocks = new Map<UserRateLimitAction, UserRateLimitLockRecord>();
+
+  for (const lock of targetLocks) {
+    const existing = keptTargetLocks.get(lock.action);
+    if (!existing) {
+      keptTargetLocks.set(lock.action, lock);
+      continue;
+    }
+
+    const lockedUntil = Math.max(existing.lockedUntil, lock.lockedUntil);
+    if (lockedUntil !== existing.lockedUntil) {
+      await ctx.db.patch(existing._id, { lockedUntil });
+      keptTargetLocks.set(lock.action, { ...existing, lockedUntil });
+    }
+    await ctx.db.delete(lock._id);
+  }
+
+  const sourceLocks = await ctx.db
+    .query("userRateLimitLocks")
+    .withIndex("by_user_action", (q) => q.eq("userId", fromUserId))
+    .collect();
+
+  for (const lock of sourceLocks) {
+    const existing = keptTargetLocks.get(lock.action);
+    if (!existing) {
+      await ctx.db.patch(lock._id, { userId: toUserId });
+      keptTargetLocks.set(lock.action, { ...lock, userId: toUserId });
+      continue;
+    }
+
+    const lockedUntil = Math.max(existing.lockedUntil, lock.lockedUntil);
+    if (lockedUntil !== existing.lockedUntil) {
+      await ctx.db.patch(existing._id, { lockedUntil });
+      keptTargetLocks.set(lock.action, { ...existing, lockedUntil });
+    }
+    await ctx.db.delete(lock._id);
+  }
 }
 
 // Get the currently authenticated user (returns only non-sensitive fields)
@@ -823,6 +955,15 @@ export const mergeAccountsByEmail = mutation({
       await ctx.db.patch(session._id, { userId: primary._id });
     }
 
+    const authRefreshTokens = await ctx.db
+      .query("authRefreshTokens")
+      .filter((q) => q.eq(q.field("userId"), secondary._id))
+      .collect();
+
+    for (const refreshToken of authRefreshTokens) {
+      await ctx.db.patch(refreshToken._id, { userId: primary._id });
+    }
+
     const repositories = await ctx.db
       .query("repositories")
       .withIndex("by_user", (q) => q.eq("userId", secondary._id))
@@ -848,6 +989,66 @@ export const mergeAccountsByEmail = mutation({
 
     for (const instance of instances) {
       await ctx.db.patch(instance._id, { userId: primary._id });
+    }
+
+    const mobileTokens = await ctx.db
+      .query("mobileTokens")
+      .withIndex("by_user", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const token of mobileTokens) {
+      await ctx.db.patch(token._id, { userId: primary._id });
+    }
+
+    const deviceTokens = await ctx.db
+      .query("deviceTokens")
+      .withIndex("by_user", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const token of deviceTokens) {
+      await ctx.db.patch(token._id, { userId: primary._id });
+    }
+
+    await transferNotificationPreferences(ctx, secondary._id, primary._id);
+
+    const linkIntents = await ctx.db
+      .query("linkIntents")
+      .withIndex("by_user", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const intent of linkIntents) {
+      await ctx.db.patch(intent._id, { userId: primary._id });
+    }
+
+    const passwordCodes = await ctx.db
+      .query("passwordChangeCodes")
+      .withIndex("by_user", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const code of passwordCodes) {
+      await ctx.db.patch(code._id, { userId: primary._id });
+    }
+
+    await transferPerActionRateLimitRecords(ctx, secondary._id, primary._id);
+
+    const userRateLimitAttempts = await ctx.db
+      .query("userRateLimitAttempts")
+      .withIndex("by_user_action_time", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const attempt of userRateLimitAttempts) {
+      await ctx.db.patch(attempt._id, { userId: primary._id });
+    }
+
+    await transferUserRateLimitLocks(ctx, secondary._id, primary._id);
+
+    const auditLogs = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_user", (q) => q.eq("userId", secondary._id))
+      .collect();
+
+    for (const log of auditLogs) {
+      await ctx.db.patch(log._id, { userId: primary._id });
     }
 
     await ctx.db.delete(secondary._id);
@@ -954,6 +1155,15 @@ export const linkProviderToAccount = mutation({
       await ctx.db.patch(account._id, { userId: originalUserId });
     }
 
+    const authRefreshTokens = await ctx.db
+      .query("authRefreshTokens")
+      .filter((q) => q.eq(q.field("userId"), currentUserId))
+      .collect();
+
+    for (const refreshToken of authRefreshTokens) {
+      await ctx.db.patch(refreshToken._id, { userId: originalUserId });
+    }
+
     // Copy provider tokens from current user to original user
     // Always overwrite with the new token (it's fresher from OAuth)
     const tokenUpdates: Partial<{
@@ -1016,6 +1226,66 @@ export const linkProviderToAccount = mutation({
 
     for (const instance of instances) {
       await ctx.db.patch(instance._id, { userId: originalUserId });
+    }
+
+    const mobileTokens = await ctx.db
+      .query("mobileTokens")
+      .withIndex("by_user", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const token of mobileTokens) {
+      await ctx.db.patch(token._id, { userId: originalUserId });
+    }
+
+    const deviceTokens = await ctx.db
+      .query("deviceTokens")
+      .withIndex("by_user", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const token of deviceTokens) {
+      await ctx.db.patch(token._id, { userId: originalUserId });
+    }
+
+    await transferNotificationPreferences(ctx, currentUserId, originalUserId);
+
+    const currentUserLinkIntents = await ctx.db
+      .query("linkIntents")
+      .withIndex("by_user", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const linkedIntent of currentUserLinkIntents) {
+      await ctx.db.patch(linkedIntent._id, { userId: originalUserId });
+    }
+
+    const passwordCodes = await ctx.db
+      .query("passwordChangeCodes")
+      .withIndex("by_user", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const code of passwordCodes) {
+      await ctx.db.patch(code._id, { userId: originalUserId });
+    }
+
+    await transferPerActionRateLimitRecords(ctx, currentUserId, originalUserId);
+
+    const userRateLimitAttempts = await ctx.db
+      .query("userRateLimitAttempts")
+      .withIndex("by_user_action_time", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const attempt of userRateLimitAttempts) {
+      await ctx.db.patch(attempt._id, { userId: originalUserId });
+    }
+
+    await transferUserRateLimitLocks(ctx, currentUserId, originalUserId);
+
+    const auditLogs = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_user", (q) => q.eq("userId", currentUserId))
+      .collect();
+
+    for (const log of auditLogs) {
+      await ctx.db.patch(log._id, { userId: originalUserId });
     }
 
     // Transfer sessions from current (duplicate) user to original user
@@ -1175,6 +1445,11 @@ export const adminClearAllData = mutation({
     for (const job of jobs) await ctx.db.delete(job._id);
     counts.compilationJobs = jobs.length;
 
+    // Clear paperVersions
+    const paperVersions = await ctx.db.query("paperVersions").collect();
+    for (const version of paperVersions) await ctx.db.delete(version._id);
+    counts.paperVersions = paperVersions.length;
+
     // Clear papers
     const papers = await ctx.db.query("papers").collect();
     for (const paper of papers) await ctx.db.delete(paper._id);
@@ -1189,6 +1464,51 @@ export const adminClearAllData = mutation({
     const repos = await ctx.db.query("repositories").collect();
     for (const repo of repos) await ctx.db.delete(repo._id);
     counts.repositories = repos.length;
+
+    // Clear mobileTokens
+    const mobileTokens = await ctx.db.query("mobileTokens").collect();
+    for (const token of mobileTokens) await ctx.db.delete(token._id);
+    counts.mobileTokens = mobileTokens.length;
+
+    // Clear deviceTokens
+    const deviceTokens = await ctx.db.query("deviceTokens").collect();
+    for (const token of deviceTokens) await ctx.db.delete(token._id);
+    counts.deviceTokens = deviceTokens.length;
+
+    // Clear notificationPreferences
+    const notificationPreferences = await ctx.db.query("notificationPreferences").collect();
+    for (const preference of notificationPreferences) await ctx.db.delete(preference._id);
+    counts.notificationPreferences = notificationPreferences.length;
+
+    // Clear linkIntents
+    const linkIntents = await ctx.db.query("linkIntents").collect();
+    for (const intent of linkIntents) await ctx.db.delete(intent._id);
+    counts.linkIntents = linkIntents.length;
+
+    // Clear userRateLimits
+    const userRateLimits = await ctx.db.query("userRateLimits").collect();
+    for (const limit of userRateLimits) await ctx.db.delete(limit._id);
+    counts.userRateLimits = userRateLimits.length;
+
+    // Clear userRateLimitAttempts
+    const userRateLimitAttempts = await ctx.db.query("userRateLimitAttempts").collect();
+    for (const attempt of userRateLimitAttempts) await ctx.db.delete(attempt._id);
+    counts.userRateLimitAttempts = userRateLimitAttempts.length;
+
+    // Clear userRateLimitLocks
+    const userRateLimitLocks = await ctx.db.query("userRateLimitLocks").collect();
+    for (const lock of userRateLimitLocks) await ctx.db.delete(lock._id);
+    counts.userRateLimitLocks = userRateLimitLocks.length;
+
+    // Clear passwordChangeCodes
+    const passwordChangeCodes = await ctx.db.query("passwordChangeCodes").collect();
+    for (const code of passwordChangeCodes) await ctx.db.delete(code._id);
+    counts.passwordChangeCodes = passwordChangeCodes.length;
+
+    // Clear auditLogs
+    const auditLogs = await ctx.db.query("auditLogs").collect();
+    for (const log of auditLogs) await ctx.db.delete(log._id);
+    counts.auditLogs = auditLogs.length;
 
     // Clear selfHostedGitLabInstances
     const instances = await ctx.db.query("selfHostedGitLabInstances").collect();
@@ -1323,7 +1643,27 @@ export const deleteAccount = mutation({
     }
     deletedCounts.mobileTokens = mobileTokens.length;
 
-    // 6. Delete link intents
+    // 6. Delete device tokens
+    const deviceTokens = await ctx.db
+      .query("deviceTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const token of deviceTokens) {
+      await ctx.db.delete(token._id);
+    }
+    deletedCounts.deviceTokens = deviceTokens.length;
+
+    // 7. Delete notification preferences
+    const notificationPreferences = await ctx.db
+      .query("notificationPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const preference of notificationPreferences) {
+      await ctx.db.delete(preference._id);
+    }
+    deletedCounts.notificationPreferences = notificationPreferences.length;
+
+    // 8. Delete link intents
     const linkIntents = await ctx.db
       .query("linkIntents")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1333,7 +1673,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.linkIntents = linkIntents.length;
 
-    // 7. Delete password change codes
+    // 9. Delete password change codes
     const passwordCodes = await ctx.db
       .query("passwordChangeCodes")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1343,7 +1683,35 @@ export const deleteAccount = mutation({
     }
     deletedCounts.passwordChangeCodes = passwordCodes.length;
 
-    // 8. Delete email rate limits (by user's email)
+    // 10. Delete user rate limit state
+    const userRateLimits = await ctx.db
+      .query("userRateLimits")
+      .withIndex("by_user_action", (q) => q.eq("userId", userId))
+      .collect();
+    for (const limit of userRateLimits) {
+      await ctx.db.delete(limit._id);
+    }
+    deletedCounts.userRateLimits = userRateLimits.length;
+
+    const userRateLimitAttempts = await ctx.db
+      .query("userRateLimitAttempts")
+      .withIndex("by_user_action_time", (q) => q.eq("userId", userId))
+      .collect();
+    for (const attempt of userRateLimitAttempts) {
+      await ctx.db.delete(attempt._id);
+    }
+    deletedCounts.userRateLimitAttempts = userRateLimitAttempts.length;
+
+    const userRateLimitLocks = await ctx.db
+      .query("userRateLimitLocks")
+      .withIndex("by_user_action", (q) => q.eq("userId", userId))
+      .collect();
+    for (const lock of userRateLimitLocks) {
+      await ctx.db.delete(lock._id);
+    }
+    deletedCounts.userRateLimitLocks = userRateLimitLocks.length;
+
+    // 11. Delete email rate limits (by user's email)
     if (user.email) {
       const rateLimits = await ctx.db
         .query("emailRateLimits")
@@ -1355,7 +1723,7 @@ export const deleteAccount = mutation({
       deletedCounts.emailRateLimits = rateLimits.length;
     }
 
-    // 9. Delete audit logs
+    // 12. Delete audit logs
     const auditLogs = await ctx.db
       .query("auditLogs")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -1365,7 +1733,7 @@ export const deleteAccount = mutation({
     }
     deletedCounts.auditLogs = auditLogs.length;
 
-    // 10. Delete auth data
+    // 13. Delete auth data
     // Auth sessions
     const sessions = await ctx.db
       .query("authSessions")
