@@ -82,20 +82,23 @@ export function sleep(ms: number): Promise<void> {
  */
 export async function fetchWithRetry(
   url: string,
-  options: RequestInit & { timeout?: number } = {},
+  options: RequestInit & { timeout?: number; returnLastResponse?: boolean } = {},
   maxRetries = 3,
   defaultTimeout = DEFAULT_API_TIMEOUT
 ): Promise<Response> {
+  const { returnLastResponse = false, ...fetchOptions } = options;
   let lastError: Error | null = null;
+  let lastResponse: Response | null = null;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const response = await fetchWithTimeout(url, options, defaultTimeout);
+      const response = await fetchWithTimeout(url, fetchOptions, defaultTimeout);
       // Don't retry on client errors (4xx), only on server errors (5xx) or network issues
       if (response.ok || response.status < 500) {
         return response;
       }
       // Server error - will retry
+      lastResponse = response;
       lastError = new Error(`Server error: ${response.status} ${response.statusText}`);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -111,6 +114,10 @@ export async function fetchWithRetry(
       console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${backoffMs}ms`);
       await sleep(backoffMs);
     }
+  }
+
+  if (returnLastResponse && lastResponse) {
+    return lastResponse;
   }
 
   throw lastError || new Error("Request failed after retries");

@@ -2091,6 +2091,21 @@ app.post("/thumbnail", rateLimit, async (req, res) => {
   }, req.log);
 });
 
+// Return JSON for unhandled route errors so callers can surface the useful cause.
+app.use((err, req, res, _next) => {
+  const requestLogger = req.log || logger;
+  requestLogger.error({ err }, "Unhandled request error");
+
+  if (res.headersSent) {
+    return;
+  }
+
+  res.status(500).json({
+    error: err && err.message ? err.message : "Internal server error",
+    requestId: req.requestId,
+  });
+});
+
 // Start server with proper configuration
 const server = app.listen(PORT, "0.0.0.0", () => {
   logger.info(`LaTeX compilation service running on port ${PORT}`);

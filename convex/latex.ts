@@ -222,6 +222,7 @@ export const compileLatexInternal = internalAction({
           knownDependencies: args.knownDependencies,
         }),
         timeout: 600000, // 10 minutes for clone + compile of large repos
+        returnLastResponse: true,
       }, 2);
 
       if (!pdfResponse.ok) {
