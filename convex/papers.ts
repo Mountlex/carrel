@@ -7,6 +7,15 @@ import type { Id } from "./_generated/dataModel";
 import { determineIfUpToDate, generateSlug, fetchPaperWithAuth, fetchUserPapers, fetchUserPapersBase, sortPapersByTime } from "./lib/paperHelpers";
 import { deletePaperAndAssociatedData } from "./lib/cascadeDelete";
 
+const LIST_ERROR_PREVIEW_CHARS = 500;
+
+function errorPreview(error: string | undefined): string | undefined {
+  if (!error) return undefined;
+  return error.length > LIST_ERROR_PREVIEW_CHARS
+    ? `${error.slice(0, LIST_ERROR_PREVIEW_CHARS)}...`
+    : error;
+}
+
 // List all papers for a user (via repositories + direct uploads)
 export const list = query({
   args: { userId: v.id("users") },
@@ -31,7 +40,7 @@ export const list = query({
       pdfSourceType: trackedFile?.pdfSourceType ?? null,
       buildStatus: paper.buildStatus,
       compilationProgress: paper.compilationProgress,
-      lastSyncError: paper.lastSyncError,
+      lastSyncError: errorPreview(paper.lastSyncError),
       isPublic: paper.isPublic,
       lastAffectedCommitTime: paper.lastAffectedCommitTime,
       updatedAt: paper.updatedAt,
@@ -196,7 +205,7 @@ export const listPaginated = query({
         pdfSourceType: trackedFile?.pdfSourceType ?? null,
         buildStatus: paper.buildStatus,
         compilationProgress: paper.compilationProgress,
-        lastSyncError: paper.lastSyncError,
+        lastSyncError: errorPreview(paper.lastSyncError),
         isPublic: paper.isPublic,
         lastAffectedCommitTime: paper.lastAffectedCommitTime,
         updatedAt: paper.updatedAt,

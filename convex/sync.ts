@@ -10,6 +10,15 @@ import { checkUserRateLimit, type UserRateLimitAction } from "./lib/rateLimit";
 import { resolveBackgroundRefreshEnabled, resolveCacheMode } from "./lib/settings";
 import { normalizeRepositorySyncError } from "./lib/syncErrors";
 
+const MAX_STORED_SYNC_ERROR_CHARS = 25000;
+
+function truncateStoredSyncError(error: string | undefined): string | undefined {
+  if (!error) return undefined;
+  return error.length > MAX_STORED_SYNC_ERROR_CHARS
+    ? `${error.slice(0, MAX_STORED_SYNC_ERROR_CHARS)}\n...(truncated)`
+    : error;
+}
+
 // Minimum time between update notifications for the same out-of-sync paper
 const UPDATE_NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000;
 
@@ -417,7 +426,7 @@ export const markRepositorySyncFailure = internalMutation({
     }
 
     const now = Date.now();
-    const errorMessage = args.error.slice(0, 1000);
+    const errorMessage = truncateStoredSyncError(args.error);
 
     await ctx.db.patch(args.repositoryId, {
       syncStatus: "error",
@@ -889,7 +898,7 @@ export const updatePaperBuildError = internalMutation({
       }
     }
     await ctx.db.patch(args.id, {
-      lastSyncError: args.error?.slice(0, 1000),
+      lastSyncError: truncateStoredSyncError(args.error),
       updatedAt: Date.now(),
     });
     await ctx.scheduler.runAfter(2_000, internal.notifications.notifyBuildCompleted, {
@@ -919,7 +928,7 @@ export const updatePaperSyncError = internalMutation({
       }
     }
     await ctx.db.patch(args.id, {
-      lastSyncError: args.error?.slice(0, 1000),
+      lastSyncError: truncateStoredSyncError(args.error),
       updatedAt: Date.now(),
     });
   },
