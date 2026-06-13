@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require("uuid");
 // Import utilities
 const { logger, createRequestLogger } = require("./lib/logger");
 const { spawnAsync, runLatexmk, runLatexmkWithProgress, runPdftoppm } = require("./lib/subprocess");
-const { cloneRepository, cloneRepositorySparse, BINARY_EXTENSIONS } = require("./lib/gitOperations");
+const { cloneRepository, cloneRepositorySparse, BINARY_EXTENSIONS, formatGitError } = require("./lib/gitOperations");
 const { extractMissingFiles } = require("./lib/latexDependencies");
 const { withCleanup, cleanupAllPendingWorkDirs } = require("./lib/cleanup");
 const { rateLimit } = require("./lib/rateLimit");
@@ -682,8 +682,8 @@ function buildAuthenticatedUrl(gitUrl, auth) {
     return gitUrl;
   }
   const url = new URL(gitUrl);
-  url.username = encodeURIComponent(auth.username);
-  url.password = encodeURIComponent(auth.password);
+  url.username = auth.username;
+  url.password = auth.password;
   return url.toString();
 }
 
@@ -708,9 +708,7 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
         } = req.body;
         const cacheMode = resolveCacheMode(requestedCacheMode, paperId);
         const hasKnownDeps = Array.isArray(knownDependencies) && knownDependencies.length > 0;
-        let sparsePaths = hasKnownDeps
-          ? buildSparsePaths(target, knownDependencies)
-          : [];
+        let sparsePaths = buildSparsePaths(target, hasKnownDeps ? knownDependencies : []);
         let effectiveSparsePaths = sparsePaths;
         let workDir = path.join(jobDir, "repo");
         let persistPaths = null;
@@ -896,7 +894,9 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
                 { timeout: 60000, logger: req.log }
               );
               if (!fetchResult.success) {
-                return res.status(400).json({ error: fetchResult.stderr || "Failed to fetch repository" });
+                return res.status(400).json({
+                  error: formatGitError(fetchResult, "Failed to fetch repository", 60000),
+                });
               }
               const localRev = await spawnAsync(
                 "git",
@@ -1460,7 +1460,9 @@ app.post("/git/refs", rateLimit, async (req, res) => {
     });
 
     if (!result.success) {
-      return res.status(400).json({ error: result.stderr || "Failed to access repository" });
+      return res.status(400).json({
+        error: formatGitError(result, "Failed to access repository", 30000),
+      });
     }
 
     const lines = result.stdout.trim().split("\n");

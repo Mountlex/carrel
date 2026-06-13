@@ -15,6 +15,7 @@ const FORCE_KILL_DELAY = 5000; // 5 seconds after SIGTERM
  * @param {number} [options.maxOutput=10485760] - Max output size in bytes
  * @param {Object} [options.env] - Environment variables
  * @param {Object} [options.logger] - Logger instance (defaults to console)
+ * @param {boolean} [options.killProcessGroup] - Kill the whole subprocess group on timeout
  * @returns {Promise<{success: boolean, stdout: string, stderr: string, code: number|null, timedOut: boolean}>}
  */
 async function spawnAsync(command, args, options = {}) {
@@ -24,30 +25,57 @@ async function spawnAsync(command, args, options = {}) {
     maxOutput = DEFAULT_MAX_OUTPUT,
     env,
     logger = console,
+    killProcessGroup = command === "git",
   } = options;
 
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let closed = false;
     let forceKillTimer = null;
+    const useProcessGroup = killProcessGroup && process.platform !== "win32";
+    const processEnv = {
+      ...process.env,
+      ...(env || {}),
+    };
+
+    if (command === "git") {
+      processEnv.GIT_TERMINAL_PROMPT = "0";
+      processEnv.GIT_ASKPASS = "/bin/false";
+      processEnv.SSH_ASKPASS = "/bin/false";
+      processEnv.GCM_INTERACTIVE = "Never";
+    }
 
     const proc = spawn(command, args, {
       cwd,
-      env: env || process.env,
+      env: processEnv,
+      detached: useProcessGroup,
     });
+
+    const killProcess = (signal) => {
+      if (useProcessGroup && proc.pid) {
+        try {
+          process.kill(-proc.pid, signal);
+          return;
+        } catch {
+          // Fall back to killing the direct child below.
+        }
+      }
+      proc.kill(signal);
+    };
 
     // Set up timeout that actually kills the process
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
       logger.warn?.(`Process ${command} timed out after ${timeout}ms, sending SIGTERM`);
-      proc.kill("SIGTERM");
+      killProcess("SIGTERM");
 
       // Force kill after FORCE_KILL_DELAY if still running
       forceKillTimer = setTimeout(() => {
-        if (!proc.killed) {
+        if (!closed) {
           logger.warn?.(`Process ${command} did not terminate, sending SIGKILL`);
-          proc.kill("SIGKILL");
+          killProcess("SIGKILL");
         }
       }, FORCE_KILL_DELAY);
     }, timeout);
@@ -65,6 +93,7 @@ async function spawnAsync(command, args, options = {}) {
     });
 
     proc.on("close", (code) => {
+      closed = true;
       clearTimeout(timeoutTimer);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);
@@ -79,6 +108,7 @@ async function spawnAsync(command, args, options = {}) {
     });
 
     proc.on("error", (err) => {
+      closed = true;
       clearTimeout(timeoutTimer);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);
@@ -262,6 +292,7 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let closed = false;
     let forceKillTimer = null;
     let currentPass = 0;
 
@@ -273,7 +304,7 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
       proc.kill("SIGTERM");
 
       forceKillTimer = setTimeout(() => {
-        if (!proc.killed) {
+        if (!closed) {
           logger.warn?.("latexmk did not terminate, sending SIGKILL");
           proc.kill("SIGKILL");
         }
@@ -317,6 +348,7 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     });
 
     proc.on("close", (code) => {
+      closed = true;
       clearTimeout(timeoutTimer);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);
@@ -329,6 +361,7 @@ async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
     });
 
     proc.on("error", (err) => {
+      closed = true;
       clearTimeout(timeoutTimer);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);

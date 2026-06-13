@@ -6,6 +6,26 @@ const fs = require("fs/promises");
 const path = require("path");
 const { spawnAsync } = require("./subprocess");
 
+function redactCredentials(text) {
+  return text.replace(/(https?:\/\/)(?:[^@\s/]+@)/g, "$1[redacted]@");
+}
+
+function formatGitError(result, fallback, timeout) {
+  const details = redactCredentials((result.stderr || result.stdout || "").trim());
+
+  if (result.timedOut) {
+    return details
+      ? `${fallback} timed out after ${Math.round(timeout / 1000)}s: ${details}`
+      : `${fallback} timed out after ${Math.round(timeout / 1000)}s`;
+  }
+
+  if (details.includes("terminal prompts disabled")) {
+    return `${fallback}: authentication failed. Check that the GitLab token has read_repository access. ${details}`;
+  }
+
+  return details || fallback;
+}
+
 /**
  * Clone a git repository to a work directory.
  *
@@ -32,7 +52,10 @@ async function cloneRepository({ authenticatedUrl, workDir, branch, timeout = 60
   });
 
   if (!result.success) {
-    return { success: false, error: result.stderr || "Failed to clone repository" };
+    return {
+      success: false,
+      error: formatGitError(result, "Failed to clone repository", timeout),
+    };
   }
 
   return { success: true };
@@ -68,7 +91,10 @@ async function cloneRepositorySparse({
   });
 
   if (!cloneResult.success) {
-    return { success: false, error: cloneResult.stderr || "Failed to clone repository" };
+    return {
+      success: false,
+      error: formatGitError(cloneResult, "Failed to clone repository", timeout),
+    };
   }
 
   const initResult = await spawnAsync("git", ["-C", workDir, "sparse-checkout", "init", "--no-cone"], {
@@ -121,6 +147,8 @@ function isBinaryFile(filePath) {
 module.exports = {
   cloneRepository,
   cloneRepositorySparse,
+  formatGitError,
+  redactCredentials,
   BINARY_EXTENSIONS,
   isBinaryFile,
 };
