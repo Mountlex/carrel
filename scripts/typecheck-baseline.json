@@ -1,0 +1,786 @@
+[
+  {
+    "file": "convex/auth.config.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "domain: process.env.CONVEX_SITE_URL,",
+    "count": 1
+  },
+  {
+    "file": "convex/auth.ts",
+    "code": 2322,
+    "message": "Type '(profile: GitLabProfile, tokens: TokenSet) => { id: string; name: string; email: string | null; image: string; gitlabAccessToken: string | undefined; gitlabRefreshToken: string | undefined; gitlabTokenExpiresAt: number; }' is not assignable to type 'ProfileCallback<GitLabProfile>'.\n  Types of parameters 'profile' and 'profile' are incompatible.\n    Property 'sub' is missing in type 'import(\"<project>/node_modules/@auth/core/providers/gitlab\").GitLabProfile' but required in type 'GitLabProfile'.",
+    "source": "profile(profile: GitLabProfile, tokens: TokenSet) {",
+    "count": 1
+  },
+  {
+    "file": "convex/auth.ts",
+    "code": 2345,
+    "message": "Argument of type 'unknown' is not assignable to parameter of type 'string | null | undefined'.",
+    "source": "const encryptedGithubToken = await encryptTokenIfNeeded(profile.githubAccessToken);",
+    "count": 1
+  },
+  {
+    "file": "convex/auth.ts",
+    "code": 2345,
+    "message": "Argument of type 'unknown' is not assignable to parameter of type 'string | null | undefined'.",
+    "source": "const encryptedGitlabRefreshToken = await encryptTokenIfNeeded(profile.gitlabRefreshToken);",
+    "count": 1
+  },
+  {
+    "file": "convex/auth.ts",
+    "code": 2345,
+    "message": "Argument of type 'unknown' is not assignable to parameter of type 'string | null | undefined'.",
+    "source": "const encryptedGitlabToken = await encryptTokenIfNeeded(profile.gitlabAccessToken);",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const clientId = process.env.AUTH_GITLAB_ID;",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const clientSecret = process.env.AUTH_GITLAB_SECRET;",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const convexSiteUrl = process.env.CONVEX_SITE_URL;",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 2615,
+    "message": "Type of property 'git' circularly references itself in mapped type '{ users: { viewer: FunctionReference<\"query\", \"public\", {}, { _id: Id<\"users\">; _creationTime: number; name: string | undefined; image: string | undefined; email: string | undefined; emailVerificationTime: number | undefined; ... 5 more ...; hasGitLabToken: boolean; } | null, string | undefined>; ... 34 more ...; de...'.",
+    "source": "const { api } = await import(\"./_generated/api\");",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 7006,
+    "message": "Parameter 'instance' implicitly has an 'any' type.",
+    "source": "instances.map(async (instance) => {",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 7022,
+    "message": "'addSelfHostedGitLabInstanceWithTest' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "export const addSelfHostedGitLabInstanceWithTest = action({",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 7022,
+    "message": "'api' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "const { api } = await import(\"./_generated/api\");",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 7022,
+    "message": "'instanceId' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "const instanceId = await ctx.runMutation(api.users.addSelfHostedGitLabInstance, {",
+    "count": 1
+  },
+  {
+    "file": "convex/git.ts",
+    "code": 7023,
+    "message": "'handler' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.",
+    "source": "handler: async (ctx, args) => {",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2339,
+    "message": "Property 'email' does not exist on type '{}'.",
+    "source": "email: user.email ?? \"\",",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2339,
+    "message": "Property 'name' does not exist on type '{}'.",
+    "source": "name: user.name ?? undefined,",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2345,
+    "message": "Argument of type 'unknown' is not assignable to parameter of type 'string'.",
+    "source": "const payload = await verifyJwt(accessToken, jwtSecret);",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const allowedOrigins = (process.env.ALLOWED_ORIGINS || \"\").split(\",\").filter(Boolean);",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const expectedSecret = process.env.LATEX_COMPILE_SECRET;",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const siteUrl = process.env.SITE_URL;",
+    "count": 1
+  },
+  {
+    "file": "convex/http.ts",
+    "code": 7006,
+    "message": "Parameter 'allowed' implicitly has an 'any' type.",
+    "source": "const allowedOrigin = origin && allowedOrigins.some(allowed => {",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2345,
+    "message": "Argument of type 'string | null' is not assignable to parameter of type 'string'.\n  Type 'null' is not assignable to type 'string'.",
+    "source": "const auth = await getAuthForProvider(ctx, provider, args.gitUrl, selfHostedInstances, args.userId);",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const compileSecret = process.env.LATEX_COMPILE_SECRET;",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const latexServiceUrl = process.env.LATEX_SERVICE_URL;",
+    "count": 2
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "convexSiteUrl = process.env.CONVEX_URL.replace(\".convex.cloud\", \".convex.site\");",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "if (!convexSiteUrl && process.env.CONVEX_URL) {",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "let convexSiteUrl = process.env.CONVEX_SITE_URL;",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 7022,
+    "message": "'compileLatex' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "export const compileLatex = action({",
+    "count": 1
+  },
+  {
+    "file": "convex/latex.ts",
+    "code": 7023,
+    "message": "'handler' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.",
+    "source": "handler: async (ctx, args) => {",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/crypto.ts",
+    "code": 2322,
+    "message": "Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'BufferSource'.\n  Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'ArrayBufferView<ArrayBuffer>'.\n    Types of property 'buffer' are incompatible.\n      Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.\n        Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.\n          Types of property '[Symbol.toStringTag]' are incompatible.\n            Type '\"SharedArrayBuffer\"' is not assignable to type '\"ArrayBuffer\"'.",
+    "source": "{ name: \"AES-GCM\", iv },",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/crypto.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const keyHex = process.env[ENCRYPTION_KEY_ENV];",
+    "count": 2
+  },
+  {
+    "file": "convex/lib/http.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const apiKey = process.env.LATEX_SERVICE_API_KEY;",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/github.ts",
+    "code": 1294,
+    "message": "This syntax is not allowed when 'erasableSyntaxOnly' is enabled.",
+    "source": "constructor(private token: string | null) {}",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/github.ts",
+    "code": 2322,
+    "message": "Type '{ name: string; fullName: string; defaultBranch: string; description: string | null; isPrivate: boolean; }' is not assignable to type 'RepositoryInfo'.\n  Types of property 'description' are incompatible.\n    Type 'string | null' is not assignable to type 'string | undefined'.\n      Type 'null' is not assignable to type 'string | undefined'.",
+    "source": "return parseGitHubRepoInfo(data);",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/index.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const latexServiceUrl = process.env.LATEX_SERVICE_URL;",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/overleaf.ts",
+    "code": 1294,
+    "message": "This syntax is not allowed when 'erasableSyntaxOnly' is enabled.",
+    "source": "private auth: { username: string; password: string },",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/overleaf.ts",
+    "code": 1294,
+    "message": "This syntax is not allowed when 'erasableSyntaxOnly' is enabled.",
+    "source": "private gitUrl: string,",
+    "count": 1
+  },
+  {
+    "file": "convex/lib/providers/overleaf.ts",
+    "code": 1294,
+    "message": "This syntax is not allowed when 'erasableSyntaxOnly' is enabled.",
+    "source": "private latexServiceUrl: string",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const issuer = process.env.CONVEX_SITE_URL || \"https://kindhearted-bloodhound-95.convex.site\";",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const jwtSecret = process.env.JWT_SECRET;",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const privateKeyPem = process.env.JWT_PRIVATE_KEY;",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const secret = process.env.JWT_SECRET;",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileEmailAuth.ts",
+    "code": 2307,
+    "message": "Cannot find module 'node:crypto' or its corresponding type declarations.",
+    "source": "import * as crypto from \"node:crypto\";",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileEmailAuth.ts",
+    "code": 2307,
+    "message": "Cannot find module 'node:util' or its corresponding type declarations.",
+    "source": "import { promisify } from \"node:util\";",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileEmailAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "})) as Buffer;",
+    "count": 1
+  },
+  {
+    "file": "convex/mobileEmailAuth.ts",
+    "code": 2591,
+    "message": "Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const storedKeyBuffer = Buffer.from(storedKey, \"hex\");",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const clientEmail = process.env.FCM_CLIENT_EMAIL;",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const env = overrideEnv ?? (process.env.APNS_ENV === \"sandbox\" ? \"sandbox\" : \"production\");",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const keyId = process.env.APNS_KEY_ID;",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const privateKey = process.env.APNS_PRIVATE_KEY?.replace(/\\\\n/g, \"\\n\");",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const privateKey = process.env.FCM_PRIVATE_KEY?.replace(/\\\\n/g, \"\\n\");",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const projectId = process.env.FCM_PROJECT_ID;",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const teamId = process.env.APNS_TEAM_ID;",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const topic = process.env.APNS_TOPIC;",
+    "count": 1
+  },
+  {
+    "file": "convex/notifications.ts",
+    "code": 2769,
+    "message": "No overload matches this call.\n  The last overload gave the following error.\n    Argument of type 'Uint8Array<ArrayBufferLike>' is not assignable to parameter of type 'BufferSource'.\n      Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'ArrayBufferView<ArrayBuffer>'.\n        Types of property 'buffer' are incompatible.\n          Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.\n            Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.\n              Types of property '[Symbol.toStringTag]' are incompatible.\n                Type '\"SharedArrayBuffer\"' is not assignable to type '\"ArrayBuffer\"'.",
+    "source": "keyData,",
+    "count": 2
+  },
+  {
+    "file": "convex/papers.ts",
+    "code": 2339,
+    "message": "Property 'lastSyncedAt' does not exist on type '{ _id: Id<\"papers\">; _creationTime: number; userId?: Id<\"users\"> | undefined; repositoryId?: Id<\"repositories\"> | undefined; pdfFileId?: Id<\"_storage\"> | undefined; ... 27 more ...; updatedAt: number; }'.",
+    "source": "lastSyncedAt: paper.lastSyncedAt,",
+    "count": 1
+  },
+  {
+    "file": "convex/passwordActions.ts",
+    "code": 2307,
+    "message": "Cannot find module 'node:crypto' or its corresponding type declarations.",
+    "source": "import * as crypto from \"node:crypto\";",
+    "count": 1
+  },
+  {
+    "file": "convex/passwordActions.ts",
+    "code": 2307,
+    "message": "Cannot find module 'node:util' or its corresponding type declarations.",
+    "source": "import { promisify } from \"node:util\";",
+    "count": 1
+  },
+  {
+    "file": "convex/passwordActions.ts",
+    "code": 2345,
+    "message": "Argument of type '(b: number) => string' is not assignable to parameter of type '(value: unknown, index: number, array: unknown[]) => string'.\n  Types of parameters 'b' and 'value' are incompatible.\n    Type 'unknown' is not assignable to type 'number'.",
+    "source": ".map((b: number) => (b % 10).toString())",
+    "count": 1
+  },
+  {
+    "file": "convex/passwordActions.ts",
+    "code": 2591,
+    "message": "Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const key = await scryptAsync(normalizedPassword, salt, dkLen, { N, r, p, maxmem }) as Buffer;",
+    "count": 1
+  },
+  {
+    "file": "convex/passwordActions.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const resendKey = process.env.AUTH_RESEND_KEY;",
+    "count": 1
+  },
+  {
+    "file": "convex/ResendOTP.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "apiKey: process.env.AUTH_RESEND_KEY,",
+    "count": 2
+  },
+  {
+    "file": "convex/ResendOTP.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const fromAddress = process.env.EMAIL_FROM || \"Carrel <onboarding@resend.dev>\";",
+    "count": 1
+  },
+  {
+    "file": "convex/ResendOTP.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "from: process.env.EMAIL_FROM || \"Carrel <onboarding@resend.dev>\",",
+    "count": 1
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 2339,
+    "message": "Property 'filePath' does not exist on type '{}'.",
+    "source": "const currentPdfHash = currentHashes[trackedFile.filePath];",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 2339,
+    "message": "Property 'filePath' does not exist on type '{}'.",
+    "source": "filePaths: [trackedFile.filePath],",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 2339,
+    "message": "Property 'filePath' does not exist on type '{}'.",
+    "source": "if (changedFiles.length > 0 && !changedFilesSet.has(trackedFile.filePath)) {",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 2339,
+    "message": "Property 'pdfSourceType' does not exist on type '{}'.",
+    "source": "if (trackedFile && trackedFile.pdfSourceType === \"committed\") {",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 2339,
+    "message": "Property 'pdfSourceType' does not exist on type '{}'.",
+    "source": "if (trackedFile && trackedFile.pdfSourceType === \"compile\") {",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'dep' implicitly has an 'any' type.",
+    "source": "const hasChangedDependency = paper.cachedDependencies.some(dep => changedFilesSet.has(dep.path));",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'dep' implicitly has an 'any' type.",
+    "source": "knownDependencies: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'dep' implicitly has an 'any' type.",
+    "source": "previousDependencyPaths: paper.cachedDependencyPaths ?? paper.cachedDependencies?.map((dep) => dep.path),",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'id' implicitly has an 'any' type.",
+    "source": ".filter((id): id is Id<\"trackedFiles\"> => id !== undefined);",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'p' implicitly has an 'any' type.",
+    "source": ".map(p => p.trackedFileId)",
+    "count": 2
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'repo' implicitly has an 'any' type.",
+    "source": "const uniqueUserIds = Array.from(new Set(repositories.map((repo) => repo.userId)));",
+    "count": 1
+  },
+  {
+    "file": "convex/sync.ts",
+    "code": 7006,
+    "message": "Parameter 'tf' implicitly has an 'any' type.",
+    "source": "const trackedFileMap = new Map(trackedFiles.map(tf => [tf._id, tf]));",
+    "count": 2
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const latexServiceUrl = process.env.LATEX_SERVICE_URL;",
+    "count": 1
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 2694,
+    "message": "Namespace '\"<project>/convex/_generated/dataModel\"' has no exported member 'Id'.",
+    "source": "_id: typeof import(\"./_generated/dataModel\").Id<\"papers\">;",
+    "count": 1
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 2694,
+    "message": "Namespace '\"<project>/convex/_generated/dataModel\"' has no exported member 'Id'.",
+    "source": "pdfFileId: typeof import(\"./_generated/dataModel\").Id<\"_storage\">;",
+    "count": 1
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 7022,
+    "message": "'papers' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "const papers = await ctx.runQuery(internal.thumbnail.getPapersNeedingThumbnails, {});",
+    "count": 1
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 7022,
+    "message": "'regenerateAllThumbnails' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.",
+    "source": "export const regenerateAllThumbnails = internalAction({",
+    "count": 1
+  },
+  {
+    "file": "convex/thumbnail.ts",
+    "code": 7023,
+    "message": "'handler' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.",
+    "source": "handler: async (ctx) => {",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2322,
+    "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+    "source": "token: encryptedToken,",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type '{ auth: Auth; } & { db: { get: (id: Id<\"users\">) => Promise<{ email?: string | undefined; } | null>; }; }' is not assignable to parameter of type 'AuthContext'.\n  Type '{ auth: Auth; } & { db: { get: (id: Id<\"users\">) => Promise<{ email?: string | undefined; } | null>; }; }' is missing the following properties from type 'GenericQueryCtx<{ users: { document: { _id: Id<\"users\">; _creationTime: number; name?: string | undefined; email?: string | undefined; emailVerificationTime?: number | undefined; image?: string | undefined; ... 11 more ...; backgroundRefreshDefault?: boolean | undefined; }; fieldPaths: ExtractFieldPaths<...> | \"_id\"...': storage, runQuery",
+    "source": "const userId = await requireUserId(ctx);",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type '\"userId\"' is not assignable to parameter of type '\"_id\" | ExtractFieldPaths<VObject<{ firstUsedTime?: number | undefined; parentRefreshTokenId?: Id<\"authRefreshTokens\"> | undefined; expirationTime: number; sessionId: Id<\"authSessions\">; }, { ...; }, \"required\", \"expirationTime\" | ... 2 more ... | \"parentRefreshTokenId\">>'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), currentUserId))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type '\"userId\"' is not assignable to parameter of type '\"_id\" | ExtractFieldPaths<VObject<{ firstUsedTime?: number | undefined; parentRefreshTokenId?: Id<\"authRefreshTokens\"> | undefined; expirationTime: number; sessionId: Id<\"authSessions\">; }, { ...; }, \"required\", \"expirationTime\" | ... 2 more ... | \"parentRefreshTokenId\">>'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), secondary._id))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type '\"userId\"' is not assignable to parameter of type '\"_id\" | ExtractFieldPaths<VObject<{ firstUsedTime?: number | undefined; parentRefreshTokenId?: Id<\"authRefreshTokens\"> | undefined; expirationTime: number; sessionId: Id<\"authSessions\">; }, { ...; }, \"required\", \"expirationTime\" | ... 2 more ... | \"parentRefreshTokenId\">>'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), userId))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type 'Id<\"users\">' is not assignable to parameter of type 'ExpressionOrValue<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n  Type 'Id<\"users\">' is not assignable to type 'Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | Expression<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n    Type 'Id<\"users\">' is not assignable to type 'Id<\"authRefreshTokens\">'.\n      Type 'Id<\"users\">' is not assignable to type '{ __tableName: \"authRefreshTokens\"; }'.\n        Types of property '__tableName' are incompatible.\n          Type '\"users\"' is not assignable to type '\"authRefreshTokens\"'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), currentUserId))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type 'Id<\"users\">' is not assignable to parameter of type 'ExpressionOrValue<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n  Type 'Id<\"users\">' is not assignable to type 'Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | Expression<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n    Type 'Id<\"users\">' is not assignable to type 'Id<\"authRefreshTokens\">'.\n      Type 'Id<\"users\">' is not assignable to type '{ __tableName: \"authRefreshTokens\"; }'.\n        Types of property '__tableName' are incompatible.\n          Type '\"users\"' is not assignable to type '\"authRefreshTokens\"'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), secondary._id))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2345,
+    "message": "Argument of type 'Id<\"users\">' is not assignable to parameter of type 'ExpressionOrValue<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n  Type 'Id<\"users\">' is not assignable to type 'Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | Expression<number | Id<\"authSessions\"> | Id<\"authRefreshTokens\"> | undefined>'.\n    Type 'Id<\"users\">' is not assignable to type 'Id<\"authRefreshTokens\">'.\n      Type 'Id<\"users\">' is not assignable to type '{ __tableName: \"authRefreshTokens\"; }'.\n        Types of property '__tableName' are incompatible.\n          Type '\"users\"' is not assignable to type '\"authRefreshTokens\"'.",
+    "source": ".filter((q) => q.eq(q.field(\"userId\"), userId))",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2353,
+    "message": "Object literal may only specify known properties, and 'userId' does not exist in type 'PatchValue<{ _id: Id<\"authRefreshTokens\">; _creationTime: number; firstUsedTime?: number | undefined; parentRefreshTokenId?: Id<\"authRefreshTokens\"> | undefined; expirationTime: number; sessionId: Id<...>; }>'.",
+    "source": "await ctx.db.patch(refreshToken._id, { userId: originalUserId });",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2353,
+    "message": "Object literal may only specify known properties, and 'userId' does not exist in type 'PatchValue<{ _id: Id<\"authRefreshTokens\">; _creationTime: number; firstUsedTime?: number | undefined; parentRefreshTokenId?: Id<\"authRefreshTokens\"> | undefined; expirationTime: number; sessionId: Id<...>; }>'.",
+    "source": "await ctx.db.patch(refreshToken._id, { userId: primary._id });",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2551,
+    "message": "Property 'providerId' does not exist on type '{ _id: Id<\"authAccounts\">; _creationTime: number; secret?: string | undefined; emailVerified?: string | undefined; phoneVerified?: string | undefined; userId: Id<\"users\">; provider: string; providerAccountId: string; }'. Did you mean 'provider'?",
+    "source": "(a) => a.provider === \"password\" || a.providerId === \"password\"",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "const adminEmails = (process.env.ADMIN_EMAILS || \"\").split(\",\").filter(Boolean);",
+    "count": 1
+  },
+  {
+    "file": "convex/users.ts",
+    "code": 2591,
+    "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
+    "source": "if (process.env.ALLOW_DEV_ADMIN !== \"true\") {",
+    "count": 1
+  },
+  {
+    "file": "src/lib/thumbnail.ts",
+    "code": 2345,
+    "message": "Argument of type '{ canvasContext: CanvasRenderingContext2D; viewport: PageViewport; }' is not assignable to parameter of type 'RenderParameters'.\n  Property 'canvas' is missing in type '{ canvasContext: CanvasRenderingContext2D; viewport: PageViewport; }' but required in type 'RenderParameters'.",
+    "source": "await page.render({",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "{paper.authors && paper.authors.length > 0 && (",
+    "count": 2
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "{paper.pdfUrl ? (",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "{paper.pdfUrl && (",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "<h1 className=\"text-2xl font-normal text-gray-900 dark:text-gray-100\">{paper.title}</h1>",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "<p className=\"mt-1 text-gray-600 dark:text-gray-400\">by {paper.authors.join(\", \")}</p>",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "<PdfViewer url={paper.pdfUrl} title={paper.title} />",
+    "count": 2
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 18048,
+    "message": "'paper' is possibly 'undefined'.",
+    "source": "href={paper.pdfUrl}",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'authors' does not exist on type '{}'.",
+    "source": "{paper.authors && paper.authors.length > 0 && (",
+    "count": 2
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'authors' does not exist on type '{}'.",
+    "source": "<p className=\"mt-1 text-gray-600 dark:text-gray-400\">by {paper.authors.join(\", \")}</p>",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'pdfUrl' does not exist on type '{}'.",
+    "source": "{paper.pdfUrl ? (",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'pdfUrl' does not exist on type '{}'.",
+    "source": "{paper.pdfUrl && (",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'pdfUrl' does not exist on type '{}'.",
+    "source": "<PdfViewer url={paper.pdfUrl} title={paper.title} />",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'pdfUrl' does not exist on type '{}'.",
+    "source": "href={paper.pdfUrl}",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'title' does not exist on type '{}'.",
+    "source": "<h1 className=\"text-2xl font-normal text-gray-900 dark:text-gray-100\">{paper.title}</h1>",
+    "count": 1
+  },
+  {
+    "file": "src/routes/share.$slug.tsx",
+    "code": 2339,
+    "message": "Property 'title' does not exist on type '{}'.",
+    "source": "<PdfViewer url={paper.pdfUrl} title={paper.title} />",
+    "count": 1
+  },
+  {
+    "file": "vite.config.ts",
+    "code": 2353,
+    "message": "Object literal may only specify known properties, and 'customViteReactPlugin' does not exist in type '{ srcDirectory?: string | undefined; start?: { entry?: string | undefined; } | undefined; router?: ({ entry?: string | undefined; basepath?: string | undefined; } & { virtualRouteConfig?: string | ... 1 more ... | undefined; ... 23 more ...; plugin?: { ...; } | undefined; }) | undefined; ... 7 more ...; vite?: { ......'.",
+    "source": "tanstackStart({ customViteReactPlugin: true }),",
+    "count": 1
+  }
+]

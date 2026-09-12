@@ -1,127 +1,86 @@
 const { spawn } = require("child_process");
+const { getJobSignal } = require("./jobContext");
 
-const DEFAULT_TIMEOUT = 60000; // 1 minute
-const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024; // 10MB
-const FORCE_KILL_DELAY = 5000; // 5 seconds after SIGTERM
+const DEFAULT_TIMEOUT = 60000;
+const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
+const FORCE_KILL_DELAY = 5000;
 
 /**
- * Spawns a subprocess with proper timeout handling that actually kills the process.
- *
- * @param {string} command - The command to run
- * @param {string[]} args - Command arguments
- * @param {Object} options - Options object
- * @param {string} [options.cwd] - Working directory
- * @param {number} [options.timeout=60000] - Timeout in milliseconds
- * @param {number} [options.maxOutput=10485760] - Max output size in bytes
- * @param {Object} [options.env] - Environment variables
- * @param {Object} [options.logger] - Logger instance (defaults to console)
- * @param {boolean} [options.killProcessGroup] - Kill the whole subprocess group on timeout
- * @returns {Promise<{success: boolean, stdout: string, stderr: string, code: number|null, timedOut: boolean}>}
+ * Wait for a subprocess to exit before its caller cleans up files or releases
+ * a queue slot. Cancellation is inherited from the current request job.
+ * On Unix, terminate the whole process group, including TeX/biber children.
  */
 async function spawnAsync(command, args, options = {}) {
   const {
-    cwd,
-    timeout = DEFAULT_TIMEOUT,
-    maxOutput = DEFAULT_MAX_OUTPUT,
-    env,
-    logger = console,
-    killProcessGroup = command === "git",
+    cwd, timeout = DEFAULT_TIMEOUT, maxOutput = DEFAULT_MAX_OUTPUT,
+    env, logger = console, signal = getJobSignal(), onStdout,
+    killProcessGroup = true,
   } = options;
-
-  return new Promise((resolve) => {
+  signal?.throwIfAborted();
+  const result = await new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    let closed = false;
-    let forceKillTimer = null;
+    let terminating = false;
+    let finished = false;
+    let forceKillTimer;
     const useProcessGroup = killProcessGroup && process.platform !== "win32";
-    const processEnv = {
-      ...process.env,
-      ...(env || {}),
-    };
-
+    const processEnv = { ...process.env, ...(env || {}) };
     if (command === "git") {
       processEnv.GIT_TERMINAL_PROMPT = "0";
       processEnv.GIT_ASKPASS = "/bin/false";
       processEnv.SSH_ASKPASS = "/bin/false";
       processEnv.GCM_INTERACTIVE = "Never";
     }
-
-    const proc = spawn(command, args, {
-      cwd,
-      env: processEnv,
-      detached: useProcessGroup,
-    });
-
-    const killProcess = (signal) => {
+    const proc = spawn(command, args, { cwd, env: processEnv, detached: useProcessGroup });
+    const kill = (killSignal) => {
       if (useProcessGroup && proc.pid) {
-        try {
-          process.kill(-proc.pid, signal);
-          return;
-        } catch {
-          // Fall back to killing the direct child below.
+        try { process.kill(-proc.pid, killSignal); } catch (error) {
+          if (error.code !== "ESRCH") logger.warn?.({ code: error.code }, "Could not signal process group");
         }
+      } else {
+        proc.kill(killSignal);
       }
-      proc.kill(signal);
     };
-
-    // Set up timeout that actually kills the process
+    const terminate = () => {
+      if (terminating) return;
+      terminating = true;
+      kill("SIGTERM");
+      forceKillTimer = setTimeout(() => kill("SIGKILL"), FORCE_KILL_DELAY);
+    };
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
-      logger.warn?.(`Process ${command} timed out after ${timeout}ms, sending SIGTERM`);
-      killProcess("SIGTERM");
-
-      // Force kill after FORCE_KILL_DELAY if still running
-      forceKillTimer = setTimeout(() => {
-        if (!closed) {
-          logger.warn?.(`Process ${command} did not terminate, sending SIGKILL`);
-          killProcess("SIGKILL");
-        }
-      }, FORCE_KILL_DELAY);
+      logger.warn?.({ command, timeoutMs: timeout }, "Subprocess timed out");
+      terminate();
     }, timeout);
+    signal?.addEventListener("abort", terminate, { once: true });
+    if (signal?.aborted) terminate();
 
     proc.stdout.on("data", (data) => {
-      if (stdout.length < maxOutput) {
-        stdout += data.toString().slice(0, maxOutput - stdout.length);
-      }
+      const text = data.toString();
+      if (stdout.length < maxOutput) stdout += text.slice(0, maxOutput - stdout.length);
+      onStdout?.(text);
     });
-
     proc.stderr.on("data", (data) => {
-      if (stderr.length < maxOutput) {
-        stderr += data.toString().slice(0, maxOutput - stderr.length);
-      }
+      if (stderr.length < maxOutput) stderr += data.toString().slice(0, maxOutput - stderr.length);
     });
-
-    proc.on("close", (code) => {
-      closed = true;
+    // An exited parent may leave children alive with their stdio closed. Kill
+    // those too, even if "close" arrives before the escalation timer fires.
+    const finish = (code, error) => {
+      if (finished) return;
+      finished = true;
+      if (terminating && useProcessGroup) kill("SIGKILL");
       clearTimeout(timeoutTimer);
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer);
-      }
-      resolve({
-        success: code === 0 && !timedOut,
-        stdout,
-        stderr,
-        code,
-        timedOut,
-      });
-    });
-
-    proc.on("error", (err) => {
-      closed = true;
-      clearTimeout(timeoutTimer);
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer);
-      }
-      resolve({
-        success: false,
-        stdout,
-        stderr: err.message,
-        code: null,
-        timedOut,
-      });
-    });
+      clearTimeout(forceKillTimer);
+      signal?.removeEventListener("abort", terminate);
+      resolve({ success: code === 0 && !timedOut && !signal?.aborted,
+        stdout, stderr: error?.message || stderr, code, timedOut });
+    };
+    proc.on("close", (code) => finish(code));
+    proc.on("error", (error) => finish(null, error));
   });
+  signal?.throwIfAborted();
+  return result;
 }
 
 /**
@@ -146,6 +105,9 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
     auxdir,
     outdir,
     logger = console,
+    signal = getJobSignal(),
+    onStdout,
+    maxOutput = DEFAULT_MAX_OUTPUT,
   } = options;
 
   const args = [
@@ -182,6 +144,9 @@ async function runLatexmk(compilerFlag, targetPath, options = {}) {
     cwd,
     timeout,
     logger,
+    signal,
+    onStdout,
+    maxOutput,
   });
 
   return {
@@ -252,127 +217,37 @@ async function runPdftoppm(pdfPath, outputPrefix, options = {}) {
  * @returns {Promise<{success: boolean, log: string, timedOut: boolean}>}
  */
 async function runLatexmkWithProgress(compilerFlag, targetPath, options = {}) {
-  const {
-    cwd,
-    timeout = 300000, // 5 minutes default
-    recorder = false,
-    auxdir,
-    outdir,
-    logger = console,
-    onProgress,
-    maxOutput = DEFAULT_MAX_OUTPUT,
-  } = options;
-
-  const args = [
-    compilerFlag,
-    "-interaction=nonstopmode",
-    "-file-line-error",
-    "-cd",
-    "-f",
-    "-bibtex",
-  ];
-
-  if (recorder) {
-    args.push("-recorder");
-  }
-
-  if (auxdir) {
-    args.push(`-auxdir=${auxdir}`);
-  }
-
-  if (outdir) {
-    args.push(`-outdir=${outdir}`);
-  }
-
-  args.push(targetPath);
-
-  logger.info?.(`Running latexmk with progress tracking: ${args.join(" ")}`);
-
-  return new Promise((resolve) => {
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let closed = false;
-    let forceKillTimer = null;
-    let currentPass = 0;
-
-    const proc = spawn("latexmk", args, { cwd });
-
-    const timeoutTimer = setTimeout(() => {
-      timedOut = true;
-      logger.warn?.(`latexmk timed out after ${timeout}ms, sending SIGTERM`);
-      proc.kill("SIGTERM");
-
-      forceKillTimer = setTimeout(() => {
-        if (!closed) {
-          logger.warn?.("latexmk did not terminate, sending SIGKILL");
-          proc.kill("SIGKILL");
-        }
-      }, 5000);
-    }, timeout);
-
-    proc.stdout.on("data", (data) => {
-      const text = data.toString();
-      if (stdout.length < maxOutput) {
-        stdout += text.slice(0, maxOutput - stdout.length);
-      }
-
-      // Detect latexmk progress from output
-      if (onProgress) {
-        // Detect pdflatex/xelatex/lualatex runs
-        if (text.includes("Latexmk: applying rule 'pdflatex'") ||
-            text.includes("Latexmk: applying rule 'xelatex'") ||
-            text.includes("Latexmk: applying rule 'lualatex'")) {
-          currentPass++;
-          onProgress(`Compiling (pass ${currentPass})...`);
-        }
-        // Detect bibtex run
-        else if (text.includes("Latexmk: applying rule 'bibtex'")) {
-          onProgress("Running bibtex...");
-        }
-        // Detect biber run
-        else if (text.includes("Latexmk: applying rule 'biber'")) {
-          onProgress("Running biber...");
-        }
-        // Detect makeindex run
-        else if (text.includes("Latexmk: applying rule 'makeindex'")) {
-          onProgress("Building index...");
-        }
-      }
-    });
-
-    proc.stderr.on("data", (data) => {
-      if (stderr.length < maxOutput) {
-        stderr += data.toString().slice(0, maxOutput - stderr.length);
-      }
-    });
-
-    proc.on("close", (code) => {
-      closed = true;
-      clearTimeout(timeoutTimer);
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer);
-      }
-      resolve({
-        success: code === 0 && !timedOut,
-        log: stdout + stderr,
-        timedOut,
+  const { onProgress, logger = console } = options;
+  let currentPass = 0;
+  let pendingLine = "";
+  const reportLine = (line) => {
+    let message;
+    if (/Latexmk: applying rule '(pdflatex|xelatex|lualatex)'/.test(line)) {
+      message = `Compiling (pass ${++currentPass})...`;
+    } else if (/Latexmk: applying rule 'bibtex(?:\s[^']*)?'/.test(line)) {
+      message = "Running bibtex...";
+    } else if (/Latexmk: applying rule 'biber(?:\s[^']*)?'/.test(line)) {
+      message = "Running biber...";
+    } else if (/Latexmk: applying rule 'makeindex(?:\s[^']*)?'/.test(line)) {
+      message = "Building index...";
+    }
+    if (message && onProgress) {
+      Promise.resolve().then(() => onProgress(message)).catch((error) => {
+        logger.warn?.({ err: error }, "Progress callback failed");
       });
-    });
-
-    proc.on("error", (err) => {
-      closed = true;
-      clearTimeout(timeoutTimer);
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer);
-      }
-      resolve({
-        success: false,
-        log: err.message,
-        timedOut,
-      });
-    });
+    }
+  };
+  const result = await runLatexmk(compilerFlag, targetPath, {
+    timeout: 300000,
+    ...options,
+    onStdout(text) {
+      const lines = (pendingLine + text).split(/\r?\n/);
+      pendingLine = lines.pop().slice(-4096);
+      for (const line of lines) reportLine(line);
+    },
   });
+  if (pendingLine) reportLine(pendingLine);
+  return result;
 }
 
 module.exports = {

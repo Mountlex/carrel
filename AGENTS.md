@@ -12,9 +12,11 @@
 - `bun run dev` starts the Vite frontend on port 5173.
 - `bun run dev:convex` runs the Convex dev server and generates types.
 - `bun run dev:all` runs both frontend and backend concurrently.
-- `bun run build` runs TypeScript project checks and builds the Vite app.
+- `bun run build` builds the Vite app; it does not type-check sources.
+- `bun run check` runs lint, TypeScript regression checks, and tests. Install the service dependencies with `npm ci --omit=dev --prefix latex-service` first.
+- `bun run typecheck:strict` reports all TypeScript errors. `bun run typecheck` checks the actual referenced projects against the documented existing-error baseline; it must not be described as a clean strict type check.
 - `bun run lint` runs ESLint across the repo.
-- `npx convex deploy` deploys Convex functions to production.
+- Use `bun run deploy:backend`, `bun run deploy:frontend`, or `bun run deploy:latex` for checked deployments.
 
 ## Coding Style & Naming Conventions
 
@@ -26,6 +28,9 @@
 ## Testing Guidelines
 
 - Run `bun run test` to run tests in watch mode, or `bun run test:run` for a single run. Tests use vitest.
+- Run `bun run check` before deploying. Do not use plain `tsc --noEmit` on the root solution config as evidence of type safety: its `files` array is empty.
+- Add regressions for compilation incidents. The default LaTeX Docker build runs real engine/PDF/thumbnail tests; do not deploy an intermediate Docker target to bypass them.
+- Do not expand `scripts/typecheck-baseline.json` to make new code pass. Remove resolved entries as type debt is fixed. See `docs/compilation-reliability.md`.
 - Validate changes by running `bun run dev:all` and exercising key flows: auth, repo sync, and paper viewing.
 
 ## Commit & Pull Request Guidelines

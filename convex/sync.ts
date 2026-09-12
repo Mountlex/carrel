@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, mutation, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -8,7 +8,7 @@ import { sleep, type DependencyHash } from "./lib/http";
 import { isFileNotFoundError } from "./lib/providers/types";
 import { checkUserRateLimit, type UserRateLimitAction } from "./lib/rateLimit";
 import { resolveBackgroundRefreshEnabled, resolveCacheMode } from "./lib/settings";
-import { normalizeRepositorySyncError } from "./lib/syncErrors";
+import { normalizeRepositorySyncError, summarizeBuildError } from "./lib/syncErrors";
 
 const MAX_STORED_SYNC_ERROR_CHARS = 25000;
 
@@ -1411,7 +1411,7 @@ export const buildPaper = action({
         status: "error",
         attemptId,
       });
-      throw error;
+      throw new ConvexError(summarizeBuildError(error));
     }
   },
 });
@@ -1518,6 +1518,7 @@ export const buildPaperForMobile = internalAction({
       let storageId: string;
       let fileSize: number;
       let dependencies: Array<{ path: string; hash: string }> | undefined;
+      let dependencyPaths: string[] | undefined;
 
       if (trackedFile.pdfSourceType === "compile") {
         const result = await ctx.runAction(internal.latex.compileLatexInternal, {
@@ -1617,7 +1618,7 @@ export const buildPaperForMobile = internalAction({
         status: "error",
         attemptId,
       });
-      throw error;
+      throw new ConvexError(summarizeBuildError(error));
     }
   },
 });

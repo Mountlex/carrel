@@ -25,6 +25,7 @@ import {
 } from "./lib/http";
 import { FileNotFoundError } from "./lib/providers/types";
 import { resolveCacheMode } from "./lib/settings";
+import { trimCompilationLog } from "./lib/buildDiagnostics";
 
 // Helper to get authentication for any git provider
 async function getAuthForProvider(
@@ -153,7 +154,6 @@ export const compileLatexInternal = internalAction({
     }))),
   },
   handler: async (ctx, args) => {
-    const MAX_LOG_CHARS = 20000;
     // Helper to update progress in UI
     const updateProgress = async (message: string | null) => {
       if (args.paperId) {
@@ -256,9 +256,7 @@ export const compileLatexInternal = internalAction({
             if (parsedError) {
               errorMessage = parsedError.error || errorMessage;
               if (parsedError.log) {
-                const trimmedLog = parsedError.log.length > MAX_LOG_CHARS
-                  ? parsedError.log.substring(0, MAX_LOG_CHARS) + "\n...(truncated)"
-                  : parsedError.log;
+                const trimmedLog = trimCompilationLog(parsedError.log);
                 errorMessage += "\n\nLog:\n" + trimmedLog;
               }
             } else {

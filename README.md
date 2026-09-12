@@ -43,6 +43,8 @@ Set these in your Convex dashboard:
 | `bun run dev:all` | Start both |
 | `bun run build` | Production build |
 | `bun run lint` | Run ESLint |
+| `bun run check` | Lint, check for TypeScript regressions, and run tests |
+| `bun run typecheck:strict` | Report the complete existing TypeScript backlog |
 
 ## Deployment
 
@@ -54,6 +56,12 @@ git push origin v1.0.0
 ```
 
 This deploys Convex, Cloudflare Workers, and the LaTeX service (if changed).
+
+Releases are gated by code checks, a frontend build, and real compiler tests in
+the LaTeX Docker image. For local releases use `bun run deploy:backend`,
+`bun run deploy:frontend`, or `bun run deploy:latex`.
+See [compilation reliability checks](docs/compilation-reliability.md) for setup,
+the existing TypeScript backlog, and incident verification.
 
 ## License
 

@@ -12,9 +12,13 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "deploy": "npx convex deploy && bun run build && npx wrangler deploy",
-    "deploy:frontend": "bun run build && npx wrangler deploy",
-    "deploy:backend": "npx convex deploy"
+    "deploy": "bun run check && bun run build && npx convex deploy && npx wrangler deploy",
+    "deploy:frontend": "bun run check && bun run build && npx wrangler deploy",
+    "deploy:backend": "bun run check && npx convex deploy",
+    "typecheck": "node scripts/typecheck.mjs",
+    "typecheck:strict": "node scripts/typecheck.mjs --strict",
+    "check": "bun run lint && bun run typecheck && bun run test:run",
+    "deploy:latex": "bun run check && cd latex-service && flyctl deploy --remote-only --strategy rolling --update-only"
   },
   "dependencies": {
     "@auth/core": "0.37.2",

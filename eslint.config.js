@@ -8,6 +8,12 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['dist', 'mobile', 'convex/_generated']),
   {
+    files: ['latex-service/**/*.{js,cjs}'],
+    ...js.configs.recommended,
+    languageOptions: { ecmaVersion: 2024, sourceType: 'commonjs', globals: globals.node },
+    rules: { ...js.configs.recommended.rules, 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,

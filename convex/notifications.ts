@@ -4,6 +4,7 @@ import { requireUserId } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { buildCompletionMessage } from "./lib/buildDiagnostics";
 
 const DEFAULT_PREFERENCES = {
   enabled: false,
@@ -292,22 +293,14 @@ export const notifyBuildCompleted = internalAction({
     if (args.status === "success" && !preferences.buildSuccess) return { delivered: 0 };
     if (args.status === "failure" && !preferences.buildFailure) return { delivered: 0 };
 
-    const title = args.status === "success" ? "Build completed" : "Build failed";
-    const paperTitle = info.title || "Paper";
-    const body = args.status === "success"
-      ? `${paperTitle} is ready.`
-      : `${paperTitle} failed to build.`;
-
     return sendPushToUser(ctx, info.userId, {
       pushType: "alert",
-      title,
-      body,
-      data: {
-        event: "build_completed",
+      ...buildCompletionMessage({
         status: args.status,
         paperId: args.paperId,
+        paperTitle: info.title || "Paper",
         error: args.error,
-      },
+      }),
       collapseId: `build-${args.paperId}`,
       includeBackground: preferences.backgroundSync,
     });

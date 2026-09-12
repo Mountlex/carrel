@@ -12,7 +12,11 @@ const { cloneRepository, cloneRepositorySparse, BINARY_EXTENSIONS, formatGitErro
 const { extractMissingFiles } = require("./lib/latexDependencies");
 const { withCleanup, cleanupAllPendingWorkDirs } = require("./lib/cleanup");
 const { rateLimit } = require("./lib/rateLimit");
-const { compilationQueue } = require("./lib/queue");
+const { compilationQueue, thumbnailQueue } = require("./lib/queue");
+const { checkJob, getJobSignal } = require("./lib/jobContext");
+const { runRequestJob, abortActiveJobs, activeJobCount,
+  COMPILE_REQUEST_TIMEOUT_MS, THUMBNAIL_REQUEST_TIMEOUT_MS } = require("./lib/requestJob");
+const { createShutdownHandler } = require("./lib/shutdown");
 const {
   LIMITS,
   safePathAsync,
@@ -44,8 +48,7 @@ const { LRUCache } = require("lru-cache");
 const REFS_CACHE_TTL = 10000; // 10 seconds (matches MIN_SYNC_INTERVAL)
 const refsCache = new LRUCache({ max: 200, ttl: REFS_CACHE_TTL });
 
-// Request tracking for graceful shutdown
-let activeRequests = 0;
+// Graceful shutdown state
 let shuttingDown = false;
 let cacheCleanupRunning = false;
 let persistCleanupRunning = false;
@@ -196,6 +199,7 @@ async function acquireLock(lockPath, { timeoutMs, staleMs, logger }) {
   const start = Date.now();
   await fs.mkdir(path.dirname(lockPath), { recursive: true });
   while (Date.now() - start < timeoutMs) {
+    checkJob();
     try {
       const handle = await fs.open(lockPath, "wx");
       await handle.writeFile(JSON.stringify({
@@ -299,14 +303,14 @@ function shouldSkipCacheFile(filePath) {
 
 async function copyDir(src, dest) {
   await fs.mkdir(dest, { recursive: true });
-  await fs.cp(src, dest, { recursive: true });
+  await fs.cp(src, dest, { recursive: true, filter: () => { checkJob(); return true; } });
 }
 
 async function copyDirFiltered(src, dest) {
   await fs.mkdir(dest, { recursive: true });
   await fs.cp(src, dest, {
     recursive: true,
-    filter: (srcPath) => !shouldSkipCacheFile(srcPath),
+    filter: (srcPath) => { checkJob(); return !shouldSkipCacheFile(srcPath); },
   });
 }
 
@@ -560,25 +564,15 @@ function scheduleCacheCleanup(logger) {
   }, CACHE_CLEAN_INTERVAL_MS);
 }
 
-// Middleware to track active requests and reject new requests during shutdown
-function requestTracker(req, res, next) {
+// Existing connections may submit another request while the server drains.
+function rejectDuringShutdown(req, res, next) {
   if (shuttingDown && req.path !== "/health") {
     return res.status(503).json({ error: "Server is shutting down" });
   }
-  activeRequests++;
-  res.on("finish", () => {
-    activeRequests--;
-  });
-  res.on("close", () => {
-    // Handle aborted requests
-    if (!res.writableEnded) {
-      activeRequests--;
-    }
-  });
   next();
 }
 
-app.use(requestTracker);
+app.use(rejectDuringShutdown);
 
 // CORS configuration
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
@@ -662,6 +656,7 @@ async function checkCommand(command, args = ["--version"]) {
 
 // Health check with dependency verification
 app.get("/health", async (req, res) => {
+  if (shuttingDown) return res.status(503).json({ status: "stopping" });
   const checks = {
     latexmk: await checkCommand("latexmk", ["--version"]),
     git: await checkCommand("git", ["--version"]),
@@ -673,6 +668,7 @@ app.get("/health", async (req, res) => {
     status: healthy ? "ok" : "degraded",
     checks,
     queue: compilationQueue.stats(),
+    thumbnailQueue: thumbnailQueue.stats(),
   });
 });
 
@@ -689,8 +685,7 @@ function buildAuthenticatedUrl(gitUrl, auth) {
 
 // Compile from git - clone repo and compile directly
 app.post("/compile-from-git", rateLimit, async (req, res) => {
-  try {
-    await compilationQueue.run(async () => {
+    await runRequestJob(req, res, compilationQueue, async () => {
       const jobId = uuidv4();
       const jobDir = path.join(JOBS_ROOT, jobId);
 
@@ -716,11 +711,13 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
         let persistEnabled = false;
         let lockHeld = false;
 
-        // Helper to send progress callbacks (fire-and-forget, don't block on errors)
+        // Progress is best-effort, but must never hold a job open indefinitely.
         const sendProgress = async (message) => {
+          checkJob();
           if (progressCallback && progressCallback.url && progressCallback.paperId) {
             try {
               const resp = await fetch(progressCallback.url, {
+                signal: AbortSignal.any([getJobSignal(), AbortSignal.timeout(5000)]),
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -734,7 +731,9 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
               if (!resp.ok) {
                 req.log.warn(`Progress callback failed: ${resp.status} ${resp.statusText}`);
               }
+              await resp.body?.cancel();
             } catch (err) {
+              checkJob();
               req.log.warn({ err }, "Failed to send progress callback");
             }
           }
@@ -824,9 +823,10 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
         if (persistEnabled && persistPaths) {
           activeAuxDir = path.join(persistPaths.paperDir, "aux");
           activeOutDir = path.join(persistPaths.paperDir, "out");
+          const auxReused = (await fs.readdir(activeAuxDir).catch(() => [])).length > 0;
           await fs.mkdir(activeAuxDir, { recursive: true });
           await fs.mkdir(activeOutDir, { recursive: true });
-          req.log.info("Persistent workdir: enabled (reusing aux/out)");
+          req.log.info({ auxReused }, "Persistent workdir enabled");
         }
 
         if (sparsePaths.length > 0) {
@@ -1038,7 +1038,7 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
               await copyDir(cachePaths.outDir, activeOutDir);
               restored = true;
             }
-            req.log.info(`Cache restore: ${restored ? "hit" : "miss"}`);
+            req.log.info({ cacheRestored: restored }, "Cache restore");
             await writeCacheMeta(cachePaths.metaPath, {
               lastUsed: Date.now(),
               paperId,
@@ -1070,12 +1070,18 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
           ...(cacheEnabled ? { auxdir: activeAuxDir, outdir: activeOutDir } : {}),
         };
         const runCompile = async () => {
+          checkJob();
+          const compileStartedAt = Date.now();
           const result = progressCallback
             ? await runLatexmkWithProgress(compilerFlag, targetPath, {
                 ...latexOptions,
                 onProgress: sendProgress,
               })
             : await runLatexmk(compilerFlag, targetPath, latexOptions);
+          req.log.info({ compileMs: Date.now() - compileStartedAt,
+            timedOut: result.timedOut, success: result.success }, "Compiler finished");
+          checkJob();
+          if (result.timedOut) return { success: false, log: result.log, timedOut: true };
 
           const pdfPath = path.join(outputDir, `${targetName}.pdf`);
           try {
@@ -1095,7 +1101,7 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
 
         let compileResult = await runCompile();
 
-        if (sparsePaths.length > 0) {
+        if (!compileResult.timedOut && sparsePaths.length > 0) {
           const MAX_SPARSE_RECOVERY_ATTEMPTS = 5;
           for (let attempt = 0; attempt < MAX_SPARSE_RECOVERY_ATTEMPTS; attempt += 1) {
             const missingFiles = extractMissingFiles(compileResult.log);
@@ -1112,12 +1118,33 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
             effectiveSparsePaths = Array.from(new Set([...(effectiveSparsePaths || []), ...addedPaths]));
             req.log.info(`Sparse checkout updated with ${addedPaths.length} file(s), retrying compile`);
             compileResult = await runCompile();
+            if (compileResult.timedOut) break;
+          }
+
+          // Cached dependencies can be incomplete after a paper is reorganized.
+          // TeX often stops at the first missing input, so a fixed number of
+          // individual-file retries cannot guarantee a complete checkout.
+          if (!compileResult.timedOut &&
+              (!compileResult.success || extractMissingFiles(compileResult.log).length > 0)) {
+            req.log.info("Sparse recovery incomplete; checking out the full repository and retrying once");
+            const checkout = await spawnAsync("git", ["-C", workDir, "sparse-checkout", "disable"], {
+              timeout: 60000,
+              logger: req.log,
+            });
+            if (checkout.success) {
+              effectiveSparsePaths = ["*"];
+              compileResult = await runCompile();
+            } else {
+              req.log.warn("Full checkout failed during sparse recovery");
+            }
           }
         }
 
         if (!compileResult.success) {
           return res.status(400).json({
-            error: "Compilation failed",
+            error: compileResult.timedOut
+              ? "Compilation exceeded its time limit"
+              : "Compilation failed",
             log: compileResult.log,
             timedOut: compileResult.timedOut,
           });
@@ -1299,6 +1326,7 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
         // Read and return PDF with dependencies in header
         const pdfBuffer = await fs.readFile(compileResult.pdfPath);
         req.log.info(`Compilation successful, PDF size: ${pdfBuffer.length} bytes`);
+        checkJob();
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Length", pdfBuffer.length);
         if (deps.size > 0) {
@@ -1328,17 +1356,7 @@ app.post("/compile-from-git", rateLimit, async (req, res) => {
           }
         }
       }, req.log);
-    }, { logger: req.log });
-  } catch (err) {
-    if (err.code === "QUEUE_FULL") {
-      return res.status(503).json({
-        error: "Server is busy. Please try again later.",
-        queue: err.stats,
-        retryAfter: 30,
-      });
-    }
-    throw err;
-  }
+    }, { timeoutMs: COMPILE_REQUEST_TIMEOUT_MS, maxWaitMs: 60000 });
 });
 
 // Clear cache entries for one or more papers
@@ -2039,58 +2057,62 @@ app.post("/git/file-hash", rateLimit, async (req, res) => {
 
 // Thumbnail endpoint
 app.post("/thumbnail", rateLimit, async (req, res) => {
-  const jobId = uuidv4();
-  const workDir = `/tmp/thumbnail-${jobId}`;
+  await runRequestJob(req, res, thumbnailQueue, async () => {
+    const jobId = uuidv4();
+    const workDir = `/tmp/thumbnail-${jobId}`;
 
-  await withCleanup(workDir, async () => {
-    const { pdfBase64, width = 800, format = "png" } = req.body;
+    await withCleanup(workDir, async () => {
+      const { pdfBase64, width = 800, format = "png" } = req.body;
 
-    if (!pdfBase64) {
-      return res.status(400).json({ error: "Missing pdfBase64" });
-    }
+      if (!pdfBase64) {
+        return res.status(400).json({ error: "Missing pdfBase64" });
+      }
 
-    const optionsValidation = validateThumbnailOptions({ width, format });
-    if (!optionsValidation.valid) {
-      return res.status(400).json({ error: optionsValidation.error });
-    }
+      const optionsValidation = validateThumbnailOptions({ width, format });
+      if (!optionsValidation.valid) {
+        return res.status(400).json({ error: optionsValidation.error });
+      }
 
-    await fs.mkdir(workDir, { recursive: true });
+      await fs.mkdir(workDir, { recursive: true });
 
-    // Decode and write PDF
-    const pdfBuffer = Buffer.from(pdfBase64, "base64");
-    const pdfPath = path.join(workDir, "input.pdf");
-    await fs.writeFile(pdfPath, pdfBuffer);
+      // Decode and write PDF
+      const pdfBuffer = Buffer.from(pdfBase64, "base64");
+      const pdfPath = path.join(workDir, "input.pdf");
+      await fs.writeFile(pdfPath, pdfBuffer);
 
-    const outputPrefix = path.join(workDir, "thumb");
+      const outputPrefix = path.join(workDir, "thumb");
 
-    const result = await runPdftoppm(pdfPath, outputPrefix, {
-      format,
-      width,
-      timeout: 30000,
-      logger: req.log,
-    });
-
-    if (!result.success) {
-      return res.status(400).json({
-        error: `Thumbnail generation failed: ${result.stderr}`,
-        timedOut: result.timedOut,
+      const result = await runPdftoppm(pdfPath, outputPrefix, {
+        format,
+        width,
+        timeout: 30000,
+        logger: req.log,
       });
-    }
 
-    const ext = format === "png" ? "png" : "jpg";
-    const thumbPath = path.join(workDir, `thumb.${ext}`);
+      if (!result.success) {
+        return res.status(400).json({
+          error: `Thumbnail generation failed: ${result.stderr}`,
+          timedOut: result.timedOut,
+        });
+      }
 
-    try {
-      const thumbBuffer = await fs.readFile(thumbPath);
-      const contentType = format === "png" ? "image/png" : "image/jpeg";
+      const ext = format === "png" ? "png" : "jpg";
+      const thumbPath = path.join(workDir, `thumb.${ext}`);
 
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Content-Length", thumbBuffer.length);
-      res.send(thumbBuffer);
-    } catch {
-      return res.status(500).json({ error: "Failed to read generated thumbnail" });
-    }
-  }, req.log);
+      try {
+        const thumbBuffer = await fs.readFile(thumbPath);
+        const contentType = format === "png" ? "image/png" : "image/jpeg";
+
+        checkJob();
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Content-Length", thumbBuffer.length);
+        res.send(thumbBuffer);
+      } catch {
+        checkJob();
+        return res.status(500).json({ error: "Failed to read generated thumbnail" });
+      }
+    }, req.log);
+  }, { timeoutMs: THUMBNAIL_REQUEST_TIMEOUT_MS, maxWaitMs: 5000 });
 });
 
 // Return JSON for unhandled route errors so callers can surface the useful cause.
@@ -2115,67 +2137,23 @@ const server = app.listen(PORT, "0.0.0.0", () => {
 });
 
 // Set server-level timeouts
-server.timeout = 300000; // 5 minutes
+// Job deadlines include queueing + cloning + compiling. Leave room for a
+// structured timeout response after subprocess termination and cleanup.
+server.timeout = 610000; // Above Convex's 10-minute compilation request timeout
 server.keepAliveTimeout = 65000; // Slightly higher than common load balancer timeouts
 server.headersTimeout = 66000; // Slightly higher than keepAliveTimeout
 
-// Helper to wait for active requests to drain
-function waitForRequestsDrain(maxWaitMs = 25000) {
-  return new Promise((resolve) => {
-    const startTime = Date.now();
-    const checkInterval = setInterval(() => {
-      if (activeRequests === 0) {
-        clearInterval(checkInterval);
-        resolve(true);
-      } else if (Date.now() - startTime > maxWaitMs) {
-        logger.warn(`${activeRequests} requests still active after ${maxWaitMs}ms, proceeding with cleanup`);
-        clearInterval(checkInterval);
-        resolve(false);
-      } else {
-        logger.info(`Waiting for ${activeRequests} active request(s) to complete...`);
-      }
-    }, 1000);
-  });
-}
-
-// Graceful shutdown handling
-async function shutdown(signal) {
-  if (shuttingDown) {
-    logger.warn(`Received ${signal} during shutdown, forcing exit`);
-    process.exit(1);
-  }
-
+const drainAndExit = createShutdownHandler({
+  server,
+  queues: [compilationQueue, thumbnailQueue],
+  abortJobs: abortActiveJobs,
+  activeJobCount,
+  cleanup: cleanupAllPendingWorkDirs,
+  logger,
+});
+function shutdown(signal) {
   shuttingDown = true;
-  logger.info(`${signal} received, starting graceful shutdown...`);
-  logger.info(`Active requests: ${activeRequests}`);
-  logger.info(`Compilation queue: ${JSON.stringify(compilationQueue.stats())}`);
-
-  // Clear queued (not yet started) compilations - they'll get 503 errors
-  compilationQueue.clear();
-
-  // Stop accepting new connections
-  server.close(async () => {
-    logger.info("HTTP server closed, no new connections accepted");
-
-    // Wait for active requests to complete
-    if (activeRequests > 0) {
-      logger.info(`Waiting for ${activeRequests} active request(s) to drain...`);
-      await waitForRequestsDrain();
-    }
-
-    // Clean up pending work directories (should be empty if all requests completed)
-    await cleanupAllPendingWorkDirs(logger);
-
-    logger.info("Shutdown complete");
-    process.exit(0);
-  });
-
-  // Force exit after timeout
-  setTimeout(() => {
-    logger.error("Graceful shutdown timed out, forcing exit");
-    process.exit(1);
-  }, 30000);
+  return drainAndExit(signal);
 }
-
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

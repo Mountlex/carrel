@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRepositorySyncError } from "./syncErrors";
+import { normalizeRepositorySyncError, summarizeBuildError } from "./syncErrors";
 
 describe("normalizeRepositorySyncError", () => {
   it("normalizes nested Overleaf authentication errors", () => {
@@ -37,5 +37,23 @@ describe("normalizeRepositorySyncError", () => {
       isAuthenticationError: true,
       isConfigurationError: false,
     });
+  });
+});
+
+describe("summarizeBuildError", () => {
+  it("exposes a useful compilation summary without the log or stack", () => {
+    expect(summarizeBuildError(new Error("Uncaught Error: Compilation failed\n\nLog:\nprivate source\n at handler")))
+      .toBe("Compilation failed. Open the paper's build log for details.");
+  });
+
+  it("distinguishes timeouts and repository authentication failures", () => {
+    expect(summarizeBuildError(new Error("Job exceeded its total time limit"))).toContain("time limit");
+    expect(summarizeBuildError(new Error("Failed to get Overleaf commit: Enter your Git authentication token")))
+      .toBe("Overleaf authentication failed. Update your Overleaf Git token and retry.");
+  });
+
+  it("does not expose unexpected internal error details", () => {
+    expect(summarizeBuildError(new Error("Database failure: secret")))
+      .toBe("The paper could not be built. Open the paper's build log for details.");
   });
 });

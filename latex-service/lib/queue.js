@@ -1,68 +1,58 @@
-/**
- * Simple in-memory job queue for rate-limiting concurrent compilations.
- * Prevents OOM by ensuring only a few compilations run at once.
- */
+const { jobError } = require("./jobContext");
 
 class CompilationQueue {
-  constructor(options = {}) {
-    this.maxConcurrent = options.maxConcurrent || 2;
-    this.maxQueued = options.maxQueued || 20;
+  constructor({ maxConcurrent = 1, maxQueued = 10 } = {}) {
+    if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 ||
+        !Number.isInteger(maxQueued) || maxQueued < 0) {
+      throw new Error("Invalid queue limits");
+    }
+    this.maxConcurrent = maxConcurrent;
+    this.maxQueued = maxQueued;
     this.running = 0;
     this.queue = [];
+    this.closed = false;
   }
 
-  /**
-   * Get current queue statistics.
-   */
   stats() {
-    return {
-      running: this.running,
-      queued: this.queue.length,
-      maxConcurrent: this.maxConcurrent,
-      maxQueued: this.maxQueued,
-    };
+    return { running: this.running, queued: this.queue.length,
+      maxConcurrent: this.maxConcurrent, maxQueued: this.maxQueued };
   }
 
-  /**
-   * Execute a function with queue management.
-   * Resolves when the function completes, or rejects if queue is full.
-   *
-   * @param {Function} fn - Async function to execute
-   * @param {Object} [options] - Options
-   * @param {Object} [options.logger] - Logger instance
-   * @returns {Promise<any>} - Result of fn()
-   */
-  async run(fn, options = {}) {
-    const { logger = console } = options;
-
-    // Check if queue is full
+  async run(fn, { signal, maxWaitMs = 60000, logger = console } = {}) {
+    signal?.throwIfAborted();
+    if (this.closed) throw jobError("QUEUE_CLEARED", "Server is shutting down");
+    if (this.running < this.maxConcurrent) return this._execute(fn, logger, 0);
     if (this.queue.length >= this.maxQueued) {
-      const err = new Error("Compilation queue is full");
-      err.code = "QUEUE_FULL";
-      err.stats = this.stats();
-      throw err;
+      throw Object.assign(jobError("QUEUE_FULL", "Server is busy"), { stats: this.stats() });
     }
-
-    // If we can run immediately, do so
-    if (this.running < this.maxConcurrent) {
-      return this._execute(fn, logger);
-    }
-
-    // Otherwise, queue it
-    logger.info?.(`Queuing request. Position: ${this.queue.length + 1}, running: ${this.running}`);
 
     return new Promise((resolve, reject) => {
-      this.queue.push({ fn, resolve, reject, logger });
+      const queuedAt = Date.now();
+      const entry = { fn, resolve, reject, logger, queuedAt, signal };
+      const remove = (error) => {
+        const index = this.queue.indexOf(entry);
+        if (index < 0) return;
+        this.queue.splice(index, 1);
+        entry.dispose();
+        reject(error);
+      };
+      const onAbort = () => remove(signal.reason);
+      const timer = setTimeout(() => remove(jobError("QUEUE_TIMEOUT", "Server is busy; queue wait limit reached")), maxWaitMs);
+      entry.dispose = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+      };
+      this.queue.push(entry);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      logger.info?.({ queued: this.queue.length }, "Job queued");
     });
   }
 
-  async _execute(fn, logger) {
+  async _execute(fn, logger, queueWaitMs) {
     this.running++;
-    logger.info?.(`Starting compilation. Running: ${this.running}, queued: ${this.queue.length}`);
-
+    logger.info?.({ queueWaitMs, running: this.running }, "Job started");
     try {
-      const result = await fn();
-      return result;
+      return await fn();
     } finally {
       this.running--;
       this._processNext();
@@ -70,43 +60,31 @@ class CompilationQueue {
   }
 
   _processNext() {
-    if (this.queue.length === 0 || this.running >= this.maxConcurrent) {
-      return;
+    while (this.queue.length && this.running < this.maxConcurrent) {
+      const entry = this.queue.shift();
+      entry.dispose();
+      if (entry.signal?.aborted) {
+        entry.reject(entry.signal.reason);
+        continue;
+      }
+      this._execute(entry.fn, entry.logger, Date.now() - entry.queuedAt)
+        .then(entry.resolve, entry.reject);
     }
-
-    const { fn, resolve, reject, logger } = this.queue.shift();
-    logger.info?.(`Dequeuing request. Running: ${this.running + 1}, queued: ${this.queue.length}`);
-
-    this._execute(fn, logger).then(resolve).catch(reject);
   }
 
-  /**
-   * Get number of pending items (for graceful shutdown).
-   */
-  pending() {
-    return this.running + this.queue.length;
-  }
+  pending() { return this.running + this.queue.length; }
 
-  /**
-   * Clear the queue (rejects all pending with an error).
-   */
   clear() {
-    const err = new Error("Queue cleared during shutdown");
-    err.code = "QUEUE_CLEARED";
-    for (const { reject } of this.queue) {
-      reject(err);
+    this.closed = true;
+    for (const entry of this.queue.splice(0)) {
+      entry.dispose();
+      entry.reject(jobError("QUEUE_CLEARED", "Server is shutting down"));
     }
-    this.queue = [];
   }
 }
 
-// Singleton instance for compilation jobs
-const compilationQueue = new CompilationQueue({
-  maxConcurrent: 1,  // Max 1 compilation at once (1 CPU, 1GB RAM)
-  maxQueued: 10,     // Max 10 waiting in queue
-});
+const compilationQueue = new CompilationQueue({ maxConcurrent: 1, maxQueued: 10 });
+// Separate short queue: thumbnails must not wait behind a multi-minute compile.
+const thumbnailQueue = new CompilationQueue({ maxConcurrent: 1, maxQueued: 2 });
 
-module.exports = {
-  CompilationQueue,
-  compilationQueue,
-};
+module.exports = { CompilationQueue, compilationQueue, thumbnailQueue };

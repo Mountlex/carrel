@@ -12,6 +12,27 @@ function unwrapErrorPrefix(message: string): string {
   return normalized;
 }
 
+// Only expose known, actionable summaries to clients; keep full logs and
+// unexpected internal errors out of action error payloads.
+export function summarizeBuildError(error: unknown): string {
+  const normalized = normalizeRepositorySyncError(error);
+  if (normalized.isAuthenticationError || normalized.isConfigurationError) {
+    // Provider errors may contain raw remote output. Only use our fixed messages.
+    if (normalized.message.startsWith("Overleaf authentication failed.")) {
+      return "Overleaf authentication failed. Update your Overleaf Git token and retry.";
+    }
+    return "Could not access the repository. Check its connection settings and retry.";
+  }
+  if (normalized.message.startsWith("Compilation exceeded its time limit") ||
+      normalized.message.startsWith("Job exceeded its total time limit")) {
+    return "Compilation exceeded its time limit. Open the paper's build log for details.";
+  }
+  if (normalized.message.startsWith("Compilation failed")) {
+    return "Compilation failed. Open the paper's build log for details.";
+  }
+  return "The paper could not be built. Open the paper's build log for details.";
+}
+
 export function normalizeRepositorySyncError(error: unknown): NormalizedRepositorySyncError {
   const rawMessage = error instanceof Error ? error.message : String(error ?? "Repository sync failed.");
   const message = unwrapErrorPrefix(rawMessage);
