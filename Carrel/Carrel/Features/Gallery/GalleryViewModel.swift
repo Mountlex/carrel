@@ -10,8 +10,6 @@ final class GalleryViewModel: SubscribableViewModel {
     private(set) var papers: [Paper] = []
     var isLoading = false
     var error: String?
-    var subscriptionTask: Task<Void, Never>?
-    var subscriptionStoppedAt: Date?
 
     init() {
         #if DEBUG
@@ -19,12 +17,7 @@ final class GalleryViewModel: SubscribableViewModel {
         #endif
     }
 
-    deinit {
-        Task { @MainActor [weak self] in
-            self?.cacheRefreshTask?.cancel()
-            self?.stopSubscription()
-        }
-    }
+
 
     /// Whether a "Check All Repositories" sync is in progress
     private(set) var isSyncing = false
@@ -44,6 +37,26 @@ final class GalleryViewModel: SubscribableViewModel {
     private(set) var cachedPaperIDs: Set<String> = []
     private var cacheRefreshTask: Task<Void, Never>?
     private var cacheRefreshGeneration = 0
+    private var accountID: String?
+
+    func loadCachedLibrary(userID: String?) async {
+        guard let userID else { return }
+        accountID = userID
+        let cached = await LibraryStore.shared.activate(accountID: userID)
+        guard !Task.isCancelled, accountID == userID else { return }
+        if papers.isEmpty { papers = cached }
+        refreshCachedPaperIDs(for: papers)
+    }
+
+    func refreshCacheState() {
+        refreshCachedPaperIDs(for: papers)
+    }
+
+    private func persistLibrary() {
+        guard let accountID else { return }
+        let snapshot = papers
+        Task { try? await LibraryStore.shared.save(snapshot, accountID: accountID) }
+    }
 
     // MARK: - SubscribableViewModel
 
@@ -62,6 +75,7 @@ final class GalleryViewModel: SubscribableViewModel {
         print("GalleryViewModel: Received \(data.count) papers")
         #endif
         papers = data
+        persistLibrary()
         refreshCachedPaperIDs(for: data)
     }
 
@@ -150,6 +164,7 @@ final class GalleryViewModel: SubscribableViewModel {
         do {
             try await ConvexService.shared.deletePaper(id: paper.id)
             papers.removeAll { $0.id == paper.id }
+            persistLibrary()
             cachedPaperIDs.remove(paper.id)
             toastMessage = ToastMessage(text: "Paper deleted", type: .success)
         } catch {

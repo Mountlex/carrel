@@ -10,17 +10,21 @@ struct GlassCard<Content: View>: View {
     }
 
     var body: some View {
+        content
+            .modifier(GlassCardSurface())
+    }
+}
+
+/// The common card material for papers, repositories, and settings sections.
+struct GlassCardSurface: ViewModifier {
+    func body(content: Content) -> some View {
         let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         content
-            .glassEffect(
-                isInteractive
-                    ? .regular.tint(GlassTheme.cardTint).interactive()
-                    : .regular.tint(GlassTheme.cardTint),
-                in: cardShape
-            )
+            .glassEffect(.regular.tint(GlassTheme.cardTint), in: cardShape)
             .overlay {
                 cardShape
                     .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
+                    .allowsHitTesting(false)
             }
     }
 }
@@ -63,7 +67,7 @@ struct GlassButton<Label: View>: View {
         Button(action: action) {
             label
         }
-        .buttonStyle(LiquidGlassButtonStyle())
+        .buttonStyle(.glass)
     }
 }
 
@@ -78,7 +82,7 @@ enum GlassTheme {
     static let cardTint: Color = Color.white.opacity(0.08)
     static let overlayTint: Color = Color.white.opacity(0.18)
 
-    static let cardStroke: Color = Color.white.opacity(0.22)
+    static let cardStroke: Color = Color(uiColor: .separator).opacity(0.25)
     static let overlayStroke: Color = Color.white.opacity(0.28)
 
     static let accent: Color = Color(red: 14.0 / 255.0, green: 165.0 / 255.0, blue: 233.0 / 255.0) // #0EA5E9
@@ -129,12 +133,7 @@ struct GlassRow<Content: View>: View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(GlassTheme.rowPadding)
-            .glassEffect(
-                isInteractive
-                    ? .regular.tint(GlassTheme.cardTint).interactive()
-                    : .regular.tint(GlassTheme.cardTint),
-                in: rowShape
-            )
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: rowShape)
             .overlay {
                 rowShape
                     .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.7)
@@ -143,13 +142,14 @@ struct GlassRow<Content: View>: View {
 }
 
 private struct CardPressFeedbackModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @GestureState private var isPressed = false
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isPressed ? 0.985 : 1)
+            .scaleEffect(isPressed && !reduceMotion ? 0.985 : 1)
             .opacity(isPressed ? 0.95 : 1)
-            .animation(GlassTheme.quickMotion, value: isPressed)
+            .animation(reduceMotion ? nil : GlassTheme.quickMotion, value: isPressed)
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.01, maximumDistance: 16)
                     .updating($isPressed) { value, state, _ in

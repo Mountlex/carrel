@@ -1,6 +1,6 @@
 import Foundation
 
-struct User: Codable, Identifiable, Equatable {
+nonisolated struct User: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let email: String?
     let name: String?

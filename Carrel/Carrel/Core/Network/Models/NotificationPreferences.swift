@@ -1,6 +1,6 @@
 import Foundation
 
-struct NotificationPreferences: Codable, Equatable {
+nonisolated struct NotificationPreferences: Codable, Equatable, Sendable {
     var enabled: Bool
     var buildSuccess: Bool
     var buildFailure: Bool

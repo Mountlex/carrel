@@ -209,7 +209,27 @@ export default defineSchema({
     .index("by_paper", ["paperId"])
     .index("by_status", ["status"]),
 
-  // Mobile authentication tokens (for JWT-based mobile app auth)
+  mobileAuthorizationCodes: defineTable({
+    userId: v.id("users"),
+    codeHash: v.string(),
+    challenge: v.string(),
+    expiresAt: v.number(),
+  }).index("by_code_hash", ["codeHash"]).index("by_user", ["userId"]),
+
+  mobileSessions: defineTable({
+    userId: v.id("users"),
+    deviceId: v.string(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  }).index("by_user", ["userId"]),
+
+  mobileSessionRefreshTokens: defineTable({
+    sessionId: v.id("mobileSessions"),
+    tokenHash: v.string(),
+    consumedAt: v.optional(v.number()),
+  }).index("by_token_hash", ["tokenHash"]).index("by_session", ["sessionId"]),
+
+  // Legacy mobile authentication tokens, retained for older installed clients.
   mobileTokens: defineTable({
     userId: v.id("users"),
     // Hashed refresh token (never store raw tokens)

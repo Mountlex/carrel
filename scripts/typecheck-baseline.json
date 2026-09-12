@@ -99,27 +99,6 @@
   },
   {
     "file": "convex/http.ts",
-    "code": 2339,
-    "message": "Property 'email' does not exist on type '{}'.",
-    "source": "email: user.email ?? \"\",",
-    "count": 1
-  },
-  {
-    "file": "convex/http.ts",
-    "code": 2339,
-    "message": "Property 'name' does not exist on type '{}'.",
-    "source": "name: user.name ?? undefined,",
-    "count": 1
-  },
-  {
-    "file": "convex/http.ts",
-    "code": 2345,
-    "message": "Argument of type 'unknown' is not assignable to parameter of type 'string'.",
-    "source": "const payload = await verifyJwt(accessToken, jwtSecret);",
-    "count": 1
-  },
-  {
-    "file": "convex/http.ts",
     "code": 2591,
     "message": "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.",
     "source": "const allowedOrigins = (process.env.ALLOWED_ORIGINS || \"\").split(\",\").filter(Boolean);",
@@ -578,13 +557,6 @@
     "code": 2322,
     "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
     "source": "token: encryptedToken,",
-    "count": 1
-  },
-  {
-    "file": "convex/users.ts",
-    "code": 2345,
-    "message": "Argument of type '{ auth: Auth; } & { db: { get: (id: Id<\"users\">) => Promise<{ email?: string | undefined; } | null>; }; }' is not assignable to parameter of type 'AuthContext'.\n  Type '{ auth: Auth; } & { db: { get: (id: Id<\"users\">) => Promise<{ email?: string | undefined; } | null>; }; }' is missing the following properties from type 'GenericQueryCtx<{ users: { document: { _id: Id<\"users\">; _creationTime: number; name?: string | undefined; email?: string | undefined; emailVerificationTime?: number | undefined; image?: string | undefined; ... 11 more ...; backgroundRefreshDefault?: boolean | undefined; }; fieldPaths: ExtractFieldPaths<...> | \"_id\"...': storage, runQuery",
-    "source": "const userId = await requireUserId(ctx);",
     "count": 1
   },
   {

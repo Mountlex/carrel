@@ -1,43 +1,31 @@
 import Foundation
-import ConvexMobile
+// Convex 0.8 exposes pre-concurrency reference types. Keep all client access in this MainActor service.
+@preconcurrency import ConvexMobile
 import Combine
 
 /// Custom AuthProvider that uses pre-obtained Convex Auth JWT tokens
 /// This allows us to use tokens obtained from the web OAuth flow
-final class ConvexAuthTokenProvider: AuthProvider {
-    /// The current JWT token
+actor ConvexAuthTokenProvider: AuthProvider {
     private var currentToken: String?
 
-    /// Set the token (called when we receive it from OAuth)
     func setToken(_ token: String?) {
         currentToken = token
     }
 
-    /// Login using the stored token
-    func login() async throws -> String {
-        guard let token = currentToken else {
-            throw ConvexAuthError.noToken
-        }
+    func login(onIdToken: @Sendable @escaping (String?) -> Void) async throws -> String {
+        guard let token = currentToken else { throw ConvexAuthError.noToken }
         return token
     }
 
-    /// Login from cached token (same as login since we manage our own cache)
-    func loginFromCache() async throws -> String {
-        guard let token = currentToken else {
-            throw ConvexAuthError.noToken
-        }
-        return token
+    func loginFromCache(onIdToken: @Sendable @escaping (String?) -> Void) async throws -> String {
+        try await login(onIdToken: onIdToken)
     }
 
-    /// Logout - just clear the token
     func logout() async throws {
         currentToken = nil
     }
 
-    /// Extract the JWT ID token from our auth result (it's already the token)
-    func extractIdToken(from authResult: String) -> String {
-        return authResult
-    }
+    nonisolated func extractIdToken(from authResult: String) -> String { authResult }
 }
 
 enum ConvexAuthError: Error {
@@ -62,6 +50,8 @@ final class ConvexService: ObservableObject {
     /// Whether the user is currently authenticated
     @Published private(set) var isAuthenticated = false
 
+    private var authGeneration = 0
+    private var authOperation: Task<Bool, Never>?
     private var authStateCancellable: AnyCancellable?
     private var webSocketCancellable: AnyCancellable?
 
@@ -83,11 +73,11 @@ final class ConvexService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 #if DEBUG
-                print("ConvexService: Auth state changed to: \(state)")
+                print("ConvexService: Auth state changed")
                 #endif
                 switch state {
-                case .authenticated:
-                    self?.isAuthenticated = true
+                case .authenticated(let token):
+                    self?.isAuthenticated = token == self?.authToken && self?.authToken != nil
                 case .unauthenticated, .loading:
                     if case .unauthenticated = state {
                         self?.isAuthenticated = false
@@ -118,92 +108,79 @@ final class ConvexService: ObservableObject {
     /// - Returns: `true` if authentication succeeded, `false` if it failed
     @discardableResult
     func setAuthToken(_ token: String?) async -> Bool {
-        #if DEBUG
-        print("ConvexService: setAuthToken called, token exists: \(token != nil)")
-        #endif
+        guard let token else { await clearAuth(); return false }
+        authGeneration += 1
+        let generation = authGeneration
         authToken = token
-        if let token = token {
-            authProvider.setToken(token)
-            // Trigger login to authenticate the client with the token
-            _ = await client.login()
-            #if DEBUG
-            print("ConvexService: client.login() completed, isAuthenticated = \(isAuthenticated)")
-            #endif
-
-            // Auth state is updated via the authState publisher observer
-            // If not yet authenticated, wait for the auth state to change (with timeout)
-            if !isAuthenticated {
-                let authenticated = await waitForAuthentication(timeout: 5.0)
-                if !authenticated {
-                    #if DEBUG
-                    print("ConvexService: Auth state did not become authenticated")
-                    #endif
-                    authToken = nil
-                    authProvider.setToken(nil)
-                    return false
-                }
+        let previous = authOperation
+        // The SDK's login/logout operations suspend. Serialize them so a late login
+        // cannot reconnect the socket after sign-out has already completed.
+        let operation = Task { @MainActor in
+            _ = await previous?.value
+            guard generation == authGeneration else { return false }
+            await authProvider.setToken(token)
+            let result = await client.login()
+            guard generation == authGeneration else { return false }
+            switch result {
+            case .success:
+                isAuthenticated = true
+                return true
+            case .failure:
+                authToken = nil
+                isAuthenticated = false
+                return false
             }
+        }
+        authOperation = operation
+        let result = await operation.value
+        if generation == authGeneration { authOperation = nil }
+        return result
+    }
 
-            #if DEBUG
-            print("ConvexService: Successfully authenticated with Convex")
-            #endif
-            return true
-        } else {
-            authProvider.setToken(nil)
+    func clearAuth() async {
+        authGeneration += 1
+        let generation = authGeneration
+        authToken = nil
+        isAuthenticated = false
+        let previous = authOperation
+        let operation = Task { @MainActor in
+            _ = await previous?.value
             await client.logout()
             return false
         }
+        authOperation = operation
+        _ = await operation.value
+        if generation == authGeneration { authOperation = nil }
     }
 
-    /// Wait for authentication state to become authenticated
-    /// - Parameter timeout: Maximum time to wait in seconds
-    /// - Returns: `true` if authenticated within timeout, `false` otherwise
-    private func waitForAuthentication(timeout: TimeInterval) async -> Bool {
-        // Check current state first
-        if isAuthenticated { return true }
-
-        // Use a simple polling approach with exponential backoff
-        // This is more reliable than complex Combine continuations
-        let checkIntervals: [UInt64] = [50, 100, 200, 500, 1000] // milliseconds
-        var totalWaited: UInt64 = 0
-        let timeoutMs = UInt64(timeout * 1000)
-
-        for interval in checkIntervals {
-            if totalWaited >= timeoutMs { break }
-
-            try? await Task.sleep(for: .milliseconds(interval))
-            totalWaited += interval
-
-            if isAuthenticated {
-                #if DEBUG
-                print("ConvexService: Authentication confirmed after \(totalWaited)ms")
-                #endif
-                return true
+    static func firstValue<T: Sendable, Failure: Error>(from publisher: AnyPublisher<T, Failure>, timeout: TimeInterval = 15) async throws -> T {
+        let request = QuerySubscription()
+        defer { request.cancel() }
+        let stream = AsyncThrowingStream<T, Error> { continuation in
+            continuation.onTermination = { @Sendable _ in
+                Task { @MainActor in request.cancel() }
             }
+            request.cancellable = publisher
+                .mapError { $0 as Error }
+                .timeout(.milliseconds(Int(timeout * 1000)), scheduler: DispatchQueue.main, customError: { URLError(.timedOut) })
+                .first()
+                .sink(receiveCompletion: { completion in
+                    switch completion {
+                    case .finished: continuation.finish()
+                    case .failure(let error): continuation.finish(throwing: error)
+                    }
+                }, receiveValue: { value in
+                    continuation.yield(value)
+                    continuation.finish()
+                })
         }
-
-        // Continue with 1 second intervals until timeout
-        while totalWaited < timeoutMs {
-            try? await Task.sleep(for: .seconds(1))
-            totalWaited += 1000
-
-            if isAuthenticated {
-                #if DEBUG
-                print("ConvexService: Authentication confirmed after \(totalWaited)ms")
-                #endif
-                return true
-            }
-        }
-
-        return false
+        for try await value in stream { return value }
+        try Task.checkCancellation()
+        throw URLError(.badServerResponse)
     }
 
-    /// Clear authentication state
-    func clearAuth() async {
-        authToken = nil
-        authProvider.setToken(nil)
-        await client.logout()
-        isAuthenticated = false
+    func deleteAccount() async throws {
+        let _: DeleteAccountResult = try await client.mutation("users:deleteAccount")
     }
 
     // MARK: - Papers
@@ -219,42 +196,12 @@ final class ConvexService: ObservableObject {
 
     /// Fetch papers once (used for background refresh)
     func refreshPapersOnce() async throws -> [Paper] {
-        try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-            cancellable = client.subscribe(to: "papers:listMine", yielding: [Paper].self)
-                .first()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                        cancellable?.cancel()
-                    },
-                    receiveValue: { papers in
-                        continuation.resume(returning: papers)
-                    }
-                )
-        }
+        try await Self.firstValue(from: client.subscribe(to: "papers:listMine", yielding: [Paper].self))
     }
 
     /// Get a single paper by ID (uses subscription to get one-time value)
     func getPaper(id: String) async throws -> Paper {
-        try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-            cancellable = client.subscribe(to: "papers:get", with: ["id": id], yielding: Paper.self)
-                .first()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                        cancellable?.cancel()
-                    },
-                    receiveValue: { paper in
-                        continuation.resume(returning: paper)
-                    }
-                )
-        }
+        try await Self.firstValue(from: client.subscribe(to: "papers:get", with: ["id": id], yielding: Paper.self))
     }
 
     /// Subscribe to a single paper for real-time updates
@@ -293,44 +240,14 @@ final class ConvexService: ObservableObject {
 
     /// Get the current user's profile
     func getViewer() async throws -> User? {
-        try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-            cancellable = client.subscribe(to: "users:viewer", yielding: User?.self)
-                .first()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                        cancellable?.cancel()
-                    },
-                    receiveValue: { user in
-                        continuation.resume(returning: user)
-                    }
-                )
-        }
+        try await Self.firstValue(from: client.subscribe(to: "users:viewer", yielding: User?.self))
     }
 
     // MARK: - Notifications
 
     /// Fetch notification preferences for the current user
     func getNotificationPreferences() async throws -> NotificationPreferences {
-        try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-            cancellable = client.subscribe(to: "notifications:getNotificationPreferences", yielding: NotificationPreferences.self)
-                .first()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                        cancellable?.cancel()
-                    },
-                    receiveValue: { preferences in
-                        continuation.resume(returning: preferences)
-                    }
-                )
-        }
+        try await Self.firstValue(from: client.subscribe(to: "notifications:getNotificationPreferences", yielding: NotificationPreferences.self))
     }
 
     /// Update notification preferences for the current user
@@ -534,42 +451,27 @@ final class ConvexService: ObservableObject {
 
     /// List tracked files for a repository
     func listTrackedFiles(repositoryId: String) async throws -> [TrackedFileInfo] {
-        try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-            cancellable = client.subscribe(to: "papers:listTrackedFiles", with: ["repositoryId": repositoryId], yielding: [TrackedFileInfo].self)
-                .first()
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
-                        }
-                        cancellable?.cancel()
-                    },
-                    receiveValue: { files in
-                        continuation.resume(returning: files)
-                    }
-                )
-        }
+        try await Self.firstValue(from: client.subscribe(to: "papers:listTrackedFiles", with: ["repositoryId": repositoryId], yielding: [TrackedFileInfo].self))
     }
 }
 
 // MARK: - Result Types
 
 /// Empty result for mutations that don't return meaningful data
-struct EmptyResult: Codable {}
+nonisolated struct EmptyResult: Codable, Sendable {}
 
-struct TogglePublicResult: Codable {
+nonisolated struct TogglePublicResult: Codable, Sendable {
     let isPublic: Bool
     let shareSlug: String?
 }
 
-struct CheckAllResult: Codable {
+nonisolated struct CheckAllResult: Codable, Sendable {
     let checked: Int
     let updated: Int
     let failed: Int
 }
 
-struct RefreshRepositoryResult: Codable {
+nonisolated struct RefreshRepositoryResult: Codable, Sendable {
     let updated: Bool
     let dateIsFallback: Bool?
     let skipped: Bool?
@@ -577,17 +479,17 @@ struct RefreshRepositoryResult: Codable {
     let commitHash: String?
 }
 
-struct TestNotificationResult: Codable {
+nonisolated struct TestNotificationResult: Codable, Sendable {
     let delivered: Int
     let reason: String?
 }
 
-struct AddTrackedFileResult: Codable {
+nonisolated struct AddTrackedFileResult: Codable, Sendable {
     let trackedFileId: String
     let paperId: String
 }
 
-struct TrackedFileInfo: Codable, Identifiable {
+nonisolated struct TrackedFileInfo: Codable, Identifiable, Sendable {
     let id: String
     let filePath: String
 
@@ -595,4 +497,17 @@ struct TrackedFileInfo: Codable, Identifiable {
         case id = "_id"
         case filePath
     }
+}
+
+@MainActor
+private final class QuerySubscription {
+    var cancellable: AnyCancellable?
+    func cancel() {
+        cancellable?.cancel()
+        cancellable = nil
+    }
+}
+
+private struct DeleteAccountResult: Decodable {
+    let deleted: Bool
 }

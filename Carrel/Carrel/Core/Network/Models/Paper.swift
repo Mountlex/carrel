@@ -1,6 +1,6 @@
 import Foundation
 
-struct Paper: Codable, Identifiable, Equatable {
+nonisolated struct Paper: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let title: String?
     let pdfUrl: String?
@@ -94,10 +94,17 @@ struct Paper: Codable, Identifiable, Equatable {
         try container.encodeIfPresent(shareSlug, forKey: .shareSlug)
         try container.encodeIfPresent(repositoryId, forKey: .repositoryId)
         try container.encodeIfPresent(trackedFileId, forKey: .trackedFileId)
+        try container.encodeIfPresent(compilationProgress, forKey: .compilationProgress)
+        try container.encodeIfPresent(lastSyncError, forKey: .lastSyncError)
+        try container.encodeIfPresent(lastSyncedAt.map { $0.timeIntervalSince1970 * 1000 }, forKey: .lastSyncedAt)
+        try container.encodeIfPresent(lastAffectedCommitTime.map { $0.timeIntervalSince1970 * 1000 }, forKey: .lastAffectedCommitTime)
+        try container.encodeIfPresent(lastAffectedCommitAuthor, forKey: .lastAffectedCommitAuthor)
+        try container.encode(createdAt.timeIntervalSince1970 * 1000, forKey: .createdAt)
+        try container.encode(updatedAt.timeIntervalSince1970 * 1000, forKey: .updatedAt)
     }
 }
 
-enum PaperStatus: String, Codable {
+nonisolated enum PaperStatus: String, Codable, Sendable {
     case synced
     case pending
     case building
@@ -112,7 +119,7 @@ enum PaperStatus: String, Codable {
     }
 }
 
-struct PapersResponse: Codable {
+nonisolated struct PapersResponse: Codable, Sendable {
     let papers: [Paper]
 
     init(from decoder: Decoder) throws {

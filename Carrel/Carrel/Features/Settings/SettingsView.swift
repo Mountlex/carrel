@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(AuthManager.self) private var authManager
     @State private var viewModel: SettingsViewModel?
     @State private var showingLogoutConfirmation = false
+    @State private var showingDeleteConfirmation = false
     @State private var pdfCacheSize: Int64 = 0
     @State private var thumbnailCacheSize: Int64 = 0
 
@@ -72,8 +73,21 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 6)
                 }
-                .buttonStyle(.liquidGlass)
+                .buttonStyle(.glass)
                 .accessibilityHint("Sign out of your account")
+
+                Button("Delete Account", role: .destructive) {
+                    showingDeleteConfirmation = true
+                }
+                .frame(minHeight: 44)
+                .disabled(viewModel.isDeletingAccount)
+                .confirmationDialog("Delete your account permanently?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+                    Button("Delete Account", role: .destructive) {
+                        Task { await viewModel.deleteAccount() }
+                    }
+                } message: {
+                    Text("This permanently deletes your Carrel account, repositories, papers, and stored files. Your original Git repositories are not deleted. This cannot be undone.")
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -226,7 +240,7 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, 4)
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.glass)
             .disabled(pdfCacheSize == 0 && thumbnailCacheSize == 0)
             .accessibilityHint("Removes all cached PDFs and thumbnails")
         }
@@ -389,6 +403,9 @@ struct SettingsView: View {
             LabeledContent("Version", value: Bundle.main.appVersionString)
             Divider()
             LabeledContent("Build", value: Bundle.main.buildNumber)
+            Divider()
+            Link("Privacy Policy", destination: AuthManager.siteURL.appendingPathComponent("privacy"))
+                .frame(minHeight: 44)
             if let websiteURL = URL(string: "https://carrelapp.com") {
                 Divider()
                 Link(destination: websiteURL) {

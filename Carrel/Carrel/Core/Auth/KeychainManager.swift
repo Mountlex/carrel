@@ -9,6 +9,7 @@ actor KeychainManager {
     private enum Keys {
         static let convexAuthToken = "convex_auth_token"
         static let refreshToken = "refresh_token"
+        static let pendingRevocations = "pending_revocations"
     }
 
     private init() {}
@@ -60,20 +61,45 @@ actor KeychainManager {
         clearRefreshToken()
     }
 
+    /// Write the pair in one actor turn so sign-out cannot interleave the two writes.
+    func saveSession(accessToken: String, refreshToken: String?) throws {
+        try saveConvexAuthToken(accessToken)
+        if let refreshToken { try saveRefreshToken(refreshToken) }
+    }
+
+    func pendingRevocations() -> [String] {
+        guard let data = load(key: Keys.pendingRevocations) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    func enqueueRevocation(_ token: String) throws {
+        var tokens = pendingRevocations()
+        if !tokens.contains(token) { tokens.append(token) }
+        try save(key: Keys.pendingRevocations, data: JSONEncoder().encode(tokens))
+    }
+
+    func finishRevocation(_ token: String) throws {
+        let remaining = pendingRevocations().filter { $0 != token }
+        try save(key: Keys.pendingRevocations, data: JSONEncoder().encode(remaining))
+    }
+
     // MARK: - Generic Keychain Operations
 
     private func save(key: String, data: Data) throws {
-        // Delete existing item first
-        delete(key: key)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
+        let match: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service, kSecAttrAccount as String: key]
+        let update = SecItemUpdate(match as CFDictionary, [kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary)
+        if update == errSecSuccess { return }
+        guard update == errSecItemNotFound else { throw KeychainError.saveFailed(update) }
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)

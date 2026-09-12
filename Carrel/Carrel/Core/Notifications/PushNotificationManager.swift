@@ -126,7 +126,10 @@ final class PushNotificationManager {
         }
 
         do {
-            _ = try await ConvexService.shared.refreshPapersOnce()
+            guard let token = ConvexService.shared.authToken, let account = SessionToken(token)?.userID else { return false }
+            let papers = try await ConvexService.shared.refreshPapersOnce()
+            guard isAuthenticated, ConvexService.shared.authToken == token, !Task.isCancelled else { return false }
+            try await LibraryStore.shared.save(papers, accountID: account)
             return true
         } catch {
             #if DEBUG
@@ -144,7 +147,8 @@ final class PushNotificationManager {
     private func registerTokenIfPossible() async {
         guard isAuthenticated, notificationsEnabled else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+        guard isAuthenticated, notificationsEnabled,
+              settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
             return
         }
 

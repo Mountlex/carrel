@@ -29,7 +29,6 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { notification in
             guard let isConnected = notification.object as? Bool, isConnected else { return }
-            guard authManager.isAuthenticated else { return }
             Task {
                 await authManager.refreshSessionIfNeededOnAppActive()
             }
@@ -78,25 +77,18 @@ struct MainTabView: View {
 
 /// Separate view for offline banner to isolate observation
 private struct OfflineBannerOverlay: View {
-    @State private var showBanner = false
+    @Environment(AuthManager.self) private var authManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var showBanner: Bool { !NetworkMonitor.shared.isConnected || authManager.isUsingCachedSession }
 
     var body: some View {
         Group {
             if showBanner {
-                OfflineBanner()
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                OfflineBanner(message: NetworkMonitor.shared.isConnected ? "Showing saved papers" : "No internet connection")
+                    .transition(.opacity)
             }
         }
-        .animation(GlassTheme.quickMotion, value: showBanner)
-        .task {
-            // Initial state
-            showBanner = !NetworkMonitor.shared.isConnected
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { notification in
-            if let isConnected = notification.object as? Bool {
-                showBanner = !isConnected
-            }
-        }
+        .animation(reduceMotion ? nil : GlassTheme.quickMotion, value: showBanner)
     }
 }
 

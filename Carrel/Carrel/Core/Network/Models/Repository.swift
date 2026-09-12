@@ -1,6 +1,6 @@
 import Foundation
 
-struct Repository: Codable, Identifiable, Equatable, Hashable {
+nonisolated struct Repository: Codable, Identifiable, Equatable, Hashable, Sendable {
     let id: String
     let name: String
     let gitUrl: String
@@ -141,7 +141,7 @@ extension Repository {
     }
 }
 
-enum RepositoryProvider: String, Codable {
+nonisolated enum RepositoryProvider: String, Codable, Sendable {
     case github
     case gitlab
     case selfhostedGitlab = "selfhosted-gitlab"
@@ -169,13 +169,13 @@ enum RepositoryProvider: String, Codable {
     }
 }
 
-enum RepositorySyncStatus: String, Codable {
+nonisolated enum RepositorySyncStatus: String, Codable, Sendable {
     case idle
     case syncing
     case error
 }
 
-enum PaperSyncStatus: String, Codable {
+nonisolated enum PaperSyncStatus: String, Codable, Sendable {
     case noPapers = "no_papers"
     case inSync = "in_sync"
     case needsSync = "needs_sync"
@@ -191,7 +191,7 @@ enum PaperSyncStatus: String, Codable {
     }
 }
 
-enum LatexCacheMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum LatexCacheMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case off
     case aux
 

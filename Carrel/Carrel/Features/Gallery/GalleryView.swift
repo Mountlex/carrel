@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct GalleryView: View {
+    @Environment(AuthManager.self) private var authManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var paperToDelete: Paper?
     @Environment(AppNavigationCoordinator.self) private var appNavigation
     @State private var viewModel = GalleryViewModel()
     @State private var selectedPaper: Paper?
@@ -10,16 +14,17 @@ struct GalleryView: View {
     @State private var isOffline = false
     private let searchBarTopInset: CGFloat = 8
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)
-    ]
+    private var columns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.adaptive(minimum: 160, maximum: 240), spacing: 16)]
+    }
 
     /// Papers filtered by search text
     private var filteredPapers: [Paper] {
-        if searchText.isEmpty {
-            return viewModel.papers
-        }
-        return viewModel.papers.filter { paper in
+        let papers = viewModel.papers
+        if searchText.isEmpty { return papers }
+        return papers.filter { paper in
             paper.title?.localizedCaseInsensitiveContains(searchText) ?? false
         }
     }
@@ -36,6 +41,7 @@ struct GalleryView: View {
 
     var body: some View {
         galleryContent(viewModel: viewModel)
+            .background { GlassBackdrop() }
             .navigationTitle("Papers")
             .searchable(text: $searchText, prompt: "Search papers")
             .safeAreaInset(edge: .top) {
@@ -90,8 +96,20 @@ struct GalleryView: View {
                     }
                 }
             }
-            .manageSubscription(viewModel)
-            .sheet(item: $selectedPaper) { paper in
+            .task(id: authManager.userID) {
+                await viewModel.loadCachedLibrary(userID: authManager.userID)
+                await viewModel.runSubscription()
+            }
+            .confirmationDialog("Delete paper?", isPresented: Binding(
+                get: { paperToDelete != nil }, set: { if !$0 { paperToDelete = nil } }
+            ), presenting: paperToDelete) { paper in
+                Button("Delete Paper", role: .destructive) {
+                    Task { await viewModel.deletePaper(paper) }
+                }
+            } message: { paper in
+                Text("Remove \(paper.title ?? "this paper") from Carrel? Your original repository file is kept. This cannot be undone.")
+            }
+            .sheet(item: $selectedPaper, onDismiss: { viewModel.refreshCacheState() }) { paper in
                 NavigationStack {
                     PaperDetailView(paper: paper)
                 }
@@ -146,22 +164,19 @@ struct GalleryView: View {
                         let isDeletingPaper = viewModel.deletingPaperIds.contains(paper.id)
                         let isOpening = openingPaperId == paper.id
 
+                        Button { openPaper(paper) } label: {
                         PaperCard(
                             paper: paper,
                             isSyncing: viewModel.syncingPaperId == paper.id,
-                            isOffline: isOffline,
+                            isOffline: isOffline || authManager.isUsingCachedSession,
                             isCached: viewModel.isPaperCached(paper.id)
                         )
                         .scaleEffect(isOpening ? 0.97 : 1.0)
                         .opacity(isOpening ? 0.68 : 1.0)
-                        .animation(GlassTheme.quickMotion, value: openingPaperId)
+                        .animation(reduceMotion ? nil : GlassTheme.quickMotion, value: openingPaperId)
                         .contentShape(Rectangle())
-                        .highPriorityGesture(
-                            TapGesture().onEnded {
-                                openPaper(paper)
-                            },
-                            including: .gesture
-                        )
+                        }
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("gallery_paper_card_\(paper.id)")
                         .accessibilityAddTraits(.isButton)
                         .contextMenu {
@@ -184,9 +199,7 @@ struct GalleryView: View {
                             Divider()
 
                             Button(role: .destructive) {
-                                Task {
-                                    await viewModel.deletePaper(paper)
-                                }
+                                paperToDelete = paper
                             } label: {
                                 if isDeletingPaper {
                                     Label("Deleting...", systemImage: "hourglass")
@@ -210,7 +223,10 @@ struct GalleryView: View {
         ContentUnavailableView {
             Label("No Papers", systemImage: "doc.text")
         } description: {
-            Text("Add repositories on the web to see your papers here.")
+            Text("Connect a repository to bring your papers into Carrel.")
+        } actions: {
+            Link("Add Repository", destination: AuthManager.siteURL.appendingPathComponent("repositories"))
+                .buttonStyle(.borderedProminent)
         }
     }
 
@@ -230,14 +246,14 @@ struct GalleryView: View {
         guard openingPaperId == nil else { return }
 
         HapticManager.impact(.light)
-        withAnimation(GlassTheme.quickMotion) {
+        withAnimation(reduceMotion ? nil : GlassTheme.quickMotion) {
             openingPaperId = paper.id
         }
 
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(130))
             selectedPaper = paper
-            withAnimation(GlassTheme.quickMotion) {
+            withAnimation(reduceMotion ? nil : GlassTheme.quickMotion) {
                 openingPaperId = nil
             }
         }
@@ -312,10 +328,9 @@ private struct GalleryOperationChip: View {
 
 private struct PaperCardSkeleton: View {
     @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
-
         VStack(alignment: .leading, spacing: 0) {
             Rectangle()
                 .fill(.quaternary.opacity(0.8))
@@ -337,15 +352,11 @@ private struct PaperCardSkeleton: View {
             }
             .padding(12)
         }
-        .glassEffect(.regular.tint(GlassTheme.cardTint), in: cardShape)
-        .overlay {
-            cardShape
-                .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
-        }
         .opacity(pulse ? 0.55 : 0.85)
-        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+        .modifier(GlassCardSurface())
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
         .task {
-            pulse = true
+            pulse = !reduceMotion
         }
         .accessibilityHidden(true)
     }

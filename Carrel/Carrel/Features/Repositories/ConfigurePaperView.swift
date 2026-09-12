@@ -151,7 +151,7 @@ struct ConfigurePaperSheet: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.glass)
             .disabled(isAdding)
             .opacity(canAddPaper ? 1 : 0.75)
         }

@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { internal } from "./_generated/api";
+import { challengeForVerifier, validChallenge, MOBILE_ACCESS_LIFETIME_MS } from "./lib/mobileSessionPolicy";
 import {
   hashToken,
   generateSecureToken,
@@ -16,6 +17,52 @@ import {
 const http = httpRouter();
 
 auth.addHttpRoutes(http);
+
+for (const path of ["/api/mobile/code", "/api/mobile/token"]) {
+  http.route({ path, method: "OPTIONS", handler: httpAction(async (_, request) =>
+    new Response(null, { status: 204, headers: corsHeaders(request.headers.get("Origin")) })) });
+}
+
+http.route({
+  path: "/api/mobile/code", method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return jsonResponse({ error: "Sign in again" }, 401, origin);
+    try {
+      const { codeChallenge } = await request.json();
+      if (!validChallenge(codeChallenge)) return jsonResponse({ error: "Invalid challenge" }, 400, origin);
+      const code = generateSecureToken();
+      await ctx.runMutation(internal.mobileSessions.issueCode, { userId, codeHash: await hashToken(code), challenge: codeChallenge });
+      return jsonResponse({ code }, 200, origin);
+    } catch {
+      return jsonResponse({ error: "Could not start sign-in. Please try again." }, 400, origin);
+    }
+  }),
+});
+
+http.route({
+  path: "/api/mobile/token", method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get("Origin");
+    try {
+      const { code, codeVerifier, deviceId } = await request.json();
+      const challenge = challengeForVerifier(codeVerifier);
+      if (!challenge || typeof code !== "string" || !/^[a-f0-9]{64}$/.test(code) || typeof deviceId !== "string" || deviceId.length > 128) {
+        return jsonResponse({ error: "Invalid sign-in request" }, 400, origin);
+      }
+      const refreshToken = `v2.${generateSecureToken()}`;
+      const session = await ctx.runMutation(internal.mobileSessions.redeemCode, {
+        codeHash: await hashToken(code), challenge, deviceId, refreshTokenHash: await hashToken(refreshToken),
+      });
+      if (!session) return jsonResponse({ error: "Expired or used sign-in code" }, 401, origin);
+      const accessToken = await createConvexAuthJwt(session.userId, MOBILE_ACCESS_LIFETIME_MS, session.sessionId);
+      return jsonResponse({ accessToken, refreshToken, expiresAt: Date.now() + MOBILE_ACCESS_LIFETIME_MS }, 200, origin);
+    } catch {
+      return jsonResponse({ error: "Could not complete sign-in" }, 400, origin);
+    }
+  }),
+});
 
 // CORS headers for mobile auth endpoints
 function corsHeaders(origin?: string | null): Record<string, string> {
@@ -54,6 +101,7 @@ function jsonResponse(
     status,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store",
       ...corsHeaders(origin),
     },
   });
@@ -210,6 +258,19 @@ http.route({
         return jsonResponse({ error: "Missing refresh token" }, 400, origin);
       }
 
+      if (typeof refreshToken !== "string" || refreshToken.length > 256) {
+        return jsonResponse({ error: "Invalid refresh token" }, 400, origin);
+      }
+      if (refreshToken.startsWith("v2.")) {
+        const nextToken = `v2.${generateSecureToken()}`;
+        const session = await ctx.runMutation(internal.mobileSessions.rotate, {
+          tokenHash: await hashToken(refreshToken), nextTokenHash: await hashToken(nextToken),
+        });
+        if (!session) return jsonResponse({ error: "Invalid or expired refresh token" }, 401, origin);
+        const accessToken = await createConvexAuthJwt(session.userId, MOBILE_ACCESS_LIFETIME_MS, session.sessionId);
+        return jsonResponse({ accessToken, refreshToken: nextToken, expiresAt: Date.now() + MOBILE_ACCESS_LIFETIME_MS }, 200, origin);
+      }
+
       // Hash and validate the refresh token
       const refreshTokenHash = await hashToken(refreshToken);
       const tokenRecord = await ctx.runQuery(
@@ -282,6 +343,14 @@ http.route({
         return jsonResponse({ error: "Missing refresh token" }, 400, origin);
       }
 
+      if (typeof refreshToken !== "string" || refreshToken.length > 256) {
+        return jsonResponse({ error: "Invalid refresh token" }, 400, origin);
+      }
+      if (refreshToken.startsWith("v2.")) {
+        await ctx.runMutation(internal.mobileSessions.revoke, { tokenHash: await hashToken(refreshToken) });
+        return jsonResponse({ success: true }, 200, origin);
+      }
+
       // Hash the refresh token
       const refreshTokenHash = await hashToken(refreshToken);
       const tokenRecord = await ctx.runQuery(
@@ -345,6 +414,11 @@ http.route({
       const userId = await auth.getUserId(ctx);
       if (!userId) {
         return jsonResponse({ error: "Invalid or expired session token" }, 401, origin);
+      }
+
+      const identity = await ctx.auth.getUserIdentity();
+      if (identity?.subject.split("|")[1]?.startsWith("mobile:")) {
+        return jsonResponse({ error: "Use the mobile session refresh endpoint" }, 403, origin);
       }
 
       // Get user details

@@ -10,8 +10,6 @@ final class RepositoryViewModel: SubscribableViewModel {
     private(set) var repositories: [Repository] = []
     var isLoading = false
     var error: String?
-    var subscriptionTask: Task<Void, Never>?
-    var subscriptionStoppedAt: Date?
 
     /// The current user's ID, needed for the repositories subscription
     private var userId: String?
@@ -38,11 +36,7 @@ final class RepositoryViewModel: SubscribableViewModel {
     private(set) var userCacheMode: LatexCacheMode = .aux
     private(set) var isCompilationCacheAllowed = true
 
-    deinit {
-        Task { @MainActor [weak self] in
-            self?.stopSubscription()
-        }
-    }
+
 
     // MARK: - SubscribableViewModel
 

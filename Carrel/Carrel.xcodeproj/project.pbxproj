@@ -8,10 +8,22 @@
 
 /* Begin PBXBuildFile section */
 		8D6A511D2F2F40A400EE049B /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 8D6A511C2F2F40A400EE049B /* ConvexMobile */; };
+		C0260912000000000000000D /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 8D6A511C2F2F40A400EE049B /* ConvexMobile */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C02609120000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8D4413082F2E82EA002BAD78 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8D44130F2F2E82EA002BAD78;
+			remoteInfo = Carrel;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		8D4413102F2E82EA002BAD78 /* Carrel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Carrel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C02609120000000000000001 /* CarrelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = CarrelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -33,6 +45,11 @@
 			path = Carrel;
 			sourceTree = "<group>";
 		};
+		C02609120000000000000002 /* CarrelTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CarrelTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,6 +61,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C02609120000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0260912000000000000000D /* ConvexMobile in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -51,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				8D4413122F2E82EA002BAD78 /* Carrel */,
+				C02609120000000000000002 /* CarrelTests */,
 				8D4413112F2E82EA002BAD78 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				8D4413102F2E82EA002BAD78 /* Carrel.app */,
+				C02609120000000000000001 /* CarrelTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -88,6 +115,30 @@
 			productName = Carrel;
 			productReference = 8D4413102F2E82EA002BAD78 /* Carrel.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C02609120000000000000008 /* CarrelTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C02609120000000000000009 /* Build configuration list for PBXNativeTarget "CarrelTests" */;
+			buildPhases = (
+				C02609120000000000000005 /* Sources */,
+				C02609120000000000000006 /* Frameworks */,
+				C02609120000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C02609120000000000000004 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C02609120000000000000002 /* CarrelTests */,
+			);
+			name = CarrelTests;
+			packageProductDependencies = (
+				8D6A511C2F2F40A400EE049B /* ConvexMobile */,
+			);
+			productName = CarrelTests;
+			productReference = C02609120000000000000001 /* CarrelTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -121,6 +172,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				C02609120000000000000008 /* CarrelTests */,
 				8D44130F2F2E82EA002BAD78 /* Carrel */,
 			);
 		};
@@ -128,6 +180,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		8D44130E2F2E82EA002BAD78 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C02609120000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -144,7 +203,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C02609120000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C02609120000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8D44130F2F2E82EA002BAD78 /* Carrel */;
+			targetProxy = C02609120000000000000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8D4413192F2E82EB002BAD78 /* Debug */ = {
@@ -276,6 +350,7 @@
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 5B22W5F9J7;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Carrel/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -294,8 +369,9 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -310,6 +386,7 @@
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 5B22W5F9J7;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Carrel/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -328,9 +405,54 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C0260912000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.carrel.CarrelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Carrel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Carrel";
+			};
+			name = Debug;
+		};
+		C0260912000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.carrel.CarrelTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Carrel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Carrel";
 			};
 			name = Release;
 		};
@@ -355,6 +477,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C02609120000000000000009 /* Build configuration list for PBXNativeTarget "CarrelTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0260912000000000000000A /* Debug */,
+				C0260912000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -363,7 +494,7 @@
 			repositoryURL = "https://github.com/get-convex/convex-swift";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.7.0;
+				minimumVersion = 0.8.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

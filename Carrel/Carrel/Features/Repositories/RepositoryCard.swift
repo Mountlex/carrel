@@ -7,7 +7,6 @@ struct RepositoryCard: View {
     var onOpenSettings: (() -> Void)? = nil
 
     var body: some View {
-        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 12) {
             // Header: Provider icon and name
             HStack(spacing: 10) {
@@ -32,7 +31,7 @@ struct RepositoryCard: View {
                     ProgressView()
                         .scaleEffect(0.8)
                 } else {
-                    statusBadge
+                    statusDot
                 }
 
                 if let onOpenSettings {
@@ -95,14 +94,7 @@ struct RepositoryCard: View {
             }
         }
         .padding(16)
-        .glassEffect(
-            .regular.tint(GlassTheme.cardTint),
-            in: cardShape
-        )
-        .overlay {
-            cardShape
-                .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
-        }
+        .modifier(GlassCardSurface())
         .accessibilityElement(children: onOpenSettings == nil ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view papers and add tracked files")
@@ -145,28 +137,11 @@ struct RepositoryCard: View {
         }
     }
 
-    @ViewBuilder
-    private var statusBadge: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 10, height: 10)
-
-            Text(statusText)
-                .font(.caption)
-                .fontWeight(.medium)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background {
-            Capsule()
-                .fill(statusColor.opacity(0.14))
-        }
-        .overlay {
-            Capsule()
-                .strokeBorder(statusColor.opacity(0.35), lineWidth: 0.8)
-        }
-        .foregroundStyle(statusColor)
+    private var statusDot: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 10, height: 10)
+            .accessibilityLabel(statusAccessibilityLabel)
     }
 
     private var statusColor: Color {
@@ -186,13 +161,6 @@ struct RepositoryCard: View {
         }
     }
 
-    private var statusText: String {
-        if repository.syncStatus == .error {
-            return "Error"
-        }
-
-        return repository.paperSyncStatus.displayText
-    }
 }
 
 #Preview {

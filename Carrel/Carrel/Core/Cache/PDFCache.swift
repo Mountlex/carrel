@@ -2,7 +2,8 @@ import Foundation
 import PDFKit
 import CryptoKit
 
-enum PDFCacheError: Error, LocalizedError {
+nonisolated enum PDFCacheError: Error, LocalizedError {
+    case invalidPDF
     case invalidURL
     case fileTooLarge(size: Int)
     case networkError(underlying: Error)
@@ -11,6 +12,8 @@ enum PDFCacheError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .invalidPDF:
+            return "The downloaded file is not a readable PDF. Try downloading it again."
         case .invalidURL:
             return "Invalid URL for caching"
         case .fileTooLarge(let size):
@@ -28,7 +31,7 @@ enum PDFCacheError: Error, LocalizedError {
         switch self {
         case .badStatusCode(let statusCode):
             return (500...599).contains(statusCode)
-        case .invalidResponse, .fileTooLarge, .invalidURL:
+        case .invalidResponse, .fileTooLarge, .invalidURL, .invalidPDF:
             return false
         case .networkError:
             return true
@@ -41,17 +44,21 @@ actor PDFCache {
 
     private let fileManager: FileManager
     private let cacheDirectory: URL
-    private let maxFileSize = 50 * 1024 * 1024 // 50MB per file
+    private let maxFileSize: Int
+    private let session: URLSession
+    private var generation = 0
     private let maxTotalSize: Int64 = 500 * 1024 * 1024 // 500MB total cache limit
 
-    private init() {
+    init(directory: URL? = nil, session: URLSession = .shared, maxFileSize: Int = 50 * 1024 * 1024) {
+        self.session = session
+        self.maxFileSize = maxFileSize
         let fileManager = FileManager.default
         self.fileManager = fileManager
 
         // Get caches directory, fallback to temp directory if unavailable (extremely rare on iOS)
         let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        self.cacheDirectory = caches.appendingPathComponent("PDFCache", isDirectory: true)
+        self.cacheDirectory = directory ?? caches.appendingPathComponent("PDFCache", isDirectory: true)
 
         // Create cache directory if needed
         try? fileManager.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
@@ -76,20 +83,30 @@ actor PDFCache {
             ofItemAtPath: cacheFile.path
         )
 
-        return try? Data(contentsOf: cacheFile)
+        guard let size = try? cacheFile.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxFileSize,
+              let data = try? Data(contentsOf: cacheFile), isValidPDF(data) else {
+            try? fileManager.removeItem(at: cacheFile)
+            return nil
+        }
+        return data
     }
 
     // Cache PDF data
-    func cachePDF(_ data: Data, for url: URL) {
+    func cachePDF(_ data: Data, for url: URL) throws {
+        guard data.count <= maxFileSize else { throw PDFCacheError.fileTooLarge(size: data.count) }
+        guard isValidPDF(data) else { throw PDFCacheError.invalidPDF }
         // Evict old files if needed before caching new data
         evictIfNeeded(bytesNeeded: Int64(data.count))
 
         let cacheFile = cacheFileURL(for: url)
-        try? data.write(to: cacheFile)
+        try data.write(to: cacheFile, options: .atomic)
     }
 
     // Fetch PDF, using cache if available
-    func fetchPDF(from url: URL) async throws -> Data {
+    func fetchPDF(from url: URL, forceReload: Bool = false) async throws -> Data {
+        let requestGeneration = generation
+        if forceReload { invalidate(url: url) }
+        try Task.checkCancellation()
         // Check cache first
         if let cached = getCachedPDF(for: url) {
             return cached
@@ -104,7 +121,9 @@ actor PDFCache {
         }
 
         // Cache for next time
-        cachePDF(data, for: url)
+        try Task.checkCancellation()
+        guard requestGeneration == generation else { throw CancellationError() }
+        try cachePDF(data, for: url)
 
         return data
     }
@@ -113,13 +132,25 @@ actor PDFCache {
         var lastError: Error?
         for attempt in 0..<maxRetries {
             do {
-                let (data, response) = try await URLSession.shared.data(from: url)
+                var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+                request.setValue("application/pdf", forHTTPHeaderField: "Accept")
+                let (bytes, response) = try await session.bytes(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw PDFCacheError.invalidResponse
                 }
                 guard (200...299).contains(httpResponse.statusCode) else {
                     throw PDFCacheError.badStatusCode(httpResponse.statusCode)
                 }
+                if response.expectedContentLength > Int64(maxFileSize) {
+                    throw PDFCacheError.fileTooLarge(size: Int(clamping: response.expectedContentLength))
+                }
+                var data = Data()
+                for try await byte in bytes {
+                    if data.count % 65_536 == 0 { try Task.checkCancellation() }
+                    guard data.count < maxFileSize else { throw PDFCacheError.fileTooLarge(size: data.count + 1) }
+                    data.append(byte)
+                }
+                guard isValidPDF(data) else { throw PDFCacheError.invalidPDF }
                 return data
             } catch {
                 if let cacheError = error as? PDFCacheError, !cacheError.isRetryable {
@@ -137,8 +168,18 @@ actor PDFCache {
         throw PDFCacheError.networkError(underlying: lastError ?? URLError(.unknown))
     }
 
-    // Clear all cached PDFs
+    private func isValidPDF(_ data: Data) -> Bool {
+        guard data.count <= maxFileSize, let document = PDFDocument(data: data) else { return false }
+        return document.pageCount > 0
+    }
+
+    func invalidate(url: URL) {
+        try? fileManager.removeItem(at: cacheFileURL(for: url))
+    }
+
+    // Clear all cached PDFs and prevent in-flight downloads from restoring them.
     func clearCache() {
+        generation += 1
         try? fileManager.removeItem(at: cacheDirectory)
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }

@@ -8,7 +8,6 @@ struct PaperCard: View {
     @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 17
 
     var body: some View {
-        let cardShape = RoundedRectangle(cornerRadius: GlassTheme.cardCornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             // Thumbnail - content layer, no glass
             thumbnailView
@@ -31,7 +30,7 @@ struct PaperCard: View {
                 }
                 .accessibilityHidden(true)
 
-            // Info section with glass backdrop
+            // Info section on the card surface
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
                     Text(paper.title ?? "Untitled")
@@ -60,14 +59,7 @@ struct PaperCard: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
         }
-        .glassEffect(
-            .regular.tint(GlassTheme.cardTint),
-            in: cardShape
-        )
-        .overlay {
-            cardShape
-                .strokeBorder(GlassTheme.cardStroke, lineWidth: 0.8)
-        }
+        .modifier(GlassCardSurface())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view paper details")

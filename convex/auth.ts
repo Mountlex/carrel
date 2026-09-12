@@ -6,6 +6,10 @@ import type { TokenSet } from "@auth/core/types";
 import { ResendOTP, ResendOTPPasswordReset } from "./ResendOTP";
 import type { DataModel } from "./_generated/dataModel";
 import { encryptTokenIfNeeded } from "./lib/crypto";
+import { internal } from "./_generated/api";
+import type { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { isActiveSession } from "./lib/mobileSessionPolicy";
 
 interface GitHubProfile {
   id: number;
@@ -24,7 +28,7 @@ interface GitLabProfile {
   avatar_url: string;
 }
 
-export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
+const { auth: baseAuth, signIn, signOut, store, isAuthenticated } = convexAuth({
   // Session duration: 90 days for mobile app convenience
   session: {
     totalDurationMs: 90 * 24 * 60 * 60 * 1000, // 90 days
@@ -134,3 +138,25 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     },
   },
 });
+
+export { signIn, signOut, store, isAuthenticated };
+
+export const auth = {
+  ...baseAuth,
+  async getUserId(ctx: QueryCtx | MutationCtx | ActionCtx): Promise<Id<"users"> | null> {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const [userId, sessionClaim] = identity.subject.split("|");
+    if (!sessionClaim?.startsWith("mobile:")) return baseAuth.getUserId(ctx);
+    const sessionId = sessionClaim.slice("mobile:".length);
+    let sessionUserId: Id<"users"> | null;
+    if ("db" in ctx) {
+      const id = ctx.db.normalizeId("mobileSessions", sessionId);
+      const session = id ? await ctx.db.get(id) : null;
+      sessionUserId = session && isActiveSession(session) ? session.userId : null;
+    } else {
+      sessionUserId = await ctx.runQuery(internal.mobileSessions.sessionUser, { sessionId });
+    }
+    return sessionUserId === userId ? sessionUserId : null;
+  },
+};

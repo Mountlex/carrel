@@ -30,10 +30,11 @@ struct ToastView: View {
     var body: some View {
         let toastShape = Capsule()
         HStack(spacing: 8) {
-            icon
+            icon.foregroundStyle(backgroundColor)
             Text(message.text)
                 .font(.subheadline)
                 .fontWeight(.medium)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -45,7 +46,8 @@ struct ToastView: View {
             toastShape
                 .strokeBorder(GlassTheme.overlayStroke.opacity(0.8), lineWidth: 0.8)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
+        .accessibilityElement(children: .combine)
         .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 
@@ -75,6 +77,7 @@ struct ToastView: View {
 
 /// Toast container that handles showing/hiding toasts with animation
 struct ToastContainer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var message: ToastMessage?
     let duration: TimeInterval
 
@@ -95,13 +98,14 @@ struct ToastContainer: View {
             Spacer()
         }
         .allowsHitTesting(false)
-        .animation(GlassTheme.motion, value: isVisible)
+        .animation(reduceMotion ? nil : GlassTheme.motion, value: isVisible)
         .onChange(of: message) { _, newMessage in
             // Cancel any existing hide task
             hideTask?.cancel()
 
             if let newMessage {
                 isVisible = true
+                UIAccessibility.post(notification: .announcement, argument: newMessage.text)
 
                 // Schedule auto-hide
                 hideTask = Task {

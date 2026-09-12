@@ -1,6 +1,6 @@
 import Foundation
 
-struct RepositoryFile: Codable, Identifiable, Equatable {
+nonisolated struct RepositoryFile: Codable, Identifiable, Equatable, Sendable {
     let name: String
     let path: String
     let type: FileType

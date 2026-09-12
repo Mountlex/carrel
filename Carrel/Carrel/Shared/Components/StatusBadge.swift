@@ -21,10 +21,7 @@ struct StatusBadge: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .glassEffect(
-            .regular.tint(statusColor.opacity(0.25)),
-            in: Capsule()
-        )
+        .background(statusColor.opacity(0.12), in: Capsule())
         .foregroundStyle(statusColor)
     }
 

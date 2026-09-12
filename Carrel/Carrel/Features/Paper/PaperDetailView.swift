@@ -8,7 +8,8 @@ struct PaperDetailView: View {
     @State private var showingEditSheet = false
     @State private var shareFileURL: URL?
     @State private var isPreparingShare = false
-    @State private var subscriptionTask: Task<Void, Never>?
+    @State private var showingBuildDetails = false
+    @State private var findRequest = 0
     @State private var pdfLoadError: String?
     @State private var toastMessage: ToastMessage?
     @State private var shareError: String?
@@ -80,6 +81,11 @@ struct PaperDetailView: View {
                 .accessibilityHint("Close paper details")
             }
 
+            ToolbarItem(placement: .primaryAction) {
+                Button("Find in PDF", systemImage: "magnifyingglass") { findRequest += 1 }
+                    .disabled(viewModel.paper.pdfUrl == nil)
+                    .keyboardShortcut("f", modifiers: .command)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -157,6 +163,20 @@ struct PaperDetailView: View {
                 ShareSheet(items: [fileURL])
             }
         }
+        .sheet(isPresented: $showingBuildDetails) {
+            NavigationStack {
+                ScrollView {
+                    Text(viewModel.paper.lastSyncError ?? "No build details are available.")
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle("Build Details")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingBuildDetails = false } } }
+            }
+        }
         .sheet(isPresented: $showingEditSheet) {
             EditPaperSheet(viewModel: viewModel)
         }
@@ -184,29 +204,21 @@ struct PaperDetailView: View {
         .task(id: viewModel.paper.pdfUrl) {
             await refreshPaperCacheState()
         }
-        .onDisappear {
-            subscriptionTask?.cancel()
-            subscriptionTask = nil
-        }
     }
 
     private func startSubscription() async {
-        guard subscriptionTask == nil else { return }
-        let paperId = viewModel.paper.id
-        subscriptionTask = Task {
-            do {
-                let publisher = ConvexService.shared.subscribeToPaper(id: paperId)
-                for try await updatedPaper in publisher.values {
-                    guard !Task.isCancelled else { break }
-                    viewModel.onPaperUpdate(updatedPaper)
-                }
-            } catch {
-                if !Task.isCancelled {
-                    #if DEBUG
-                    print("PaperDetailView: Subscription error: \(error)")
-                    #endif
-                }
+        while !Task.isCancelled {
+            guard NetworkMonitor.shared.isConnected, ConvexService.shared.isAuthenticated else {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                continue
             }
+            do {
+                for try await paper in ConvexService.shared.subscribeToPaper(id: viewModel.paper.id).values {
+                    try Task.checkCancellation()
+                    viewModel.onPaperUpdate(paper)
+                }
+            } catch { if Task.isCancelled { return } }
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
         }
     }
 
@@ -216,6 +228,7 @@ struct PaperDetailView: View {
             PDFViewerWithOfflineCheck(
                 url: url,
                 reloadToken: pdfReloadToken,
+                findRequest: findRequest,
                 onError: { error in
                     pdfLoadError = error
                 },
@@ -226,7 +239,10 @@ struct PaperDetailView: View {
             .alert("PDF Error", isPresented: Binding(get: { pdfLoadError != nil }, set: { if !$0 { pdfLoadError = nil } })) {
                 Button("Retry") {
                     pdfLoadError = nil
-                    pdfReloadToken += 1
+                    Task {
+                        await PDFCache.shared.invalidate(url: url)
+                        pdfReloadToken += 1
+                    }
                 }
                 Button("OK") {
                     pdfLoadError = nil
@@ -252,8 +268,6 @@ struct PaperDetailView: View {
     }
 
     private var infoPanel: some View {
-        let panelShape = Rectangle()
-
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -289,6 +303,12 @@ struct PaperDetailView: View {
                 }
             }
 
+            if viewModel.paper.lastSyncError?.isEmpty == false {
+                Button("View Build Details", systemImage: "exclamationmark.bubble") { showingBuildDetails = true }
+                    .font(.subheadline)
+                    .frame(minHeight: 44)
+            }
+
             // Last commit info
             if viewModel.paper.lastAffectedCommitTime != nil || viewModel.paper.lastAffectedCommitAuthor != nil {
                 HStack(spacing: 8) {
@@ -315,7 +335,7 @@ struct PaperDetailView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
-        .glassEffect(.regular.tint(GlassTheme.cardTint.opacity(0.95)), in: panelShape)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(GlassTheme.cardStroke.opacity(0.92))
@@ -339,6 +359,7 @@ struct PaperDetailView: View {
 struct PDFViewerWithOfflineCheck: View {
     let url: URL
     let reloadToken: Int
+    let findRequest: Int
     var onError: ((String) -> Void)?
     var onLoaded: (() -> Void)?
 
@@ -359,6 +380,7 @@ struct PDFViewerWithOfflineCheck: View {
                 PDFViewerContainer(
                     url: url,
                     reloadToken: reloadToken + networkReloadToken,
+                    findRequest: findRequest,
                     onError: { error in
                         // Check if this is a network error while offline
                         if !NetworkMonitor.shared.isConnected {
@@ -401,6 +423,7 @@ struct PDFViewerWithOfflineCheck: View {
 struct PDFViewerContainer: UIViewRepresentable {
     let url: URL
     let reloadToken: Int
+    let findRequest: Int
     var onError: ((String) -> Void)?
     var onLoaded: (() -> Void)?
 
@@ -410,6 +433,7 @@ struct PDFViewerContainer: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PDFView {
         let pdfView = PDFView()
+        pdfView.isFindInteractionEnabled = true
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
@@ -417,6 +441,10 @@ struct PDFViewerContainer: UIViewRepresentable {
     }
 
     func updateUIView(_ pdfView: PDFView, context: Context) {
+        if findRequest != context.coordinator.lastFindRequest {
+            context.coordinator.lastFindRequest = findRequest
+            pdfView.findInteraction.presentFindNavigator(showingReplace: false)
+        }
         if context.coordinator.lastLoadedURL == url && context.coordinator.lastReloadToken == reloadToken {
             return
         }
@@ -461,6 +489,7 @@ struct PDFViewerContainer: UIViewRepresentable {
     }
 
     class Coordinator {
+        var lastFindRequest = 0
         var loadTask: Task<Void, Never>?
         var lastLoadedURL: URL?
         var lastReloadToken: Int?

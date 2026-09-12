@@ -5,6 +5,7 @@ import SwiftUI
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
     @State private var currentPage = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let pages: [OnboardingPage] = [
         OnboardingPage(
@@ -39,7 +40,7 @@ struct OnboardingView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .padding(.bottom, 176)
+
         }
         .safeAreaInset(edge: .bottom) {
             controls
@@ -56,13 +57,15 @@ struct OnboardingView: View {
                     Circle()
                         .fill(index == currentPage ? Color.primary.opacity(0.8) : Color.primary.opacity(0.2))
                         .frame(width: 8, height: 8)
-                        .animation(.easeInOut(duration: 0.2), value: currentPage)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: currentPage)
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Page \(currentPage + 1) of \(pages.count)")
 
             Button {
                 if currentPage < pages.count - 1 {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                         currentPage += 1
                     }
                 } else {
@@ -74,7 +77,7 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             }
-            .buttonStyle(.liquidGlass)
+            .buttonStyle(.glassProminent)
             .padding(.horizontal, 24)
 
             if currentPage < pages.count - 1 {
@@ -83,6 +86,7 @@ struct OnboardingView: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .frame(minHeight: 44)
             }
         }
     }
@@ -100,9 +104,7 @@ private struct OnboardingPageView: View {
     let page: OnboardingPage
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
+        ScrollView {
             GlassCard {
                 VStack(spacing: 16) {
                     Image(systemName: page.icon)
@@ -115,20 +117,22 @@ private struct OnboardingPageView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Text(page.description)
                             .font(.body)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 12)
                     }
                 }
                 .padding(.vertical, 24)
                 .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
+            .padding(24)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(page.title). \(page.description)")

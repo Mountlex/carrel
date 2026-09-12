@@ -3,6 +3,7 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
+import { internal } from "./_generated/api";
 import { requireUserId } from "./lib/auth";
 import { logAudit } from "./lib/audit";
 import { encryptTokenIfNeeded } from "./lib/crypto";
@@ -1632,6 +1633,15 @@ export const deleteAccount = mutation({
       await ctx.db.delete(instance._id);
     }
     deletedCounts.selfHostedGitLabInstances = instances.length;
+
+    const mobileSessions = await ctx.db.query("mobileSessions").withIndex("by_user", q => q.eq("userId", userId)).collect();
+    for (const session of mobileSessions) {
+      // Revoke immediately; bounded scheduled batches remove rotation history.
+      await ctx.db.patch(session._id, { revokedAt: Date.now() });
+      await ctx.scheduler.runAfter(0, internal.mobileSessions.expireSession, { sessionId: session._id });
+    }
+    const mobileCodes = await ctx.db.query("mobileAuthorizationCodes").withIndex("by_user", q => q.eq("userId", userId)).collect();
+    for (const code of mobileCodes) await ctx.db.delete(code._id);
 
     // 5. Delete mobile tokens
     const mobileTokens = await ctx.db

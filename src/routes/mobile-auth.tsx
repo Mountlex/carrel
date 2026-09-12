@@ -4,6 +4,7 @@ import { useConvexAuth } from "convex/react";
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
 import { EmailPasswordForm } from "../components/auth/EmailPasswordForm";
 import { GitHubIcon, GitLabIcon } from "../components/icons";
+import { parseMobileAuthSearch } from "../lib/mobileAuthRequest";
 
 // Mobile app callback URL scheme
 const MOBILE_CALLBACK_URL = "carrel://auth/callback";
@@ -60,16 +61,8 @@ function notifyCancel() {
   window.location.href = `${MOBILE_CALLBACK_URL}?cancelled=true`;
 }
 
-interface MobileAuthSearch {
-  provider?: "github" | "gitlab" | "email";
-  error?: string;
-}
-
 export const Route = createFileRoute("/mobile-auth")({
-  validateSearch: (search: Record<string, unknown>): MobileAuthSearch => ({
-    provider: search.provider as MobileAuthSearch["provider"],
-    error: search.error as string | undefined,
-  }),
+  validateSearch: parseMobileAuthSearch,
   component: MobileAuthPage,
 });
 
@@ -83,6 +76,11 @@ function MobileAuthPage() {
   const [error] = useState<string | null>(search.error ?? null);
   const [tokenExchangeAttempted, setTokenExchangeAttempted] = useState(false);
 
+  const oauthReturnURL = new URL("/mobile-auth", window.location.origin);
+  if (search.codeChallenge) oauthReturnURL.searchParams.set("codeChallenge", search.codeChallenge);
+  if (search.state) oauthReturnURL.searchParams.set("state", search.state);
+  const redirectTo = oauthReturnURL.toString();
+
   // Exchange the short-lived web token for mobile credentials before redirecting.
   const exchangeAndNotify = useCallback(async () => {
     if (!authToken) {
@@ -91,6 +89,18 @@ function MobileAuthPage() {
     }
 
     try {
+      if (search.codeChallenge && search.state) {
+        const response = await fetch(`${getConvexHttpOrigin()}/api/mobile/code`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ codeChallenge: search.codeChallenge }),
+        });
+        if (!response.ok) throw new Error("Unable to authorize this sign-in request");
+        const { code } = await response.json();
+        const params = new URLSearchParams({ code, state: search.state });
+        window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
+        return;
+      }
       const response = await fetch(`${getConvexHttpOrigin()}/api/mobile/exchange`, {
         method: "POST",
         headers: {
@@ -119,6 +129,10 @@ function MobileAuthPage() {
 
       window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
     } catch (err) {
+      if (search.codeChallenge || search.state) {
+        window.location.href = `${MOBILE_CALLBACK_URL}?${new URLSearchParams({ error: "sign_in_failed", state: search.state ?? "" })}`;
+        return;
+      }
       console.error("[mobile-auth] Token exchange error, falling back to web token:", err);
 
       const params = new URLSearchParams({
@@ -126,7 +140,7 @@ function MobileAuthPage() {
       });
       window.location.href = `${MOBILE_CALLBACK_URL}?${params.toString()}`;
     }
-  }, [authToken]);
+  }, [authToken, search.codeChallenge, search.state]);
 
   // Auto-start OAuth flow if provider is specified
   useEffect(() => {
@@ -138,10 +152,10 @@ function MobileAuthPage() {
       setTimeout(() => setAuthStarted(true), 0);
       // Redirect back to this page after OAuth completes
       signIn(provider, {
-        redirectTo: window.location.origin + "/mobile-auth",
+        redirectTo,
       });
     }
-  }, [search.provider, authStarted, isAuthLoading, signIn]);
+  }, [search.provider, authStarted, isAuthLoading, signIn, redirectTo]);
 
   // Redirect to mobile app after successful authentication
   useEffect(() => {
@@ -250,7 +264,7 @@ function MobileAuthPage() {
                 onClick={() => {
                   setAuthStarted(true);
                   signIn("github", {
-                    redirectTo: window.location.origin + "/mobile-auth",
+                    redirectTo,
                   });
                 }}
                 className="inline-flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-3 text-base font-normal text-white hover:bg-gray-800"
@@ -263,7 +277,7 @@ function MobileAuthPage() {
                 onClick={() => {
                   setAuthStarted(true);
                   signIn("gitlab", {
-                    redirectTo: window.location.origin + "/mobile-auth",
+                    redirectTo,
                   });
                 }}
                 className="inline-flex w-full items-center justify-center rounded-md bg-[#FC6D26] px-4 py-3 text-base font-normal text-white hover:bg-[#E24329]"
@@ -281,7 +295,7 @@ function MobileAuthPage() {
             onClick={() => {
               setAuthStarted(true);
               signIn("github", {
-                redirectTo: window.location.origin + "/mobile-auth",
+                redirectTo,
               });
             }}
             className="inline-flex w-full items-center justify-center rounded-md bg-gray-900 px-4 py-3 text-base font-normal text-white hover:bg-gray-800"
@@ -296,7 +310,7 @@ function MobileAuthPage() {
             onClick={() => {
               setAuthStarted(true);
               signIn("gitlab", {
-                redirectTo: window.location.origin + "/mobile-auth",
+                redirectTo,
               });
             }}
             className="inline-flex w-full items-center justify-center rounded-md bg-[#FC6D26] px-4 py-3 text-base font-normal text-white hover:bg-[#E24329]"

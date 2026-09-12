@@ -7,6 +7,7 @@ final class SettingsViewModel {
     private(set) var user: User?
     private(set) var isLoading = false
     private(set) var error: String?
+    private(set) var isDeletingAccount = false
     var notificationPreferences: NotificationPreferences = .default
     private(set) var isNotificationsLoading = false
     private(set) var isNotificationsUpdating = false
@@ -139,6 +140,18 @@ final class SettingsViewModel {
 
     func logout() async {
         await authManager.logout()
+    }
+
+    func deleteAccount() async {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await ConvexService.shared.deleteAccount()
+            await authManager.logout(revokeRemoteSession: false)
+        } catch {
+            self.error = "Could not delete your account. \(error.localizedDescription)"
+        }
     }
 
     func clearError() {

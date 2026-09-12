@@ -14,64 +14,42 @@ struct LoginView: View {
             Color(uiColor: .systemBackground)
                 .ignoresSafeArea()
 
-            VStack(spacing: 40) {
-                Spacer()
-
-                // Logo and title
-                VStack(spacing: 16) {
-                    Text("Carrel")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-
-                    Text("Your paper gallery")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Sign in buttons with unified glass sampling
-                GlassEffectContainer {
-                    VStack(spacing: 16) {
-                        SignInButton(
-                            provider: .github,
-                            isLoading: isStartingSignIn && activeProvider == .github,
-                            isDisabled: isStartingSignIn,
-                            action: { signIn(with: .github) }
-                        )
-
-                        SignInButton(
-                            provider: .gitlab,
-                            isLoading: isStartingSignIn && activeProvider == .gitlab,
-                            isDisabled: isStartingSignIn,
-                            action: { signIn(with: .gitlab) }
-                        )
-
-                        // Divider
-                        HStack {
-                            Rectangle()
-                                .fill(.secondary.opacity(0.3))
-                                .frame(height: 1)
-                            Text("or")
-                                .font(.caption)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 32) {
+                        Spacer(minLength: 16)
+                        VStack(spacing: 12) {
+                            Text("Carrel")
+                                .font(.largeTitle.bold())
+                            Text("Your paper gallery")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            Rectangle()
-                                .fill(.secondary.opacity(0.3))
-                                .frame(height: 1)
                         }
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                        SignInButton(
-                            provider: .email,
-                            isLoading: isStartingSignIn && activeProvider == .email,
-                            isDisabled: isStartingSignIn,
-                            action: { signIn(with: .email) }
-                        )
+                        Spacer(minLength: 24)
+                        VStack(spacing: 16) {
+                            ForEach([OAuthProvider.github, .gitlab, .email], id: \.self) { provider in
+                                SignInButton(
+                                    provider: provider,
+                                    isLoading: isStartingSignIn && activeProvider == provider,
+                                    isDisabled: isStartingSignIn || authManager.isLoading,
+                                    action: { signIn(with: provider) }
+                                )
+                            }
+                        }
+                        Link("Privacy Policy", destination: AuthManager.siteURL.appendingPathComponent("privacy"))
+                            .font(.footnote)
+                            .frame(minHeight: 44)
+                        Spacer(minLength: 16)
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: 480)
+                    .frame(minHeight: geometry.size.height, alignment: .center)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 32)
-
-                Spacer()
-                    .frame(height: 60)
             }
         }
         .alert("Error", isPresented: Binding(
@@ -89,25 +67,15 @@ struct LoginView: View {
         isStartingSignIn = true
         activeProvider = provider
 
-        guard var components = URLComponents(
-            url: AuthManager.siteURL.appendingPathComponent("mobile-auth"),
-            resolvingAgainstBaseURL: true
-        ) else {
-            error = "Failed to build authentication URL"
+        let request: MobileSignInRequest
+        do { request = try MobileSignInRequest() }
+        catch {
+            self.error = error.localizedDescription
             isStartingSignIn = false
             activeProvider = nil
             return
         }
-        components.queryItems = [
-            URLQueryItem(name: "provider", value: provider.rawValue)
-        ]
-
-        guard let url = components.url else {
-            error = "Failed to build authentication URL"
-            isStartingSignIn = false
-            activeProvider = nil
-            return
-        }
+        let url = request.url(siteURL: AuthManager.siteURL, provider: provider.rawValue)
 
         let session = ASWebAuthenticationSession(
             url: url,
@@ -130,39 +98,13 @@ struct LoginView: View {
                     return
                 }
 
-                guard let callbackURL = callbackURL,
-                      let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                      let queryItems = components.queryItems else {
-                    self.error = "Invalid callback"
+                guard let callbackURL else {
+                    self.error = "Invalid sign-in response"
                     return
                 }
+                do { try await authManager.completeSignIn(callback: callbackURL, request: request) }
+                catch { self.error = error.localizedDescription }
 
-                if let errorItem = queryItems.first(where: { $0.name == "error" }),
-                   let errorMessage = errorItem.value {
-                    self.error = errorMessage
-                    return
-                }
-
-                if let accessToken = queryItems.first(where: { $0.name == "accessToken" })?.value,
-                   let expiresAt = queryItems.first(where: { $0.name == "expiresAt" })?.value,
-                   let expiresAtValue = Double(expiresAt) {
-                    let refreshToken = queryItems.first(where: { $0.name == "refreshToken" })?.value
-                    let refreshExpiresAt = queryItems
-                        .first(where: { $0.name == "refreshExpiresAt" })?
-                        .value
-                        .flatMap(Double.init)
-                    await authManager.handleOAuthCallback(
-                        accessToken: accessToken,
-                        refreshToken: refreshToken,
-                        expiresAt: expiresAtValue,
-                        refreshExpiresAt: refreshExpiresAt
-                    )
-                } else if let tokenItem = queryItems.first(where: { $0.name == "token" }),
-                          let token = tokenItem.value {
-                    await authManager.handleOAuthCallback(token: token)
-                } else {
-                    self.error = "Invalid callback"
-                }
             }
         }
 
@@ -201,11 +143,14 @@ struct SignInButton: View {
 
                 Text("Sign in with \(provider.displayName)")
                     .font(.headline)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
         }
-        .buttonStyle(.liquidGlass)
+        .buttonStyle(.glass)
         .foregroundStyle(.primary)
         .disabled(isDisabled)
     }

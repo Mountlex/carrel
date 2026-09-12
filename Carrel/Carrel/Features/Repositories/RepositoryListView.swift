@@ -9,6 +9,7 @@ struct RepositoryListView: View {
 
     var body: some View {
         repositoryListContent(viewModel: viewModel)
+            .background { GlassBackdrop() }
             .navigationTitle("Repositories")
             .navigationDestination(item: $selectedRepository) { repository in
                 AddPaperFromRepoView(repository: repository)
@@ -33,6 +34,11 @@ struct RepositoryListView: View {
                 _ = await (notificationTask, userTask)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Link(destination: AuthManager.siteURL.appendingPathComponent("repositories")) {
+                        Label("Add Repository", systemImage: "plus")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task {
@@ -164,7 +170,10 @@ struct RepositoryListView: View {
         ContentUnavailableView {
             Label("No Repositories", systemImage: "folder")
         } description: {
-            Text("Add repositories on the web to see them here.")
+            Text("Connect GitHub, GitLab, or Overleaf to start tracking papers.")
+        } actions: {
+            Link("Add Repository", destination: AuthManager.siteURL.appendingPathComponent("repositories"))
+                .buttonStyle(.borderedProminent)
         }
     }
 }

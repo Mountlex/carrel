@@ -5,6 +5,7 @@ import CryptoKit
 actor ThumbnailCache {
     static let shared = ThumbnailCache()
 
+    private var generation = 0
     private let fileManager: FileManager
     private let cacheDirectory: URL
     private let memoryCache: NSCache<NSString, UIImage>
@@ -28,6 +29,8 @@ actor ThumbnailCache {
     }
 
     func fetchThumbnail(from url: URL) async throws -> UIImage {
+        try Task.checkCancellation()
+        let fetchGeneration = generation
         let cacheKey = url.absoluteString as NSString
 
         // Check memory cache first
@@ -52,6 +55,8 @@ actor ThumbnailCache {
         // Fetch from network with retry
         let data = try await fetchWithRetry(from: url)
 
+        try Task.checkCancellation()
+        guard fetchGeneration == generation else { throw CancellationError() }
         guard let image = UIImage(data: data) else {
             throw ThumbnailError.invalidImageData
         }
@@ -69,6 +74,7 @@ actor ThumbnailCache {
     }
 
     func clearCache() {
+        generation += 1
         memoryCache.removeAllObjects()
         try? fileManager.removeItem(at: cacheDirectory)
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)

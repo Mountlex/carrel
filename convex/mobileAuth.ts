@@ -66,7 +66,8 @@ async function createJwt(
 // This token will be accepted by Convex for real-time subscriptions
 async function createConvexAuthJwt(
   userId: string,
-  expiresInMs: number = CONVEX_AUTH_TOKEN_EXPIRY_MS
+  expiresInMs: number = CONVEX_AUTH_TOKEN_EXPIRY_MS,
+  mobileSessionId?: string
 ): Promise<string> {
   const privateKeyPem = process.env.JWT_PRIVATE_KEY;
   if (!privateKeyPem) {
@@ -80,7 +81,7 @@ async function createConvexAuthJwt(
   const exp = Math.floor((Date.now() + expiresInMs) / 1000);
 
   // Create a session-like subject (userId|randomSessionId)
-  const sessionId = generateSecureToken().substring(0, 32);
+  const sessionId = mobileSessionId ? `mobile:${mobileSessionId}` : generateSecureToken().substring(0, 32);
   const subject = `${userId}|${sessionId}`;
 
   const header = { alg: "RS256", typ: "JWT" };
@@ -400,6 +401,9 @@ export const generateMobileTokens = mutation({
 
     // Get identity for email/name (optional fields for JWT)
     const identity = await ctx.auth.getUserIdentity();
+    if (identity?.subject.split("|")[1]?.startsWith("mobile:")) {
+      throw new Error("Use the mobile session refresh endpoint");
+    }
 
     // Get JWT secret
     const jwtSecret = process.env.JWT_SECRET;

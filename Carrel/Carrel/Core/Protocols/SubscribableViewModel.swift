@@ -1,105 +1,45 @@
 import Combine
 import Foundation
 
-/// Protocol for ViewModels that manage Convex subscriptions for real-time data updates.
-///
-/// Conforming types should implement `createSubscriptionPublisher()` to return their
-/// specific Combine publisher and `handleSubscriptionData(_:)` to process received data.
+/// Runs inside a SwiftUI `.task`, so leaving the view cancels setup and live updates.
 @MainActor
 protocol SubscribableViewModel: AnyObject {
     associatedtype SubscriptionData
-
-    /// The current subscription task, if any
-    var subscriptionTask: Task<Void, Never>? { get set }
-
-    /// Timestamp of when the subscription was last stopped (for debouncing)
-    var subscriptionStoppedAt: Date? { get set }
-
-    /// Whether the view model is loading initial data
     var isLoading: Bool { get set }
-
-    /// Current error message, if any
     var error: String? { get set }
-
-    /// Optional async setup to run before creating the subscription publisher.
-    /// Override this to fetch required data (e.g., user ID) before starting.
-    /// Throw an error to abort subscription startup.
     func setupBeforeSubscription() async throws
-
-    /// Creates the Combine publisher for this subscription
     func createSubscriptionPublisher() -> AnyPublisher<SubscriptionData, Error>
-
-    /// Handles data received from the subscription
     func handleSubscriptionData(_ data: SubscriptionData)
 }
 
 extension SubscribableViewModel {
-    /// Default implementation does nothing
     func setupBeforeSubscription() async throws {}
 
-    /// Start subscribing to real-time updates
-    func startSubscription() {
-        // Don't restart if already subscribed
-        guard subscriptionTask == nil else {
-            #if DEBUG
-            print("\(type(of: self)): Subscription already active, skipping")
-            #endif
-            return
-        }
-
-        // Debounce rapid restarts (within 0.5 seconds of stop)
-        // This prevents spurious SwiftUI lifecycle events from causing duplicate subscriptions
-        if let stoppedAt = subscriptionStoppedAt, Date().timeIntervalSince(stoppedAt) < 0.5 {
-            #if DEBUG
-            print("\(type(of: self)): Subscription restart too soon after stop, skipping")
-            #endif
-            return
-        }
-
-        subscriptionStoppedAt = nil
-        isLoading = true
-
-        subscriptionTask = Task { [weak self] in
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.subscriptionTask = nil
-                }
+    func runSubscription() async {
+        defer { isLoading = false }
+        while !Task.isCancelled {
+            // Preserve the offline snapshot until the connection has authenticated.
+            guard NetworkMonitor.shared.isConnected, ConvexService.shared.isAuthenticated else {
+                isLoading = false
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                continue
             }
-
+            isLoading = true
             do {
-                // Run async setup first (e.g., fetch user ID)
-                try await self?.setupBeforeSubscription()
-
-                guard let publisher = self?.createSubscriptionPublisher() else { return }
-
-                for try await data in publisher.values {
-                    guard !Task.isCancelled else { break }
-                    guard let self = self else { break }
-                    await MainActor.run {
-                        self.handleSubscriptionData(data)
-                        if self.isLoading {
-                            self.isLoading = false
-                        }
-                    }
+                try await setupBeforeSubscription()
+                try Task.checkCancellation()
+                for try await data in createSubscriptionPublisher().values {
+                    try Task.checkCancellation()
+                    handleSubscriptionData(data)
+                    isLoading = false
+                    error = nil
                 }
             } catch {
-                if !Task.isCancelled {
-                    await MainActor.run { [weak self] in
-                        self?.error = error.localizedDescription
-                        self?.isLoading = false
-                    }
-                }
+                guard !Task.isCancelled else { return }
+                self.error = error.localizedDescription
             }
+            isLoading = false
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
         }
-    }
-
-    /// Stop the current subscription
-    func stopSubscription() {
-        #if DEBUG
-        print("\(type(of: self)): Stopping subscription")
-        #endif
-        subscriptionTask?.cancel()
-        subscriptionTask = nil
-        subscriptionStoppedAt = Date()
     }
 }
